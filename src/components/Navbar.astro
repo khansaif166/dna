@@ -27,7 +27,7 @@ const links = [
     </div>
 
     <div class="navbar__actions">
-      <a class="navbar__cta" href="#contact">Call 8123080202</a>
+      <button class="navbar__cta" type="button" data-modal-open>Enroll Now</button>
 
       <details class="navbar__mobile">
         <summary aria-label="Open navigation menu">
@@ -41,13 +41,14 @@ const links = [
               {link.label}
             </a>
           ))}
-          <a
+          <button
             class="navbar__mobile-cta"
-            href="#contact"
+            type="button"
+            data-modal-open
             onclick="this.closest('details').removeAttribute('open')"
           >
-            Call 8123080202
-          </a>
+            Enroll Now
+          </button>
         </div>
       </details>
     </div>
