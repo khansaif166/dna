@@ -69,8 +69,11 @@ import { Icon } from 'astro-icon/components';
   const submitButton = overlay?.querySelector('.enroll-modal__submit');
   const formContent = overlay?.querySelector('[data-modal-form]');
   const successContent = overlay?.querySelector('[data-modal-success]');
+  const nameInput = overlay?.querySelector('#enroll-name');
   const firstInput = overlay?.querySelector('#enroll-name');
   const mobileInput = overlay?.querySelector('#enroll-mobile');
+  const cityInput = overlay?.querySelector('#enroll-city');
+  const targetSelect = overlay?.querySelector('#enroll-target');
   let successTimer;
 
   function resetModal() {
@@ -87,6 +90,29 @@ import { Icon } from 'astro-icon/components';
       successContent.hidden = true;
     }
     window.clearTimeout(successTimer);
+  }
+
+  function openWhatsAppChat() {
+    const phoneNumber = '917984301015';
+    const name = nameInput?.value.trim() || 'Not provided';
+    const mobile = mobileInput?.value.trim() || 'Not provided';
+    const city = cityInput?.value.trim() || 'Not provided';
+    const target = targetSelect?.value || 'Not provided';
+
+    const message = [
+      'Hi, I am interested in the 20-Day Re-NEET guided self-study program.',
+      `Name: ${name}`,
+      `Mobile: ${mobile}`,
+      `City: ${city}`,
+      `Exam Target: ${target}`,
+    ].join('\n');
+
+    const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+    const popup = window.open(url, '_blank', 'noopener,noreferrer');
+
+    if (!popup) {
+      window.location.href = url;
+    }
   }
 
   function openModal() {
@@ -139,13 +165,8 @@ import { Icon } from 'astro-icon/components';
     }
 
     mobileInput?.removeAttribute('aria-invalid');
-
-    if (formContent && successContent) {
-      formContent.hidden = true;
-      successContent.hidden = false;
-    }
-
-    successTimer = window.setTimeout(() => closeModal(), 3000);
+    openWhatsAppChat();
+    closeModal();
   });
 </script>
 

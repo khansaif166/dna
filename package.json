@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "11.2.0",
-    "@astrojs/tailwind": "6.0.2",
     "@iconify-json/tabler": "^1.2.35",
     "@tailwindcss/vite": "4.3.0",
     "astro": "4.16.19",

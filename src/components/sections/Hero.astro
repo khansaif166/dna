@@ -12,27 +12,34 @@ const stats = [
   <div class="hero__backdrop" aria-hidden="true"></div>
 
   <div class="hero__content">
-    <div class="hero__brand-row">
-      <img class="hero__logo" src="/images/logo.jpeg" alt="Dream Neet Academy logo" />
+    <div class="hero__brand-row" data-reveal>
+      <img
+        class="hero__logo"
+        src="/images/logo.jpeg"
+        alt="Dream Neet Academy logo"
+        loading="eager"
+        fetchpriority="high"
+        decoding="async"
+      />
       <div class="hero__brand-copy">
         <p>Dream Neet Academy</p>
         <span>Offline Re-NEET guided self-study</span>
       </div>
     </div>
 
-    <div class="hero__date-band">Re-NEET Examination on <strong>21st June 2026</strong></div>
+    <div class="hero__date-band" data-reveal>Re-NEET Examination on <strong>21st June 2026</strong></div>
 
-    <h1 class="hero__headline">
+    <h1 class="hero__headline" data-reveal>
       <span>Execute the</span>
       <span>last 20 days</span>
       <span>with precision.</span>
     </h1>
 
-    <p class="hero__lead">
+    <p class="hero__lead" data-reveal>
       A premium offline revision environment with disciplined study hours, PCB faculty monitoring and daily execution support.
     </p>
 
-    <div class="hero__meta">
+    <div class="hero__meta" data-reveal>
       <div class="hero__urgency">
         <strong>Last 20 Days</strong>
         <span>to make the difference</span>
@@ -40,7 +47,7 @@ const stats = [
       <p class="hero__guidance">Expert-guided execution. Zero-distraction routine.</p>
     </div>
 
-    <div class="hero__actions">
+    <div class="hero__actions" data-reveal>
       <button class="hero__primary" type="button" data-modal-open>
         <Icon name="tabler:user-plus" size="19" aria-hidden="true" />
         Enroll Now
@@ -51,9 +58,9 @@ const stats = [
       </a>
     </div>
 
-    <div class="hero__stats" aria-label="20 day Re-NEET program summary">
-      {stats.map((stat) => (
-        <div class="hero__stat">
+    <div class="hero__stats" aria-label="20 day Re-NEET program summary" data-reveal>
+      {stats.map((stat, index) => (
+        <div class="hero__stat" data-reveal style={`--reveal-delay: ${index * 110}ms;`}>
           <Icon name={stat.icon} size="20" aria-hidden="true" />
           <strong>{stat.value}</strong>
           <span>{stat.label}</span>

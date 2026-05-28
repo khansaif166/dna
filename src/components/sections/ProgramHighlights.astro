@@ -27,7 +27,7 @@ const cards = [
 
 <section class="program-highlights">
   <div class="program-highlights__inner">
-    <div class="program-highlights__math" aria-label="Effective study hours">
+    <div class="program-highlights__math" aria-label="Effective study hours" data-reveal>
       <p>This program is for you</p>
       <div class="program-highlights__equation">
         <span class="program-highlights__term program-highlights__term--days">
@@ -48,7 +48,7 @@ const cards = [
       <small>of effective and focused study</small>
     </div>
 
-    <div class="program-highlights__intro">
+    <div class="program-highlights__intro" data-reveal>
       <p>100% Effective Guided Self-Study</p>
       <h2>Execute the last 20 days with discipline and expert supervision.</h2>
       <span aria-hidden="true"></span>
@@ -59,8 +59,8 @@ const cards = [
     </div>
 
     <div class="program-highlights__cards">
-      {cards.map((card) => (
-        <article class="program-highlights__card">
+      {cards.map((card, index) => (
+        <article class="program-highlights__card" data-reveal style={`--reveal-delay: ${index * 90}ms;`}>
           <div class="program-highlights__icon">
             <Icon name={card.icon} size="22" aria-hidden="true" />
           </div>

@@ -12,9 +12,14 @@ const pills = [
 ---
 
 <section id="highlights" class="subject-pills" aria-label="Subject areas">
-  <div class="subject-pills__inner">
+  <div class="subject-pills__inner" data-reveal>
     {pills.map((pill, index) => (
-      <button class:list={['subject-pills__pill', { active: index === 0 }]} type="button">
+      <button
+        class:list={['subject-pills__pill', { active: index === 0 }]}
+        type="button"
+        data-reveal
+        style={`--reveal-delay: ${index * 70}ms;`}
+      >
         <Icon name={pill.icon} size="18" aria-hidden="true" />
         {pill.label}
       </button>

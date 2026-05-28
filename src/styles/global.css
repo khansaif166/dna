@@ -10,23 +10,48 @@
 
   html {
     scroll-behavior: smooth;
-    background: var(--cream);
+    background:
+      radial-gradient(circle at top left, rgba(249, 221, 23, 0.14), transparent 28%),
+      radial-gradient(circle at top right, rgba(6, 35, 92, 0.12), transparent 24%),
+      var(--cream);
   }
 
   body {
+    position: relative;
     margin: 0;
     min-width: 320px;
     overflow-x: hidden;
     padding-top: 40px;
-    background: var(--cream);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)),
+      var(--cream);
     color: var(--text-dark);
     font-family: var(--font-sans);
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
   }
 
+  body::before {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(circle at 18% 14%, rgba(249, 221, 23, 0.08), transparent 0 22%),
+      radial-gradient(circle at 82% 0%, rgba(3, 24, 70, 0.08), transparent 0 18%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 24%, rgba(3, 24, 70, 0.02));
+    content: "";
+    pointer-events: none;
+  }
+
   section[id] {
     scroll-margin-top: 112px;
+  }
+
+  main > section {
+    position: relative;
+    isolation: isolate;
+    content-visibility: auto;
+    contain-intrinsic-size: 900px;
   }
 
   a {
@@ -90,13 +115,27 @@
     }
   }
 
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+  }
+
+  .reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
   @media (prefers-reduced-motion: no-preference) {
-    .hero__date-band,
     .hero__brand-row,
+    .hero__date-band,
     .hero__headline,
-    .hero__urgency,
-    .hero__guidance,
-    .hero__program,
+    .hero__lead,
+    .hero__meta,
     .hero__actions,
     .hero__stats,
     .program-highlights__math,
@@ -109,49 +148,65 @@
     .cta-banner__left,
     .cta-banner__right,
     .footer__grid {
-      animation: dna-fade-up 700ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+      animation: dna-fade-up 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
-    .hero__poster img,
     .program-highlights__card,
     .testimonials__card,
-    .advantage__panel {
-      animation: dna-scale-in 650ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+    .advantage__panel,
+    .hero__stat {
+      animation: dna-scale-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
     }
 
     .hero__brand-row,
     .program-highlights__intro,
     .testimonials__heading,
-    .cta-banner__right {
-      animation-delay: 90ms;
+    .cta-banner__right,
+    .footer__grid {
+      animation-delay: 80ms;
     }
 
     .hero__headline,
     .advantage__compare,
-    .testimonials__grid,
-    .footer__grid {
-      animation-delay: 160ms;
+    .testimonials__grid {
+      animation-delay: 140ms;
     }
 
-    .hero__urgency,
+    .hero__lead,
+    .hero__actions,
+    .hero__stats,
+    .program-highlights__math,
+    .testimonials__schedule {
+      animation-delay: 200ms;
+    }
+
+    .hero__meta,
     .program-highlights__card:nth-child(2),
     .testimonials__card:nth-child(2) {
-      animation-delay: 230ms;
+      animation-delay: 260ms;
     }
 
-    .hero__guidance,
     .program-highlights__card:nth-child(3),
     .testimonials__card:nth-child(3) {
-      animation-delay: 300ms;
+      animation-delay: 320ms;
     }
 
-    .hero__program,
     .program-highlights__card:nth-child(4) {
-      animation-delay: 370ms;
+      animation-delay: 380ms;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
     }
 
-    .hero__poster img {
-      animation-delay: 220ms;
+    .reveal,
+    .reveal.is-visible {
+      opacity: 1;
+      transform: none;
+      animation: none;
+      transition: none;
     }
   }
 

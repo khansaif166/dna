@@ -22,7 +22,7 @@ const batchDetails = [
 
 <section id="batch" class="testimonials">
   <div class="testimonials__inner">
-    <div class="testimonials__schedule" aria-label="20 day batch dates">
+    <div class="testimonials__schedule" aria-label="20 day batch dates" data-reveal>
       <div>
         <span>20 Day Batch</span>
       </div>
@@ -36,14 +36,14 @@ const batchDetails = [
       </div>
     </div>
 
-    <div class="testimonials__heading">
+    <div class="testimonials__heading" data-reveal>
       <p>What makes our 20-day program highly effective?</p>
       <h2>Focused study, daily measurement and same-day doubt support.</h2>
     </div>
 
     <div class="testimonials__grid">
-      {batchDetails.map((item) => (
-        <article class="testimonials__card">
+      {batchDetails.map((item, index) => (
+        <article class="testimonials__card" data-reveal style={`--reveal-delay: ${index * 100}ms;`}>
           <div class="testimonials__icon">
             <Icon name={item.icon} size="28" aria-hidden="true" />
           </div>
