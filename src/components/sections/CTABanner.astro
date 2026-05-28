@@ -9,7 +9,7 @@ import { Icon } from 'astro-icon/components';
         <Icon name="tabler:phone-call" size="30" aria-hidden="true" />
       </div>
       <h2>For Admission & Enquiries</h2>
-      <a href="tel:+918123080202">8123080202</a>
+      <a href="tel:+918123080202">+91 81230 80202</a>
     </div>
 
     <div class="cta-banner__right" data-reveal style="--reveal-delay: 120ms;">
@@ -57,7 +57,7 @@ import { Icon } from 'astro-icon/components';
     max-width: 720px;
     margin: 16px 0 0;
     color: var(--white);
-    font-size: clamp(34px, 5vw, 56px);
+    font-size: clamp(28px, 3.6vw, 44px);
     font-weight: 900;
     line-height: 1.05;
   }
@@ -66,9 +66,10 @@ import { Icon } from 'astro-icon/components';
     display: inline-flex;
     margin-top: 14px;
     color: #f9dd17;
-    font-size: clamp(36px, 6vw, 76px);
+    font-size: clamp(24px, 4.2vw, 54px);
     font-weight: 900;
     line-height: 1;
+    letter-spacing: -0.03em;
   }
 
   .cta-banner__right p {
@@ -127,6 +128,39 @@ import { Icon } from 'astro-icon/components';
   @media (max-width: 767px) {
     .cta-banner__inner {
       grid-template-columns: 1fr;
+      gap: 1.5rem;
+      padding-top: 4rem;
+      padding-bottom: 4rem;
+    }
+
+    .cta-banner__badge {
+      width: 56px;
+      height: 56px;
+    }
+
+    .cta-banner__badge [data-icon] {
+      width: 22px;
+      height: 22px;
+    }
+
+    .cta-banner h2 {
+      font-size: clamp(22px, 7vw, 32px);
+      line-height: 1.12;
+    }
+
+    .cta-banner__left a {
+      font-size: clamp(20px, 8vw, 34px);
+    }
+
+    .cta-banner__right p {
+      margin-bottom: 20px;
+      font-size: 16px;
+    }
+
+    .cta-banner__right button {
+      width: 100%;
+      padding: 14px 18px;
+      font-size: 15px;
     }
   }
 </style>

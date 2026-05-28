@@ -50,13 +50,21 @@ const socials = [
         <h2 id="footer-contact">Contact</h2>
         <a class="footer__phone" href="tel:+918123080202">
           <Icon name="tabler:phone" size="20" aria-hidden="true" />
-          8123080202
+          +91 81230 80202
         </a>
         <address>
           Dream Neet Academy, Near Pinnacle Institute of Pharmacy,<br />
           Doddamane Nursing Home Road, Shankarpuram 4th cross,<br />
           Near B.H. Road, Tumakuru - 572102, Karnataka
         </address>
+        <a
+          class="footer__map"
+          href="https://goo.gl/maps/jeQ6etdeJPLXVa557"
+          target="_blank"
+          rel="noopener"
+        >
+          Open in Google Maps &rarr;
+        </a>
         <a class="footer__whatsapp" href="https://wa.me/918123080202">Chat on WhatsApp &rarr;</a>
         <a class="footer__site" href="https://www.dreamneetacademy.com" target="_blank" rel="noopener">
           www.dreamneetacademy.com
@@ -213,6 +221,7 @@ const socials = [
     line-height: 1.6;
   }
 
+  .footer__map,
   .footer__whatsapp,
   .footer__site {
     width: fit-content;
@@ -220,6 +229,10 @@ const socials = [
     font-size: 14px;
     font-weight: 700;
     transition: color 150ms ease;
+  }
+
+  .footer__map {
+    margin-top: 12px;
   }
 
   .footer__whatsapp {
