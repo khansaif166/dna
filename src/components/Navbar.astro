@@ -113,9 +113,7 @@ const links = [
     height: 100%;
     margin: 0 auto;
     padding: 0 var(--section-pad-x);
-    border-radius: 999px;
-    background: rgba(1, 10, 31, 0.34);
-    backdrop-filter: blur(14px);
+    /* Removed rounded "pill" background to keep navbar clean while preserving transparency */
   }
 
   .navbar__brand {
@@ -295,7 +293,7 @@ const links = [
 
   @media (max-width: 1060px) {
     .navbar__inner {
-      border-radius: 20px;
+      /* no border-radius to avoid pill-shaped background on smaller screens */
       grid-template-columns: 1fr auto;
     }
 
@@ -316,7 +314,6 @@ const links = [
 
     .navbar__inner {
       padding: 0 1rem;
-      border-radius: 18px;
     }
 
     .navbar__mobile-panel {
