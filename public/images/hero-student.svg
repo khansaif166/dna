@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="720" viewBox="0 0 720 720" role="img" aria-labelledby="title desc">
+  <title id="title">Focused NEET student</title>
+  <desc id="desc">Premium placeholder image for a student preparing for NEET.</desc>
+  <rect width="720" height="720" fill="#F5F3EE" />
+  <rect x="54" y="54" width="612" height="612" rx="6" fill="#1A3D2B" />
+  <circle cx="360" cy="218" r="86" fill="#E2C97E" />
+  <path d="M198 648V440c0-92 64-154 162-154s162 62 162 154v208z" fill="#0F2318" />
+  <path d="M162 152h128" stroke="#C5A84F" stroke-width="14" stroke-linecap="round" />
+  <path d="M162 202h90" stroke="#F5F3EE" stroke-width="8" stroke-linecap="round" opacity="0.72" />
+  <path d="M478 132h72v72h-72z" fill="none" stroke="#C5A84F" stroke-width="10" />
+  <path d="m496 168 20 20 50-58" fill="none" stroke="#F5F3EE" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

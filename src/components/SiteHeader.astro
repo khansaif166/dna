@@ -1,0 +1,19 @@
+---
+import { Icon } from 'astro-icon/components';
+---
+
+<header class="border-b border-white/10 bg-green-800 text-white">
+  <div class="mx-auto flex max-w-(--max-width) items-center justify-between px-(--section-pad-x) py-5">
+    <a href="/" class="flex items-center gap-3 font-serif text-2xl font-bold">
+      <span class="grid size-10 place-items-center rounded-(--radius-md) bg-gold-500 text-green-900">
+        <Icon name="book-open" size="22" aria-hidden="true" />
+      </span>
+      Dream Neet Academy
+    </a>
+    <nav aria-label="Primary navigation" class="hidden items-center gap-8 text-sm font-medium text-gray-100 md:flex">
+      <a class="transition hover:text-gold-300" href="#programs">Programs</a>
+      <a class="transition hover:text-gold-300" href="#approach">Approach</a>
+      <a class="transition hover:text-gold-300" href="#contact">Contact</a>
+    </nav>
+  </div>
+</header>

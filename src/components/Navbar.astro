@@ -1,0 +1,351 @@
+---
+const links = [
+  { href: '#program', label: 'Program' },
+  { href: '#highlights', label: 'Highlights' },
+  { href: '#results', label: 'Reality Check' },
+  { href: '#batch', label: 'Batch' },
+  { href: '#contact', label: 'Contact' },
+];
+---
+
+<div class="navbar-sentinel" aria-hidden="true"></div>
+
+<nav class="navbar" aria-label="Primary navigation">
+  <div class="navbar__inner">
+    <a class="navbar__brand" href="/" aria-label="Dream Neet Academy home">
+      <img class="navbar__mark" src="/images/logo.jpeg" alt="Dream Neet Academy logo" />
+      <span class="navbar__brand-copy">
+        <span class="navbar__brand-name">DREAM NEET ACADEMY</span>
+        <span class="navbar__brand-line">RE-NEET · 20 DAY BATCH</span>
+      </span>
+    </a>
+
+    <div class="navbar__links" aria-label="Page sections">
+      {links.map((link) => (
+        <a href={link.href}>{link.label}</a>
+      ))}
+    </div>
+
+    <div class="navbar__actions">
+      <a class="navbar__cta" href="#contact">Call 8123080202</a>
+
+      <details class="navbar__mobile">
+        <summary aria-label="Open navigation menu">
+          <span></span>
+          <span></span>
+          <span></span>
+        </summary>
+        <div class="navbar__mobile-panel">
+          {links.map((link) => (
+            <a href={link.href} onclick="this.closest('details').removeAttribute('open')">
+              {link.label}
+            </a>
+          ))}
+          <a
+            class="navbar__mobile-cta"
+            href="#contact"
+            onclick="this.closest('details').removeAttribute('open')"
+          >
+            Call 8123080202
+          </a>
+        </div>
+      </details>
+    </div>
+  </div>
+</nav>
+
+<script is:inline>
+  const sentinel = document.querySelector('.navbar-sentinel');
+  const navbar = document.querySelector('.navbar');
+
+  if (sentinel && navbar) {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        navbar.classList.toggle('scrolled', !entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    observer.observe(sentinel);
+  }
+</script>
+
+<style>
+  .navbar-sentinel {
+    position: absolute;
+    top: 60px;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+  }
+
+  .navbar {
+    position: fixed;
+    z-index: 50;
+    top: 40px;
+    right: 0;
+    left: 0;
+    height: 72px;
+    background: transparent;
+    color: var(--white);
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      box-shadow 150ms ease,
+      backdrop-filter 150ms ease;
+  }
+
+  .navbar.scrolled {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(1, 10, 31, 0.98);
+    color: #f7f9ff;
+    box-shadow: 0 14px 32px rgba(1, 10, 31, 0.18);
+    backdrop-filter: blur(18px);
+  }
+
+  .navbar__inner {
+    display: grid;
+    grid-template-columns: minmax(290px, 1fr) minmax(440px, auto) minmax(220px, 1fr);
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    margin: 0 auto;
+    padding: 0 var(--section-pad-x);
+    border-radius: 999px;
+    background: rgba(1, 10, 31, 0.34);
+    backdrop-filter: blur(14px);
+  }
+
+  .navbar__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    width: fit-content;
+  }
+
+  .navbar__mark {
+    display: block;
+    width: 46px;
+    height: 46px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    object-fit: cover;
+    box-shadow: 0 10px 24px rgba(1, 10, 31, 0.2);
+  }
+
+  .navbar__brand-copy {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+    line-height: 1;
+  }
+
+  .navbar__brand-name {
+    color: inherit;
+    font-size: clamp(16px, 1.25vw, 21px);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    text-shadow: 0 2px 18px rgba(1, 10, 31, 0.5);
+  }
+
+  .navbar__brand-line {
+    color: #ffe65a;
+    font-size: clamp(10px, 0.82vw, 13px);
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    white-space: nowrap;
+    text-shadow: 0 2px 18px rgba(1, 10, 31, 0.5);
+  }
+
+  .navbar__links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(1.5rem, 3vw, 4rem);
+  }
+
+  .navbar__links a {
+    color: inherit;
+    font-size: clamp(14px, 1vw, 18px);
+    font-weight: 500;
+    opacity: 0.96;
+    text-shadow: 0 2px 18px rgba(1, 10, 31, 0.5);
+    transition:
+      color 150ms ease,
+      opacity 150ms ease;
+  }
+
+  .navbar__links a:hover,
+  .navbar__links a:focus-visible {
+    color: #ffe65a;
+    opacity: 1;
+  }
+
+  .navbar__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .navbar__cta,
+  .navbar__mobile-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, #ffe65a 0%, #f9dd17 100%);
+    color: #031846;
+    box-shadow: 0 12px 28px rgba(249, 221, 23, 0.22);
+    font-size: 14px;
+    font-weight: 800;
+    transition:
+      background-color 150ms ease,
+      box-shadow 150ms ease,
+      transform 150ms ease;
+  }
+
+  .navbar__cta {
+    min-width: 180px;
+    min-height: 46px;
+    padding: 12px 26px;
+  }
+
+  .navbar__cta:hover,
+  .navbar__cta:focus-visible,
+  .navbar__mobile-cta:hover,
+  .navbar__mobile-cta:focus-visible {
+    background: #ffffff;
+    box-shadow: 0 16px 34px rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .navbar__mobile {
+    display: none;
+  }
+
+  .navbar__mobile summary {
+    display: grid;
+    gap: 5px;
+    width: 44px;
+    height: 44px;
+    place-content: center;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .navbar__mobile summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .navbar__mobile summary span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: currentColor;
+  }
+
+  .navbar.scrolled .navbar__brand-name,
+  .navbar.scrolled .navbar__brand-line,
+  .navbar.scrolled .navbar__links a {
+    text-shadow: none;
+  }
+
+  .navbar.scrolled .navbar__inner {
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .navbar__mobile-panel {
+    position: fixed;
+    top: 112px;
+    right: 0;
+    left: 0;
+    display: grid;
+    background: rgba(1, 10, 31, 0.98);
+    backdrop-filter: blur(18px);
+  }
+
+  .navbar__mobile-panel a {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    padding: 0 var(--section-pad-x);
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .navbar__mobile-panel a:hover,
+  .navbar__mobile-panel a:focus-visible {
+    color: var(--white);
+  }
+
+  .navbar__mobile-panel .navbar__mobile-cta {
+    min-height: 46px;
+    margin: 16px var(--section-pad-x);
+    padding: 0 18px;
+    border-bottom: 0;
+    color: #031846;
+  }
+
+  @media (max-width: 1060px) {
+    .navbar__inner {
+      border-radius: 20px;
+      grid-template-columns: 1fr auto;
+    }
+
+    .navbar__links,
+    .navbar__cta {
+      display: none;
+    }
+
+    .navbar__mobile {
+      display: block;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .navbar {
+      height: 60px;
+    }
+
+    .navbar__inner {
+      padding: 0 1rem;
+      border-radius: 18px;
+    }
+
+    .navbar__mobile-panel {
+      top: 100px;
+    }
+
+    .navbar__brand {
+      gap: 8px;
+    }
+
+    .navbar__mark {
+      width: 40px;
+      height: 40px;
+      font-size: 11px;
+    }
+
+    .navbar__brand-name {
+      max-width: 218px;
+      overflow: hidden;
+      font-size: 12.5px;
+      letter-spacing: 0.06em;
+      text-overflow: ellipsis;
+    }
+
+    .navbar__brand-line {
+      max-width: 218px;
+      overflow: hidden;
+      font-size: 8.5px;
+      letter-spacing: 0.14em;
+      text-overflow: ellipsis;
+    }
+  }
+</style>

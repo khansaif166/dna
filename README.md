@@ -1,43 +1,31 @@
-# Astro Starter Kit: Minimal
+# Dream Neet Academy
+
+Astro 4 static site for Dream Neet Academy's 20-day Re-NEET guided self-study program.
+
+## Stack
+
+- Astro 4.16.19 with `output: "static"`
+- TypeScript strict mode
+- Tailwind CSS 4.3.0 via `@tailwindcss/vite`
+- `@astrojs/tailwind` installed per project requirement, but not enabled because Astro 4's integration still uses Tailwind 3's PostCSS plugin API
+- `@astrojs/cloudflare` installed per project requirement, but not enabled because Astro 4 rejects this adapter when `output: "static"` is set
+- `astro-icon` using local SVG icons from `src/icons`
+- Astro components only
+
+## Commands
 
 ```sh
-npm create astro@latest -- --template minimal
+npm run dev
+npm run build
+npm run preview
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Cloudflare Pages
 
-## 🚀 Project Structure
+Build output is configured through `wrangler.toml`:
 
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-├── src/
-│   └── pages/
-│       └── index.astro
-└── package.json
+```toml
+pages_build_output_dir = "dist"
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
-
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
-
-Any static assets, like images, can be placed in the `public/` directory.
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+Static cache rules live in `public/_headers`; canonical host redirects live in `public/_redirects`.

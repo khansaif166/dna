@@ -1,0 +1,264 @@
+---
+import { Icon } from 'astro-icon/components';
+
+const links = [
+  { href: '#program', label: 'Program' },
+  { href: '#highlights', label: 'Highlights' },
+  { href: '#results', label: 'Reality Check' },
+  { href: '#batch', label: 'Batch Dates' },
+  { href: '#contact', label: 'Contact' },
+];
+
+const socials = [
+  { href: 'https://wa.me/918123080202', label: 'WhatsApp', icon: 'tabler:brand-whatsapp' },
+  { href: '#', label: 'Instagram', icon: 'tabler:brand-instagram' },
+  { href: '#', label: 'YouTube', icon: 'tabler:brand-youtube' },
+];
+---
+
+<footer id="contact" class="footer">
+  <div class="footer__inner">
+    <div class="footer__grid">
+      <section class="footer__brand" aria-label="Dream Neet Academy">
+        <a class="footer__logo" href="/" aria-label="Dream Neet Academy home">
+          <img class="footer__mark" src="/images/logo.jpeg" alt="Dream Neet Academy logo" />
+          <span>
+            <span class="footer__logo-title">DREAM NEET ACADEMY</span>
+            <span class="footer__logo-line">RE-NEET · GUIDED SELF-STUDY</span>
+          </span>
+        </a>
+        <p>20-day offline guided self-study program for Re-NEET aspirants.</p>
+        <div class="footer__socials" aria-label="Social links">
+          {socials.map((social) => (
+            <a href={social.href} aria-label={social.label}>
+              <Icon name={social.icon} size="18" aria-hidden="true" />
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section aria-labelledby="footer-quick-links">
+        <h2 id="footer-quick-links">Quick Links</h2>
+        <nav class="footer__links" aria-label="Footer navigation">
+          {links.map((link) => (
+            <a href={link.href}>{link.label}</a>
+          ))}
+        </nav>
+      </section>
+
+      <section class="footer__contact" aria-labelledby="footer-contact">
+        <h2 id="footer-contact">Contact</h2>
+        <a class="footer__phone" href="tel:+918123080202">
+          <Icon name="tabler:phone" size="20" aria-hidden="true" />
+          8123080202
+        </a>
+        <address>
+          Dream Neet Academy, Near Pinnacle Institute of Pharmacy,<br />
+          Doddamane Nursing Home Road, Shankarpuram 4th cross,<br />
+          Near B.H. Road, Tumakuru - 572102, Karnataka
+        </address>
+        <a class="footer__whatsapp" href="https://wa.me/918123080202">Chat on WhatsApp &rarr;</a>
+        <a class="footer__site" href="https://www.dreamneetacademy.com" target="_blank" rel="noopener">
+          www.dreamneetacademy.com
+        </a>
+      </section>
+    </div>
+
+    <div class="footer__divider"></div>
+    <p class="footer__bottom">&copy; 2026 Dream Neet Academy · All rights reserved.</p>
+  </div>
+</footer>
+
+<style>
+  .footer {
+    background: linear-gradient(180deg, #010a1f 0%, #020916 100%);
+    color: var(--white);
+  }
+
+  .footer__inner {
+    width: 100%;
+    margin: 0 auto;
+    padding: var(--section-pad-y) var(--section-pad-x) 28px;
+  }
+
+  .footer__grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 1.15fr) minmax(180px, 0.65fr) minmax(360px, 1.2fr);
+    gap: clamp(2.5rem, 6vw, 5rem);
+  }
+
+  .footer__logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--white);
+  }
+
+  .footer__mark {
+    display: block;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    object-fit: cover;
+  }
+
+  .footer__logo span {
+    display: grid;
+    gap: 3px;
+    line-height: 1;
+  }
+
+  .footer__logo-title {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+  }
+
+  .footer__logo-line {
+    color: #f9dd17;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+  }
+
+  .footer__brand p {
+    margin: 18px 0 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .footer__socials {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+  }
+
+  .footer__socials a {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 0.5px solid rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    color: #f9dd17;
+    background: rgba(255, 255, 255, 0.04);
+    transition:
+      border-color 150ms ease,
+      color 150ms ease,
+      transform 150ms ease;
+  }
+
+  .footer__socials a:hover,
+  .footer__socials a:focus-visible {
+    border-color: #f9dd17;
+    color: var(--white);
+    transform: translateY(-2px);
+  }
+
+  .footer h2 {
+    margin: 0 0 20px;
+    color: #f9dd17;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+
+  .footer__links {
+    display: grid;
+    gap: 13px;
+  }
+
+  .footer__links a {
+    width: fit-content;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 14px;
+    transition:
+      color 150ms ease,
+      transform 150ms ease;
+  }
+
+  .footer__links a:hover,
+  .footer__links a:focus-visible {
+    color: var(--white);
+    transform: translateX(3px);
+  }
+
+  .footer__contact {
+    display: grid;
+    align-content: start;
+  }
+
+  .footer__phone {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    width: fit-content;
+    color: var(--white);
+    font-size: 22px;
+    font-weight: 900;
+  }
+
+  .footer__phone [data-icon] {
+    color: #f9dd17;
+  }
+
+  .footer address {
+    margin-top: 18px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 13px;
+    font-style: normal;
+    line-height: 1.6;
+  }
+
+  .footer__whatsapp,
+  .footer__site {
+    width: fit-content;
+    color: #f9dd17;
+    font-size: 14px;
+    font-weight: 700;
+    transition: color 150ms ease;
+  }
+
+  .footer__whatsapp {
+    margin-top: 18px;
+  }
+
+  .footer__site {
+    margin-top: 10px;
+  }
+
+  .footer__whatsapp:hover,
+  .footer__whatsapp:focus-visible,
+  .footer__site:hover,
+  .footer__site:focus-visible {
+    color: var(--white);
+  }
+
+  .footer__divider {
+    width: 100%;
+    height: 0.5px;
+    margin-top: clamp(3rem, 6vw, 5rem);
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .footer__bottom {
+    margin: 24px 0 0;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  @media (max-width: 767px) {
+    .footer__inner {
+      padding-top: 4rem;
+    }
+
+    .footer__grid {
+      grid-template-columns: 1fr;
+      gap: 2.75rem;
+    }
+  }
+</style>

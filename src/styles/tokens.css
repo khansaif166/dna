@@ -1,0 +1,35 @@
+:root {
+  --green-900: #0F2318;
+  --green-800: #1A3D2B;   /* primary bg */
+  --green-700: #214D36;
+  --green-600: #2A6045;
+  --gold-500:  #C5A84F;   /* accent */
+  --gold-300:  #E2C97E;
+  --cream:     #F5F3EE;   /* section bg */
+  --white:     #FFFFFF;
+  --gray-100:  #F0EEE9;
+  --gray-400:  #9B9890;
+  --gray-600:  #6B6860;
+  --text-dark: #1C1C1C;
+  --text-mid:  #4A4845;
+  --navy-950: #010A1F;
+  --navy-900: #021130;
+  --navy-850: #031846;
+  --navy-800: #06235C;
+  --blue-100: #EAF1FF;
+  --red-700: #B90505;
+  --yellow-400: #F9DD17;
+  --shadow-soft: 0 18px 45px rgba(3, 24, 70, 0.12);
+  --shadow-lift: 0 22px 55px rgba(3, 24, 70, 0.18);
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --section-pad-x: clamp(1.25rem, 5vw, 7rem);
+  --section-pad-y: clamp(4rem, 8vw, 7rem);
+  --max-width: 100%;
+}

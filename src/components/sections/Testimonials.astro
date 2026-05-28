@@ -1,0 +1,203 @@
+---
+import { Icon } from 'astro-icon/components';
+
+const batchDetails = [
+  {
+    icon: 'tabler:desk',
+    title: '12 Hours of Focused Self-Study',
+    body: 'A full-day offline study routine designed to remove distractions and build exam-day confidence.',
+  },
+  {
+    icon: 'tabler:clipboard-check',
+    title: 'Daily Tests & Detailed Analysis',
+    body: 'Students get regular evaluation and feedback so every day has a measurable output.',
+  },
+  {
+    icon: 'tabler:messages',
+    title: 'Doubt Clearance Every Day',
+    body: 'Faculty support is available throughout the program for Physics, Chemistry and Biology doubts.',
+  },
+];
+---
+
+<section id="batch" class="testimonials">
+  <div class="testimonials__inner">
+    <div class="testimonials__schedule" aria-label="20 day batch dates">
+      <div>
+        <span>20 Day Batch</span>
+      </div>
+      <div>
+        <p>Start Date</p>
+        <strong>1st June 2026</strong>
+      </div>
+      <div>
+        <p>End Date</p>
+        <strong>20th June 2026</strong>
+      </div>
+    </div>
+
+    <div class="testimonials__heading">
+      <p>What makes our 20-day program highly effective?</p>
+      <h2>Focused study, daily measurement and same-day doubt support.</h2>
+    </div>
+
+    <div class="testimonials__grid">
+      {batchDetails.map((item) => (
+        <article class="testimonials__card">
+          <div class="testimonials__icon">
+            <Icon name={item.icon} size="28" aria-hidden="true" />
+          </div>
+          <h3>{item.title}</h3>
+          <p>{item.body}</p>
+        </article>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .testimonials {
+    background: linear-gradient(180deg, #f7f8fb 0%, #eef4ff 100%);
+  }
+
+  .testimonials__inner {
+    width: 100%;
+    margin: 0 auto;
+    padding: var(--section-pad-y) var(--section-pad-x);
+  }
+
+  .testimonials__schedule {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    overflow: hidden;
+    margin-bottom: 34px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, #031846 0%, #09296b 100%);
+    color: var(--white);
+  }
+
+  .testimonials__schedule > div {
+    display: grid;
+    min-height: 86px;
+    place-content: center;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .testimonials__schedule > div + div {
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+  }
+
+  .testimonials__schedule span {
+    display: inline-flex;
+    border-radius: var(--radius-sm);
+    background: #f9dd17;
+    color: #031846;
+    font-size: clamp(24px, 3vw, 36px);
+    font-weight: 900;
+    line-height: 1;
+    padding: 12px 18px;
+    text-transform: uppercase;
+  }
+
+  .testimonials__schedule p {
+    margin: 0 0 6px;
+    color: var(--white);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .testimonials__schedule strong {
+    color: #f9dd17;
+    font-size: clamp(22px, 3vw, 32px);
+    font-weight: 900;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .testimonials__heading {
+    max-width: 820px;
+    margin-bottom: 2rem;
+  }
+
+  .testimonials__heading p {
+    margin: 0 0 0.75rem;
+    color: #b90505;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .testimonials__heading h2 {
+    margin: 0;
+    color: #031846;
+    font-size: clamp(30px, 4vw, 48px);
+    font-weight: 900;
+    line-height: 1.08;
+  }
+
+  .testimonials__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(1rem, 1.8vw, 1.75rem);
+  }
+
+  .testimonials__card {
+    border: 1px solid rgba(3, 24, 70, 0.12);
+    border-radius: var(--radius-md);
+    background: var(--white);
+    padding: clamp(1.5rem, 2.3vw, 2.4rem);
+    box-shadow: 0 12px 32px rgba(3, 24, 70, 0.07);
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .testimonials__card:hover {
+    border-color: rgba(11, 105, 61, 0.32);
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-5px);
+  }
+
+  .testimonials__icon {
+    display: grid;
+    width: 62px;
+    height: 62px;
+    place-items: center;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #0f7a49 0%, #0b693d 100%);
+    color: var(--white);
+  }
+
+  .testimonials__card h3 {
+    margin: 18px 0 8px;
+    color: #031846;
+    font-size: 20px;
+    font-weight: 900;
+    line-height: 1.2;
+  }
+
+  .testimonials__card p {
+    margin: 0;
+    color: #43506d;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    .testimonials__schedule,
+    .testimonials__grid {
+      grid-template-columns: 1fr;
+    }
+
+    .testimonials__schedule > div + div {
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+      border-left: 0;
+    }
+  }
+</style>

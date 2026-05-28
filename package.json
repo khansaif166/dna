@@ -1,5 +1,5 @@
 {
-  "name": "pragya-academy",
+  "name": "dream-neet-academy",
   "type": "module",
   "version": "0.0.1",
   "engines": {
@@ -12,6 +12,12 @@
     "astro": "astro"
   },
   "dependencies": {
-    "astro": "^6.4.0"
+    "@astrojs/cloudflare": "11.2.0",
+    "@astrojs/tailwind": "6.0.2",
+    "@iconify-json/tabler": "^1.2.35",
+    "@tailwindcss/vite": "4.3.0",
+    "astro": "4.16.19",
+    "astro-icon": "1.1.5",
+    "tailwindcss": "4.3.0"
   }
 }

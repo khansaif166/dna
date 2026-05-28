@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1100" viewBox="0 0 900 1100" role="img" aria-labelledby="title desc">
+  <title id="title">NEET mentor in classroom</title>
+  <desc id="desc">Premium placeholder image for a teacher mentoring NEET aspirants.</desc>
+  <rect width="900" height="1100" fill="#214D36" />
+  <rect x="72" y="72" width="756" height="956" rx="8" fill="#F5F3EE" opacity="0.08" />
+  <circle cx="560" cy="270" r="104" fill="#E2C97E" />
+  <path d="M390 980V614c0-120 72-200 176-200s176 80 176 200v366z" fill="#0F2318" />
+  <path d="M478 516h176l-30 176h-116z" fill="#F5F3EE" />
+  <path d="M198 370h246" stroke="#C5A84F" stroke-width="16" stroke-linecap="round" />
+  <path d="M198 438h188" stroke="#F5F3EE" stroke-width="10" stroke-linecap="round" opacity="0.7" />
+  <path d="M198 492h260" stroke="#F5F3EE" stroke-width="10" stroke-linecap="round" opacity="0.45" />
+  <path d="M126 816c120-76 240-76 360 0 94-60 188-72 282-36" fill="none" stroke="#C5A84F" stroke-width="18" stroke-linecap="round" opacity="0.9" />
+</svg>

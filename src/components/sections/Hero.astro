@@ -1,0 +1,458 @@
+---
+import { Icon } from 'astro-icon/components';
+
+const stats = [
+  { icon: 'tabler:calendar-event', value: '1 Jun', label: 'Batch Starts' },
+  { icon: 'tabler:clock-hour-4', value: '12 Hrs', label: 'Focused Study Daily' },
+  { icon: 'tabler:chart-bar', value: '240 Hrs', label: 'Effective Study' },
+];
+---
+
+<section id="program" class="hero">
+  <div class="hero__backdrop" aria-hidden="true"></div>
+
+  <div class="hero__content">
+    <div class="hero__brand-row">
+      <img class="hero__logo" src="/images/logo.jpeg" alt="Dream Neet Academy logo" />
+      <div class="hero__brand-copy">
+        <p>Dream Neet Academy</p>
+        <span>Offline Re-NEET guided self-study</span>
+      </div>
+    </div>
+
+    <div class="hero__date-band">Re-NEET Examination on <strong>21st June 2026</strong></div>
+
+    <h1 class="hero__headline">
+      <span>Execute the</span>
+      <span>last 20 days</span>
+      <span>with precision.</span>
+    </h1>
+
+    <p class="hero__lead">
+      A premium offline revision environment with disciplined study hours, PCB faculty monitoring and daily execution support.
+    </p>
+
+    <div class="hero__meta">
+      <div class="hero__urgency">
+        <strong>Last 20 Days</strong>
+        <span>to make the difference</span>
+      </div>
+      <p class="hero__guidance">Expert-guided execution. Zero-distraction routine.</p>
+    </div>
+
+    <div class="hero__actions">
+      <button class="hero__primary" type="button" data-modal-open>
+        <Icon name="tabler:user-plus" size="19" aria-hidden="true" />
+        Enroll Now
+      </button>
+      <a class="hero__secondary" href="tel:+918123080202">
+        <Icon name="tabler:phone" size="19" aria-hidden="true" />
+        Call 8123080202
+      </a>
+    </div>
+
+    <div class="hero__stats" aria-label="20 day Re-NEET program summary">
+      {stats.map((stat) => (
+        <div class="hero__stat">
+          <Icon name={stat.icon} size="20" aria-hidden="true" />
+          <strong>{stat.value}</strong>
+          <span>{stat.label}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    isolation: isolate;
+    min-height: calc(100vh - 40px);
+    overflow: hidden;
+    background:
+      linear-gradient(90deg, rgba(1, 10, 31, 0.94) 0%, rgba(1, 10, 31, 0.72) 34%, rgba(1, 10, 31, 0.26) 58%, rgba(1, 10, 31, 0.04) 75%),
+      url('/images/bleed-web.png') center center / cover no-repeat;
+    color: var(--white);
+  }
+
+  .hero__backdrop {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 22% 18%, rgba(249, 221, 23, 0.12), transparent 22%),
+      linear-gradient(180deg, rgba(1, 10, 31, 0.1), rgba(1, 10, 31, 0.22));
+    pointer-events: none;
+  }
+
+  .hero__content {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    align-content: center;
+    min-height: calc(100vh - 40px);
+    width: min(100%, 760px);
+    padding: clamp(7rem, 10vw, 9.5rem) 0 clamp(4rem, 8vw, 6rem) var(--section-pad-x);
+  }
+
+  .hero__brand-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 16px;
+    width: fit-content;
+    margin-bottom: 1.25rem;
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(14px);
+  }
+
+  .hero__logo {
+    width: 68px;
+    height: 68px;
+    border-radius: 999px;
+    object-fit: cover;
+    box-shadow: 0 14px 30px rgba(1, 10, 31, 0.28);
+  }
+
+  .hero__brand-copy {
+    display: grid;
+    gap: 4px;
+  }
+
+  .hero__brand-copy p {
+    margin: 0;
+    color: var(--white);
+    font-size: clamp(16px, 1.35vw, 21px);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .hero__brand-copy span {
+    color: rgba(255, 230, 90, 0.92);
+    font-size: clamp(11px, 0.82vw, 13px);
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .hero__date-band {
+    width: fit-content;
+    margin-bottom: 1.2rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.94);
+    font-size: clamp(13px, 1vw, 15px);
+    font-weight: 800;
+    line-height: 1.2;
+    padding: 12px 18px;
+    text-transform: uppercase;
+    backdrop-filter: blur(12px);
+  }
+
+  .hero__date-band strong {
+    color: #ffe65a;
+    font-weight: 900;
+  }
+
+  .hero__headline {
+    margin: 0;
+    max-width: 680px;
+    color: var(--white);
+    font-size: clamp(48px, 6.2vw, 88px);
+    font-weight: 900;
+    letter-spacing: 0;
+    line-height: 0.92;
+    text-transform: uppercase;
+  }
+
+  .hero__headline span {
+    display: block;
+  }
+
+  .hero__lead {
+    max-width: 600px;
+    margin: 1.35rem 0 0;
+    color: rgba(235, 241, 255, 0.84);
+    font-size: clamp(17px, 1.35vw, 21px);
+    font-weight: 500;
+    line-height: 1.7;
+  }
+
+  .hero__meta {
+    display: grid;
+    gap: 12px;
+    margin-top: 1.8rem;
+  }
+
+  .hero__urgency {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    width: fit-content;
+    max-width: 100%;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(200, 7, 7, 0.94), rgba(169, 4, 4, 0.94));
+    color: var(--white);
+    padding: 12px 16px;
+    text-transform: uppercase;
+    box-shadow: 0 18px 44px rgba(82, 4, 4, 0.28);
+  }
+
+  .hero__urgency strong {
+    color: #ffe65a;
+    font-size: clamp(24px, 2.6vw, 38px);
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .hero__urgency span {
+    font-size: clamp(13px, 1vw, 17px);
+    font-weight: 800;
+    line-height: 1.15;
+  }
+
+  .hero__guidance {
+    width: fit-content;
+    max-width: 100%;
+    margin: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: clamp(12px, 0.95vw, 14px);
+    font-weight: 700;
+    line-height: 1.25;
+    padding: 11px 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    backdrop-filter: blur(12px);
+  }
+
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 2rem;
+  }
+
+  .hero__primary,
+  .hero__secondary {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    min-height: 52px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 800;
+    padding: 13px 24px;
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .hero__primary::after,
+  .hero__secondary::after {
+    position: absolute;
+    inset: 0;
+    width: 34%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.34), transparent);
+    content: "";
+    transform: translateX(-120%) skewX(-18deg);
+  }
+
+  .hero__primary {
+    border: 0;
+    background: linear-gradient(135deg, #ffe65a 0%, #f9dd17 100%);
+    color: #031846;
+    cursor: pointer;
+    box-shadow: 0 16px 36px rgba(249, 221, 23, 0.22);
+  }
+
+  .hero__secondary {
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--white);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 30px rgba(1, 10, 31, 0.16);
+  }
+
+  .hero__primary:hover,
+  .hero__primary:focus-visible,
+  .hero__secondary:hover,
+  .hero__secondary:focus-visible {
+    transform: translateY(-2px);
+  }
+
+  .hero__primary:hover::after,
+  .hero__primary:focus-visible::after,
+  .hero__secondary:hover::after,
+  .hero__secondary:focus-visible::after {
+    animation: dna-shine 720ms ease;
+  }
+
+  .hero__primary:hover,
+  .hero__primary:focus-visible {
+    background: linear-gradient(135deg, #fff0a0 0%, #ffe65a 100%);
+    box-shadow: 0 20px 42px rgba(249, 221, 23, 0.28);
+  }
+
+  .hero__secondary:hover,
+  .hero__secondary:focus-visible {
+    border-color: rgba(255, 255, 255, 0.38);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 18px 38px rgba(1, 10, 31, 0.24);
+  }
+
+  .hero__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    max-width: 640px;
+    margin-top: 2rem;
+  }
+
+  .hero__stat {
+    min-width: 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 16px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 34px rgba(1, 10, 31, 0.12);
+    transition:
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .hero__stat:hover {
+    border-color: rgba(255, 230, 90, 0.32);
+    box-shadow: var(--shadow-soft);
+    transform: translateY(-3px);
+  }
+
+  .hero__stat [data-icon] {
+    color: #ffe65a;
+  }
+
+  .hero__stat strong {
+    display: block;
+    margin-top: 10px;
+    color: var(--white);
+    font-size: clamp(22px, 2.2vw, 30px);
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .hero__stat span {
+    display: block;
+    margin-top: 6px;
+    color: rgba(235, 241, 255, 0.78);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 1180px) {
+    .hero__content {
+      width: min(100%, 680px);
+      padding-right: var(--section-pad-x);
+    }
+
+    .hero__headline {
+      font-size: clamp(42px, 6vw, 74px);
+    }
+  }
+
+  @media (max-width: 900px) {
+    .hero {
+      min-height: auto;
+      background:
+        linear-gradient(180deg, rgba(1, 10, 31, 0.34) 0%, rgba(1, 10, 31, 0.76) 44%, rgba(1, 10, 31, 0.96) 100%),
+        url('/images/bleed-mob.png') center top / cover no-repeat;
+    }
+
+    .hero__content {
+      width: 100%;
+      min-height: calc(100vh - 40px);
+      padding: 7rem 1rem 3rem;
+      align-content: end;
+    }
+
+    .hero__headline {
+      max-width: 100%;
+      font-size: clamp(40px, 9.8vw, 60px);
+    }
+
+    .hero__lead {
+      max-width: 100%;
+      font-size: 16px;
+    }
+
+    .hero__stats {
+      max-width: 100%;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .hero__brand-row {
+      gap: 12px;
+      padding: 8px 12px;
+    }
+
+    .hero__logo {
+      width: 54px;
+      height: 54px;
+    }
+
+    .hero__brand-copy p {
+      font-size: 14px;
+    }
+
+    .hero__brand-copy span {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+    }
+
+    .hero__date-band {
+      font-size: 12px;
+      padding: 10px 14px;
+    }
+
+    .hero__urgency {
+      gap: 6px 10px;
+      padding: 12px 14px;
+    }
+
+    .hero__guidance {
+      font-size: 11px;
+      line-height: 1.45;
+      letter-spacing: 0.06em;
+    }
+
+    .hero__primary,
+    .hero__secondary {
+      width: 100%;
+    }
+
+    .hero__actions {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .hero__stats {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

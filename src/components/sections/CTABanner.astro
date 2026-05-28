@@ -1,0 +1,132 @@
+---
+import { Icon } from 'astro-icon/components';
+---
+
+<section class="cta-banner">
+  <div class="cta-banner__inner">
+    <div class="cta-banner__left">
+      <div class="cta-banner__badge" aria-label="Admission enquiries">
+        <Icon name="tabler:phone-call" size="30" aria-hidden="true" />
+      </div>
+      <h2>For Admission & Enquiries</h2>
+      <a href="tel:+918123080202">8123080202</a>
+    </div>
+
+    <div class="cta-banner__right">
+      <p>
+        Separate hostel facilities for boys and girls are available. The program runs at Dream Neet Academy, Tumakuru.
+      </p>
+      <button type="button" data-modal-open>
+        <Icon name="tabler:user-plus" size="20" aria-hidden="true" />
+        Enroll Now
+      </button>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta-banner {
+    background:
+      radial-gradient(circle at 18% 30%, rgba(249, 221, 23, 0.13), transparent 28%),
+      linear-gradient(135deg, #06235c 0%, #031846 58%, #010a1f 100%);
+  }
+
+  .cta-banner__inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(2rem, 5vw, 6rem);
+    align-items: center;
+    width: 100%;
+    margin: 0 auto;
+    padding: var(--section-pad-y) var(--section-pad-x);
+  }
+
+  .cta-banner__badge {
+    display: grid;
+    width: 72px;
+    height: 72px;
+    place-items: center;
+    border: 2px solid rgba(249, 221, 23, 0.7);
+    border-radius: 999px;
+    background: linear-gradient(135deg, #0f7a49 0%, #0b693d 100%);
+    color: var(--white);
+    box-shadow: 0 18px 40px rgba(11, 105, 61, 0.32);
+  }
+
+  .cta-banner h2 {
+    max-width: 720px;
+    margin: 16px 0 0;
+    color: var(--white);
+    font-size: clamp(34px, 5vw, 56px);
+    font-weight: 900;
+    line-height: 1.05;
+  }
+
+  .cta-banner__left a {
+    display: inline-flex;
+    margin-top: 14px;
+    color: #f9dd17;
+    font-size: clamp(36px, 6vw, 76px);
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .cta-banner__right p {
+    max-width: 640px;
+    margin: 0 0 28px;
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.6;
+  }
+
+  .cta-banner__right button {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 0;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #ffe65a 0%, #f9dd17 100%);
+    color: #031846;
+    cursor: pointer;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 900;
+    padding: 16px 34px;
+    box-shadow: 0 18px 38px rgba(249, 221, 23, 0.22);
+    transition:
+      background-color 180ms ease,
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .cta-banner__right button::after {
+    position: absolute;
+    inset: 0;
+    width: 34%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
+    content: "";
+    transform: translateX(-120%) skewX(-18deg);
+  }
+
+  .cta-banner__right button:hover,
+  .cta-banner__right button:focus-visible {
+    background: var(--white);
+    box-shadow: 0 22px 45px rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
+  }
+
+  .cta-banner__right button:hover::after,
+  .cta-banner__right button:focus-visible::after {
+    animation: dna-shine 720ms ease;
+  }
+
+  @media (max-width: 767px) {
+    .cta-banner__inner {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

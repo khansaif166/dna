@@ -1,0 +1,347 @@
+---
+import { Icon } from 'astro-icon/components';
+---
+
+<div id="enroll-overlay" class="enroll-overlay" aria-hidden="true">
+  <div
+    class="enroll-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="enroll-modal-title"
+    aria-describedby="enroll-modal-description"
+  >
+    <button class="enroll-modal__close" type="button" aria-label="Close">&times;</button>
+
+    <div class="enroll-modal__content" data-modal-form>
+      <span class="enroll-modal__badge">20-Day Re-NEET Batch</span>
+      <h3 id="enroll-modal-title">Reserve Your Guided Study Seat</h3>
+      <p id="enroll-modal-description">Our team will call you with batch and hostel details.</p>
+
+      <div class="enroll-modal__field">
+        <label for="enroll-name">Full Name</label>
+        <input id="enroll-name" type="text" placeholder="Your full name" autocomplete="name" />
+      </div>
+
+      <div class="enroll-modal__field">
+        <label for="enroll-mobile">Mobile Number</label>
+        <input
+          id="enroll-mobile"
+          type="tel"
+          placeholder="10-digit mobile number"
+          pattern="[0-9]{10}"
+          autocomplete="tel"
+          inputmode="numeric"
+        />
+      </div>
+
+      <div class="enroll-modal__field">
+        <label for="enroll-city">City</label>
+        <input id="enroll-city" type="text" placeholder="Your city" autocomplete="address-level2" />
+      </div>
+
+      <div class="enroll-modal__field">
+        <label for="enroll-target">Exam Target</label>
+        <select id="enroll-target">
+          <option value="" disabled selected>Select exam</option>
+          <option>NEET 2026</option>
+          <option>Re-NEET June 2026</option>
+          <option>Both</option>
+        </select>
+      </div>
+
+      <button class="enroll-modal__submit" type="button">Confirm My Seat &rarr;</button>
+    </div>
+
+    <div class="enroll-modal__success" data-modal-success hidden>
+      <div class="enroll-modal__check">
+        <Icon name="tabler:check" size="28" aria-hidden="true" />
+      </div>
+      <h3>You're on the list!</h3>
+      <p>Dream Neet Academy will call you soon to confirm your seat.</p>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  const overlay = document.getElementById('enroll-overlay');
+  const modal = overlay?.querySelector('.enroll-modal');
+  const closeButton = overlay?.querySelector('.enroll-modal__close');
+  const submitButton = overlay?.querySelector('.enroll-modal__submit');
+  const formContent = overlay?.querySelector('[data-modal-form]');
+  const successContent = overlay?.querySelector('[data-modal-success]');
+  const firstInput = overlay?.querySelector('#enroll-name');
+  const mobileInput = overlay?.querySelector('#enroll-mobile');
+  let successTimer;
+
+  function resetModal() {
+    overlay?.querySelectorAll('input').forEach((input) => {
+      input.value = '';
+      input.removeAttribute('aria-invalid');
+    });
+    const select = overlay?.querySelector('select');
+    if (select) {
+      select.selectedIndex = 0;
+    }
+    if (formContent && successContent) {
+      formContent.hidden = false;
+      successContent.hidden = true;
+    }
+    window.clearTimeout(successTimer);
+  }
+
+  function openModal() {
+    if (!overlay) return;
+    overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    window.setTimeout(() => firstInput?.focus(), 0);
+  }
+
+  function closeModal() {
+    if (!overlay) return;
+    overlay.style.display = 'none';
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    resetModal();
+  }
+
+  window.openModal = openModal;
+  window.closeModal = closeModal;
+
+  document.querySelectorAll('[data-modal-open]').forEach((trigger) => {
+    trigger.addEventListener('click', (event) => {
+      event.preventDefault();
+      openModal();
+    });
+  });
+
+  closeButton?.addEventListener('click', closeModal);
+
+  overlay?.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeModal();
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && overlay?.style.display === 'flex') {
+      closeModal();
+    }
+  });
+
+  submitButton?.addEventListener('click', () => {
+    const mobile = mobileInput?.value.trim() ?? '';
+
+    if (!/^[0-9]{10}$/.test(mobile)) {
+      mobileInput?.setAttribute('aria-invalid', 'true');
+      mobileInput?.focus();
+      return;
+    }
+
+    mobileInput?.removeAttribute('aria-invalid');
+
+    if (formContent && successContent) {
+      formContent.hidden = true;
+      successContent.hidden = false;
+    }
+
+    successTimer = window.setTimeout(() => closeModal(), 3000);
+  });
+</script>
+
+<style>
+  .enroll-overlay {
+    position: fixed;
+    z-index: 200;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(1, 10, 31, 0.78);
+    padding: 24px;
+    backdrop-filter: blur(10px);
+  }
+
+  .enroll-modal {
+    position: relative;
+    width: min(480px, 92vw);
+    border-radius: var(--radius-lg);
+    background: var(--white);
+    padding: 40px 36px;
+    box-shadow: 0 30px 80px rgba(1, 10, 31, 0.34);
+  }
+
+  .enroll-modal__close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: #eef4ff;
+    color: var(--text-mid);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    transition:
+      background-color 150ms ease,
+      transform 150ms ease;
+  }
+
+  .enroll-modal__close:hover,
+  .enroll-modal__close:focus-visible {
+    background: #E3E0D9;
+    transform: rotate(90deg);
+  }
+
+  .enroll-modal__badge {
+    display: inline-block;
+    margin-bottom: 16px;
+    border-radius: 100px;
+    background: linear-gradient(135deg, #031846 0%, #09296b 100%);
+    color: #f9dd17;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 4px 12px;
+    text-transform: uppercase;
+  }
+
+  .enroll-modal h3 {
+    margin: 0 0 4px;
+    color: var(--text-dark);
+    font-family: var(--font-serif);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .enroll-modal__content > p {
+    margin: 0 0 28px;
+    color: var(--gray-600);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .enroll-modal__field {
+    margin-bottom: 20px;
+  }
+
+  .enroll-modal__field label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-dark);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .enroll-modal__field input,
+  .enroll-modal__field select {
+    width: 100%;
+    border: 1px solid #dfe6f2;
+    border-radius: var(--radius-md);
+    background: var(--white);
+    color: var(--text-dark);
+    font: inherit;
+    font-size: 15px;
+    padding: 12px 16px;
+  }
+
+  .enroll-modal__field input:focus,
+  .enroll-modal__field select:focus {
+    border-color: #031846;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(9, 41, 107, 0.1);
+  }
+
+  .enroll-modal__field input[aria-invalid="true"] {
+    border-color: #B45309;
+    box-shadow: 0 0 0 3px rgba(180, 83, 9, 0.12);
+  }
+
+  .enroll-modal__submit {
+    position: relative;
+    overflow: hidden;
+    width: 100%;
+    margin-top: 8px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, #031846 0%, #09296b 100%);
+    color: var(--white);
+    cursor: pointer;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 900;
+    padding: 15px;
+    box-shadow: 0 16px 34px rgba(3, 24, 70, 0.2);
+    transition:
+      background-color 150ms ease,
+      box-shadow 150ms ease,
+      transform 150ms ease;
+  }
+
+  .enroll-modal__submit::after {
+    position: absolute;
+    inset: 0;
+    width: 34%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.36), transparent);
+    content: "";
+    transform: translateX(-120%) skewX(-18deg);
+  }
+
+  .enroll-modal__submit:hover,
+  .enroll-modal__submit:focus-visible {
+    background: linear-gradient(135deg, #0f7a49 0%, #0b693d 100%);
+    box-shadow: 0 20px 42px rgba(11, 105, 61, 0.24);
+    transform: translateY(-2px);
+  }
+
+  .enroll-modal__submit:hover::after,
+  .enroll-modal__submit:focus-visible::after {
+    animation: dna-shine 720ms ease;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .enroll-overlay[aria-hidden="false"] .enroll-modal {
+      animation: dna-scale-in 260ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+    }
+  }
+
+  .enroll-modal__success {
+    padding: 20px 0 8px;
+    text-align: center;
+  }
+
+  .enroll-modal__check {
+    display: grid;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 18px;
+    place-items: center;
+    border-radius: 999px;
+    background: rgba(11, 105, 61, 0.1);
+    color: #0b693d;
+  }
+
+  .enroll-modal__success h3 {
+    font-size: 24px;
+  }
+
+  .enroll-modal__success p {
+    margin: 8px auto 0;
+    max-width: 300px;
+    color: var(--gray-600);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 520px) {
+    .enroll-modal {
+      padding: 36px 24px 28px;
+    }
+  }
+</style>

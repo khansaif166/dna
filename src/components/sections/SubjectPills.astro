@@ -1,0 +1,105 @@
+---
+import { Icon } from 'astro-icon/components';
+
+const pills = [
+  { label: 'Physics Faculty Monitoring', icon: 'tabler:atom' },
+  { label: 'Chemistry Faculty Monitoring', icon: 'tabler:flask' },
+  { label: 'Biology Faculty Monitoring', icon: 'tabler:leaf' },
+  { label: 'Regular Tests', icon: 'tabler:clipboard-check' },
+  { label: 'Doubt Support', icon: 'tabler:messages' },
+  { label: 'Focused Environment', icon: 'tabler:target-arrow' },
+];
+---
+
+<section id="highlights" class="subject-pills" aria-label="Subject areas">
+  <div class="subject-pills__inner">
+    {pills.map((pill, index) => (
+      <button class:list={['subject-pills__pill', { active: index === 0 }]} type="button">
+        <Icon name={pill.icon} size="18" aria-hidden="true" />
+        {pill.label}
+      </button>
+    ))}
+  </div>
+</section>
+
+<script is:inline>
+  document.querySelectorAll('.subject-pills__pill').forEach((pill) => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.subject-pills__pill').forEach((item) => item.classList.remove('active'));
+      pill.classList.add('active');
+    });
+  });
+</script>
+
+<style>
+  .subject-pills {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(90deg, #06235c 0%, #031846 48%, #09296b 100%);
+  }
+
+  .subject-pills__inner {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    width: 100%;
+    height: 72px;
+    margin: 0 auto;
+    padding: 0 var(--section-pad-x);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .subject-pills__inner::-webkit-scrollbar {
+    display: none;
+  }
+
+  .subject-pills__pill {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    padding: 10px clamp(16px, 1.5vw, 28px);
+    border: 0.5px solid transparent;
+    border-radius: 100px;
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--white);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      background-color 150ms ease,
+      box-shadow 150ms ease,
+      color 150ms ease,
+      transform 150ms ease;
+  }
+
+  .subject-pills__pill [data-icon] {
+    margin-right: 8px;
+    transition: color 150ms ease;
+  }
+
+  .subject-pills__pill.active,
+  .subject-pills__pill:hover,
+  .subject-pills__pill:focus-visible {
+    background: #f9dd17;
+    color: #031846;
+    box-shadow: 0 12px 26px rgba(249, 221, 23, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .subject-pills__pill.active [data-icon],
+  .subject-pills__pill:hover [data-icon],
+  .subject-pills__pill:focus-visible [data-icon] {
+    color: #0b693d;
+  }
+
+  @media (max-width: 767px) {
+    .subject-pills__inner {
+      justify-content: flex-start;
+    }
+  }
+</style>

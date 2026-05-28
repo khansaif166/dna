@@ -1,0 +1,238 @@
+---
+import { Icon } from 'astro-icon/components';
+
+const problems = [
+  'Distraction',
+  'Deviation from study schedule',
+  'Disturbances at home',
+  'Social media scrolling',
+  'Gaming and other addictions',
+  'Guests, family functions and homely environment',
+];
+
+const solutions = [
+  'Expert monitoring by Physics, Chemistry and Biology faculties',
+  'Regular tests, analysis and performance tracking',
+  'Customized study plan for every student',
+  'Individual attention and doubt support',
+  'Distraction-free, disciplined and focused environment',
+];
+---
+
+<section id="results" class="advantage">
+  <div class="advantage__inner">
+    <div class="advantage__heading">
+      <p>The Reality</p>
+      <h2>Most students plan well, but lose marks because execution breaks down.</h2>
+    </div>
+
+    <div class="advantage__compare">
+      <article class="advantage__panel advantage__panel--problem">
+        <h3>The Reality</h3>
+        <p>Majority of students make plans but fail to execute them due to:</p>
+        <ul>
+          {problems.map((problem) => (
+            <li>
+              <Icon name="tabler:circle-x-filled" size="22" aria-hidden="true" />
+              <span>{problem}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="advantage__result">
+          <Icon name="tabler:book-off" size="34" aria-hidden="true" />
+          <strong>Unable to give 100% input and get maximum output.</strong>
+        </div>
+      </article>
+
+      <div class="advantage__vs" aria-hidden="true">VS</div>
+
+      <article class="advantage__panel advantage__panel--solution">
+        <h3>This Program Is For You</h3>
+        <p>
+          If you join this program, you will utilize your last 20 days in the best possible way.
+        </p>
+        <ul>
+          {solutions.map((solution) => (
+            <li>
+              <Icon name="tabler:circle-check-filled" size="22" aria-hidden="true" />
+              <span>{solution}</span>
+            </li>
+          ))}
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<style>
+  .advantage {
+    background: #ffffff;
+  }
+
+  .advantage__inner {
+    width: 100%;
+    margin: 0 auto;
+    padding: var(--section-pad-y) var(--section-pad-x);
+  }
+
+  .advantage__heading {
+    max-width: 1040px;
+    margin-bottom: 34px;
+  }
+
+  .advantage__heading p {
+    width: fit-content;
+    margin: 0 0 14px;
+    border-radius: var(--radius-sm);
+    background: #b90505;
+    color: var(--white);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    padding: 10px 14px;
+    text-transform: uppercase;
+  }
+
+  .advantage__heading h2 {
+    margin: 0;
+    color: #031846;
+    font-size: clamp(30px, 4vw, 48px);
+    font-weight: 900;
+    line-height: 1.08;
+  }
+
+  .advantage__compare {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+    gap: clamp(1rem, 2vw, 2rem);
+    align-items: stretch;
+  }
+
+  .advantage__panel {
+    min-width: 0;
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    background: #f7f8fb;
+    padding: clamp(1.4rem, 3vw, 2rem);
+    box-shadow: 0 14px 36px rgba(3, 24, 70, 0.06);
+    transition:
+      box-shadow 180ms ease,
+      transform 180ms ease;
+  }
+
+  .advantage__panel:hover {
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-4px);
+  }
+
+  .advantage__panel--problem {
+    border-color: rgba(185, 5, 5, 0.35);
+  }
+
+  .advantage__panel--solution {
+    border-color: rgba(11, 105, 61, 0.35);
+  }
+
+  .advantage__panel h3 {
+    width: fit-content;
+    margin: 0 0 16px;
+    border-radius: var(--radius-sm);
+    color: var(--white);
+    font-size: 20px;
+    font-weight: 900;
+    line-height: 1;
+    padding: 11px 16px;
+    text-transform: uppercase;
+  }
+
+  .advantage__panel--problem h3 {
+    background: linear-gradient(135deg, #c80707 0%, #a90404 100%);
+  }
+
+  .advantage__panel--solution h3 {
+    background: linear-gradient(135deg, #0f7a49 0%, #0b693d 100%);
+  }
+
+  .advantage__panel p {
+    margin: 0 0 18px;
+    color: #031846;
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.45;
+  }
+
+  .advantage__panel ul {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .advantage__panel li {
+    display: grid;
+    grid-template-columns: 22px 1fr;
+    gap: 10px;
+    align-items: start;
+    color: #26385f;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  .advantage__panel--problem li [data-icon] {
+    color: #b90505;
+  }
+
+  .advantage__panel--solution li [data-icon] {
+    color: #0b693d;
+  }
+
+  .advantage__result {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 26px;
+    border-radius: var(--radius-md);
+    background: #b90505;
+    color: var(--white);
+    padding: 18px;
+  }
+
+  .advantage__result [data-icon] {
+    flex: 0 0 auto;
+    color: var(--white);
+  }
+
+  .advantage__result strong {
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .advantage__vs {
+    display: grid;
+    width: 64px;
+    height: 64px;
+    place-self: center;
+    place-items: center;
+    border: 6px solid var(--white);
+    border-radius: 999px;
+    background: #031846;
+    color: var(--white);
+    font-size: 23px;
+    font-weight: 900;
+    box-shadow: 0 12px 30px rgba(3, 24, 70, 0.18);
+  }
+
+  @media (max-width: 900px) {
+    .advantage__compare {
+      grid-template-columns: 1fr;
+    }
+
+    .advantage__vs {
+      margin: -8px 0;
+    }
+  }
+</style>
