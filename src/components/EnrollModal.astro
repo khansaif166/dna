@@ -81,44 +81,6 @@ import { Icon } from 'astro-icon/components';
     window.__dna_whatsapp_opening = false;
   }
 
-  // Temporary tracing instrumentation — remove after debugging
-  (function () {
-    const origOpen = window.open;
-    window.open = function (...args) {
-      console.log('[trace] window.open called with', args);
-      console.trace();
-      return origOpen.apply(this, args);
-    };
-
-    document.addEventListener(
-      'click',
-      (e) => {
-        const a = e.target && e.target.closest ? e.target.closest('a') : null;
-        if (a && a.href && a.href.includes('wa.me')) {
-          console.log('[trace] anchor click to wa.me', a.href);
-          console.trace();
-        }
-      },
-      true
-    );
-
-    // wrap location assign/replace to catch programmatic navigations
-    try {
-      const origAssign = window.location.assign.bind(window.location);
-      window.location.assign = function (url) {
-        console.log('[trace] location.assign', url);
-        console.trace();
-        return origAssign(url);
-      };
-      const origReplace = window.location.replace.bind(window.location);
-      window.location.replace = function (url) {
-        console.log('[trace] location.replace', url);
-        console.trace();
-        return origReplace(url);
-      };
-    } catch (e) {}
-  })();
-
   function resetModal() {
     overlay?.querySelectorAll('input').forEach((input) => {
       input.value = '';
@@ -155,26 +117,21 @@ import { Icon } from 'astro-icon/components';
     ].join('\n');
 
     const url = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
-    console.log('[trace] openWhatsAppChat prepared url', url);
-    const popup = window.open(url, '_blank', 'noopener,noreferrer');
-
-    if (!popup) {
-      console.log('[trace] popup blocked — navigating current window to', url);
-      // popup blocked or unavailable — navigate current window
-      window.location.href = url;
-    } else {
-      // try to focus the opened window
-      try {
-        popup.focus();
-      } catch (e) {}
-    }
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
 
     // clear the guard after a short interval
     window.setTimeout(() => {
       window.__dna_whatsapp_opening = false;
     }, 3000);
 
-    return popup;
+    return true;
   }
 
   function openModal() {
@@ -196,11 +153,11 @@ import { Icon } from 'astro-icon/components';
   window.openModal = openModal;
   window.closeModal = closeModal;
 
-  document.querySelectorAll('[data-modal-open]').forEach((trigger) => {
-    trigger.addEventListener('click', (event) => {
-      event.preventDefault();
-      openModal();
-    });
+  document.addEventListener('click', (event) => {
+    const trigger = event.target && event.target.closest ? event.target.closest('[data-modal-open]') : null;
+    if (!trigger) return;
+    event.preventDefault();
+    openModal();
   });
 
   closeButton?.addEventListener('click', closeModal);
@@ -237,13 +194,8 @@ import { Icon } from 'astro-icon/components';
     }
 
     mobileInput?.removeAttribute('aria-invalid');
-    const popup = openWhatsAppChat();
+    openWhatsAppChat();
     closeModal();
-
-    // If popup opened successfully, ensure we do not navigate current window
-    if (popup) {
-      // nothing further
-    }
 
     // Re-enable after a short delay to avoid accidental double submits
     window.setTimeout(() => {
