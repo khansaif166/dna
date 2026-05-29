@@ -95,12 +95,14 @@ const links = [
   }
 
   .navbar {
+    --navbar-top: 40px;
+    --navbar-height: 72px;
     position: fixed;
     z-index: 50;
-    top: 40px;
+    top: var(--navbar-top);
     right: 0;
     left: 0;
-    height: 72px;
+    height: var(--navbar-height);
     background: transparent;
     color: var(--white);
     transition:
@@ -235,6 +237,7 @@ const links = [
   }
 
   .navbar__mobile {
+    position: static;
     display: none;
   }
 
@@ -246,6 +249,8 @@ const links = [
     place-content: center;
     cursor: pointer;
     list-style: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .navbar__mobile summary::-webkit-details-marker {
@@ -257,6 +262,21 @@ const links = [
     width: 22px;
     height: 2px;
     background: currentColor;
+    transition:
+      transform 180ms ease,
+      opacity 180ms ease;
+  }
+
+  .navbar__mobile[open] summary span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+  }
+
+  .navbar__mobile[open] summary span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .navbar__mobile[open] summary span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
   }
 
   .navbar.scrolled .navbar__brand-name,
@@ -271,24 +291,29 @@ const links = [
   }
 
   .navbar__mobile-panel {
-    position: fixed;
-    top: 112px;
+    position: absolute;
+    top: 100%;
     right: 0;
     left: 0;
+    height: calc(100dvh - (var(--navbar-top) + var(--navbar-height)));
     display: grid;
+    align-content: start;
     background: rgba(1, 10, 31, 0.98);
     backdrop-filter: blur(18px);
+    box-shadow: 0 24px 60px rgba(1, 10, 31, 0.28);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .navbar__mobile-panel a {
     display: flex;
-    min-height: 48px;
+    min-height: 72px;
     align-items: center;
     padding: 0 var(--section-pad-x);
     border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 14px;
-    font-weight: 500;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 17px;
+    font-weight: 600;
   }
 
   .navbar__mobile-panel a:hover,
@@ -297,8 +322,8 @@ const links = [
   }
 
   .navbar__mobile-panel .navbar__mobile-cta {
-    min-height: 46px;
-    margin: 16px var(--section-pad-x);
+    min-height: 52px;
+    margin: 20px var(--section-pad-x) max(20px, env(safe-area-inset-bottom));
     padding: 0 18px;
     border-bottom: 0;
     color: #031846;
@@ -322,15 +347,11 @@ const links = [
 
   @media (max-width: 767px) {
     .navbar {
-      height: 60px;
+      --navbar-height: 60px;
     }
 
     .navbar__inner {
       padding: 0 1rem;
-    }
-
-    .navbar__mobile-panel {
-      top: 100px;
     }
 
     .navbar__brand {
@@ -357,6 +378,16 @@ const links = [
       font-size: 8.5px;
       letter-spacing: 0.14em;
       text-overflow: ellipsis;
+    }
+
+    .navbar__mobile-panel a {
+      min-height: 64px;
+      padding: 0 1.5rem;
+      font-size: 16px;
+    }
+
+    .navbar__mobile-panel .navbar__mobile-cta {
+      margin: 18px 1rem max(18px, env(safe-area-inset-bottom));
     }
   }
 </style>

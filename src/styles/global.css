@@ -21,7 +21,7 @@
     margin: 0;
     min-width: 320px;
     overflow-x: hidden;
-    padding-top: 40px;
+    padding-top: 32px;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0)),
       var(--cream);
