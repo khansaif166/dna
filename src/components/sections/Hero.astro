@@ -7,9 +7,11 @@ import heroMobileSource from '../../assets/images/bleed-mob.png';
 
 const stats = [
   { icon: 'tabler:calendar-event', value: '1 Jun', label: 'Batch Starts' },
-  { icon: 'tabler:clock-hour-4', value: '12 Hrs', label: 'Focused Study Daily' },
-  { icon: 'tabler:chart-bar', value: '240 Hrs', label: 'Effective Study' },
+  { icon: 'tabler:clock-hour-4', value: '12 Hrs', label: 'Daily Study' },
+  { icon: 'tabler:chart-bar', value: '240 Hrs', label: 'Focused Revision' },
 ];
+
+const mobilePoints = ['PCB Faculty Monitoring', 'Zero-Distraction Routine', 'Offline Guided Revision'];
 
 const heroDesktop = await getImage({
   src: heroDesktopSource,
@@ -34,43 +36,39 @@ const heroMobile = await getImage({
   <div class="hero__backdrop" aria-hidden="true"></div>
 
   <div class="hero__content">
-    <div class="hero__brand-row" data-reveal>
+    <div class="hero__date-band" data-reveal>
       <Image
         class="hero__logo"
         src={logo}
         alt="Dream Neet Academy logo"
-        widths={[68, 136]}
-        sizes="68px"
+        widths={[40, 80]}
+        sizes="40px"
         format="webp"
         quality={90}
         loading="eager"
         fetchpriority="high"
         decoding="async"
       />
-      <div class="hero__brand-copy">
-        <p>Dream Neet Academy</p>
-        <span>Offline Re-NEET guided self-study</span>
-      </div>
+      <span>Re-NEET Examination on <strong>21st June 2026</strong></span>
     </div>
 
-    <div class="hero__date-band" data-reveal>Re-NEET Examination on <strong>21st June 2026</strong></div>
-
     <h1 class="hero__headline" data-reveal>
-      <span>Execute the</span>
-      <span>last 20 days</span>
-      <span>with precision.</span>
+      <span>One more <em>chance.</em></span>
+      <span>Make these <em>20 days</em></span>
+      <span>count.</span>
     </h1>
 
     <p class="hero__lead" data-reveal>
-      A premium offline revision environment with disciplined study hours, PCB faculty monitoring and daily execution support.
+      Structured offline revision with faculty monitoring, disciplined study hours and daily execution support.
     </p>
 
-    <div class="hero__meta" data-reveal>
-      <div class="hero__urgency">
-        <strong>Last 20 Days</strong>
-        <span>to make the difference</span>
-      </div>
-      <p class="hero__guidance">Expert-guided execution. Zero-distraction routine.</p>
+    <div class="hero__mobile-points" data-reveal aria-label="Program highlights">
+      {mobilePoints.map((point, index) => (
+        <div class="hero__mobile-point" style={`--reveal-delay: ${index * 80}ms;`}>
+          <Icon name="tabler:check" size="14" aria-hidden="true" />
+          <span>{point}</span>
+        </div>
+      ))}
     </div>
 
     <div class="hero__actions" data-reveal>
@@ -150,69 +148,32 @@ const heroMobile = await getImage({
     display: grid;
     align-content: center;
     min-height: calc(100vh - 40px);
-    width: min(100%, 760px);
+    width: min(100%, 660px);
     padding: clamp(7rem, 10vw, 9.5rem) 0 clamp(4rem, 8vw, 6rem) var(--section-pad-x);
   }
 
-  .hero__brand-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 16px;
-    width: fit-content;
-    margin-bottom: 1.25rem;
-    padding: 10px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(14px);
-    transition:
-      transform 220ms ease,
-      border-color 220ms ease,
-      background-color 220ms ease;
-  }
-
   .hero__logo {
-    width: 68px;
-    height: 68px;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
     border-radius: 999px;
     object-fit: cover;
     box-shadow: 0 14px 30px rgba(1, 10, 31, 0.28);
   }
 
-  .hero__brand-copy {
-    display: grid;
-    gap: 4px;
-  }
-
-  .hero__brand-copy p {
-    margin: 0;
-    color: var(--white);
-    font-size: clamp(16px, 1.35vw, 21px);
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    line-height: 1;
-    text-transform: uppercase;
-  }
-
-  .hero__brand-copy span {
-    color: rgba(255, 230, 90, 0.92);
-    font-size: clamp(11px, 0.82vw, 13px);
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    line-height: 1.2;
-    text-transform: uppercase;
-  }
-
   .hero__date-band {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
     width: fit-content;
     margin-bottom: 1.2rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.94);
-    font-size: clamp(13px, 1vw, 15px);
+    font-size: clamp(12px, 0.96vw, 14px);
     font-weight: 800;
     line-height: 1.2;
-    padding: 12px 18px;
+    padding: 10px 16px 10px 10px;
     text-transform: uppercase;
     backdrop-filter: blur(12px);
   }
@@ -224,91 +185,42 @@ const heroMobile = await getImage({
 
   .hero__headline {
     margin: 0;
-    max-width: 680px;
+    max-width: 10ch;
     color: var(--white);
-    font-size: clamp(48px, 6.2vw, 88px);
+    font-size: clamp(52px, 6vw, 84px);
     font-weight: 900;
-    letter-spacing: 0;
-    line-height: 0.92;
-    text-transform: uppercase;
+    letter-spacing: -0.05em;
+    line-height: 0.94;
   }
 
   .hero__headline span {
     display: block;
   }
 
-  .hero__headline span:nth-child(2) {
-    padding-left: clamp(0.35rem, 1vw, 0.9rem);
-  }
-
-  .hero__headline span:nth-child(3) {
-    padding-left: clamp(0.7rem, 1.8vw, 1.5rem);
+  .hero__headline em {
+    color: #ffe65a;
+    font-style: normal;
+    text-shadow: 0 0 24px rgba(249, 221, 23, 0.18);
   }
 
   .hero__lead {
-    max-width: 600px;
-    margin: 1.35rem 0 0;
+    max-width: 520px;
+    margin: 1.4rem 0 0;
     color: rgba(235, 241, 255, 0.84);
-    font-size: clamp(17px, 1.35vw, 21px);
+    font-size: clamp(16px, 1.18vw, 19px);
     font-weight: 500;
-    line-height: 1.7;
+    line-height: 1.75;
   }
 
-  .hero__meta {
-    display: grid;
-    gap: 12px;
-    margin-top: 1.8rem;
-  }
-
-  .hero__urgency {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px 14px;
-    width: fit-content;
-    max-width: 100%;
-    border-radius: 10px;
-    background: linear-gradient(135deg, rgba(200, 7, 7, 0.94), rgba(169, 4, 4, 0.94));
-    color: var(--white);
-    padding: 12px 16px;
-    text-transform: uppercase;
-    box-shadow: 0 18px 44px rgba(82, 4, 4, 0.28);
-  }
-
-  .hero__urgency strong {
-    color: #ffe65a;
-    font-size: clamp(24px, 2.6vw, 38px);
-    font-weight: 900;
-    line-height: 1;
-  }
-
-  .hero__urgency span {
-    font-size: clamp(13px, 1vw, 17px);
-    font-weight: 800;
-    line-height: 1.15;
-  }
-
-  .hero__guidance {
-    width: fit-content;
-    max-width: 100%;
-    margin: 0;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.92);
-    font-size: clamp(12px, 0.95vw, 14px);
-    font-weight: 700;
-    line-height: 1.25;
-    padding: 11px 16px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    backdrop-filter: blur(12px);
+  .hero__mobile-points {
+    display: none;
   }
 
   .hero__actions {
     display: flex;
     flex-wrap: wrap;
     gap: 14px;
-    margin-top: 2rem;
+    margin-top: 1.9rem;
   }
 
   .hero__primary,
@@ -389,8 +301,8 @@ const heroMobile = await getImage({
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
-    max-width: 640px;
-    margin-top: 2rem;
+    max-width: 560px;
+    margin-top: 1.7rem;
   }
 
   .hero__stat {
@@ -413,11 +325,30 @@ const heroMobile = await getImage({
     transform: translateY(-3px);
   }
 
-  @media (prefers-reduced-motion: no-preference) {
-    .hero__brand-row {
-      animation: dna-fade-up 520ms cubic-bezier(0.22, 1, 0.36, 1) both, dna-tilt-bob 6.5s ease-in-out 1.1s infinite;
-    }
+  .hero__stat [data-icon] {
+    color: #ffe65a;
+  }
 
+  .hero__stat strong {
+    display: block;
+    margin-top: 10px;
+    color: var(--white);
+    font-size: clamp(22px, 2.2vw, 30px);
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .hero__stat span {
+    display: block;
+    margin-top: 6px;
+    color: rgba(235, 241, 255, 0.78);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.3;
+    text-transform: uppercase;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
     .hero__date-band {
       animation: dna-fade-up 520ms cubic-bezier(0.22, 1, 0.36, 1) both, dna-glow-pulse 3.8s ease-in-out 1s infinite;
     }
@@ -446,13 +377,6 @@ const heroMobile = await getImage({
       animation: dna-orbit 10s ease-in-out infinite;
     }
 
-    .hero__brand-row:hover,
-    .hero__brand-row:focus-within {
-      transform: translateY(-2px);
-      border-color: rgba(255, 255, 255, 0.2);
-      background: rgba(255, 255, 255, 0.1);
-    }
-
     .hero__stat:nth-child(1) {
       animation: dna-scale-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both, dna-float 5.4s ease-in-out 0.8s infinite;
     }
@@ -466,37 +390,14 @@ const heroMobile = await getImage({
     }
   }
 
-  .hero__stat [data-icon] {
-    color: #ffe65a;
-  }
-
-  .hero__stat strong {
-    display: block;
-    margin-top: 10px;
-    color: var(--white);
-    font-size: clamp(22px, 2.2vw, 30px);
-    font-weight: 900;
-    line-height: 1;
-  }
-
-  .hero__stat span {
-    display: block;
-    margin-top: 6px;
-    color: rgba(235, 241, 255, 0.78);
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1.3;
-    text-transform: uppercase;
-  }
-
   @media (max-width: 1180px) {
     .hero__content {
-      width: min(100%, 680px);
+      width: min(100%, 620px);
       padding-right: var(--section-pad-x);
     }
 
     .hero__headline {
-      font-size: clamp(42px, 6vw, 74px);
+      font-size: clamp(46px, 6vw, 72px);
     }
   }
 
@@ -517,53 +418,59 @@ const heroMobile = await getImage({
 
     .hero__headline {
       max-width: 100%;
-      font-size: clamp(40px, 9.8vw, 60px);
+      font-size: clamp(42px, 10vw, 58px);
     }
 
-    .hero__lead {
-      max-width: 100%;
-      font-size: 16px;
-    }
-
+    .hero__lead,
     .hero__stats {
       max-width: 100%;
     }
   }
 
   @media (max-width: 767px) {
-    .hero__brand-row {
-      gap: 12px;
-      padding: 8px 12px;
+    .hero__date-band {
+      gap: 10px;
+      font-size: 11px;
+      padding: 9px 12px 9px 9px;
     }
 
     .hero__logo {
-      width: 54px;
-      height: 54px;
+      width: 34px;
+      height: 34px;
     }
 
-    .hero__brand-copy p {
-      font-size: 14px;
+    .hero__lead {
+      font-size: 15px;
+      line-height: 1.65;
     }
 
-    .hero__brand-copy span {
-      font-size: 9px;
-      letter-spacing: 0.12em;
+    .hero__mobile-points {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 1rem;
     }
 
-    .hero__date-band {
-      font-size: 12px;
-      padding: 10px 14px;
-    }
-
-    .hero__urgency {
-      gap: 6px 10px;
-      padding: 12px 14px;
-    }
-
-    .hero__guidance {
+    .hero__mobile-point {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(245, 248, 255, 0.9);
       font-size: 11px;
-      line-height: 1.45;
-      letter-spacing: 0.06em;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      line-height: 1;
+      padding: 0 11px;
+      text-transform: uppercase;
+      backdrop-filter: blur(10px);
+    }
+
+    .hero__mobile-point [data-icon] {
+      color: #ffe65a;
+      flex: 0 0 auto;
     }
 
     .hero__primary,
@@ -577,7 +484,26 @@ const heroMobile = await getImage({
     }
 
     .hero__stats {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 1.3rem;
+    }
+
+    .hero__stat {
+      padding: 12px 10px;
+      border-radius: 14px;
+      text-align: center;
+    }
+
+    .hero__stat strong {
+      margin-top: 8px;
+      font-size: 18px;
+    }
+
+    .hero__stat span {
+      margin-top: 4px;
+      font-size: 10px;
+      line-height: 1.25;
     }
   }
 </style>
