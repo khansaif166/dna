@@ -26,9 +26,23 @@ import { Icon } from 'astro-icon/components';
 
 <style>
   .cta-banner {
+    position: relative;
+    overflow: hidden;
     background:
       radial-gradient(circle at 18% 30%, rgba(249, 221, 23, 0.13), transparent 28%),
       linear-gradient(135deg, #06235c 0%, #031846 58%, #010a1f 100%);
+  }
+
+  .cta-banner::after {
+    position: absolute;
+    top: -12%;
+    right: -6%;
+    width: min(28vw, 320px);
+    aspect-ratio: 1;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(249, 221, 23, 0.14), transparent 68%);
+    content: "";
+    pointer-events: none;
   }
 
   .cta-banner__inner {
@@ -51,6 +65,9 @@ import { Icon } from 'astro-icon/components';
     background: linear-gradient(135deg, #0f7a49 0%, #0b693d 100%);
     color: var(--white);
     box-shadow: 0 18px 40px rgba(11, 105, 61, 0.32);
+    transition:
+      transform 220ms ease,
+      box-shadow 220ms ease;
   }
 
   .cta-banner h2 {
@@ -70,6 +87,9 @@ import { Icon } from 'astro-icon/components';
     font-weight: 900;
     line-height: 1;
     letter-spacing: -0.03em;
+    transition:
+      color 200ms ease,
+      text-shadow 200ms ease;
   }
 
   .cta-banner__right p {
@@ -123,6 +143,27 @@ import { Icon } from 'astro-icon/components';
   .cta-banner__right button:hover::after,
   .cta-banner__right button:focus-visible::after {
     animation: dna-shine 720ms ease;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .cta-banner::after {
+      animation: dna-ambient-shift 12s ease-in-out infinite;
+    }
+
+    .cta-banner__badge {
+      animation: dna-float 4.6s ease-in-out infinite;
+    }
+
+    .cta-banner:hover .cta-banner__badge {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 22px 48px rgba(11, 105, 61, 0.4);
+    }
+
+    .cta-banner__left a:hover,
+    .cta-banner__left a:focus-visible {
+      color: #fff0a0;
+      text-shadow: 0 0 22px rgba(249, 221, 23, 0.25);
+    }
   }
 
   @media (max-width: 767px) {

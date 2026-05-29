@@ -38,9 +38,21 @@ const pills = [
 
 <style>
   .subject-pills {
+    position: relative;
+    overflow: hidden;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     background: linear-gradient(90deg, #06235c 0%, #031846 48%, #09296b 100%);
+  }
+
+  .subject-pills::after {
+    position: absolute;
+    inset: 0 auto 0 -12%;
+    width: 22%;
+    background: linear-gradient(90deg, rgba(249, 221, 23, 0.12), transparent);
+    content: "";
+    pointer-events: none;
+    opacity: 0.55;
   }
 
   .subject-pills__inner {
@@ -61,6 +73,8 @@ const pills = [
   }
 
   .subject-pills__pill {
+    position: relative;
+    overflow: hidden;
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
@@ -82,6 +96,15 @@ const pills = [
       transform 150ms ease;
   }
 
+  .subject-pills__pill::after {
+    position: absolute;
+    inset: 0;
+    width: 34%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent);
+    content: "";
+    transform: translateX(-140%) skewX(-20deg);
+  }
+
   .subject-pills__pill [data-icon] {
     margin-right: 8px;
     transition: color 150ms ease;
@@ -94,6 +117,18 @@ const pills = [
     color: #031846;
     box-shadow: 0 12px 26px rgba(249, 221, 23, 0.2);
     transform: translateY(-1px);
+  }
+
+  .subject-pills__pill:hover::after,
+  .subject-pills__pill:focus-visible::after,
+  .subject-pills__pill.active::after {
+    animation: dna-shine 720ms ease;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .subject-pills::after {
+      animation: dna-ambient-shift 16s ease-in-out infinite;
+    }
   }
 
   .subject-pills__pill.active [data-icon],

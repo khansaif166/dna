@@ -43,6 +43,20 @@
     pointer-events: none;
   }
 
+  body::after {
+    position: fixed;
+    inset: -12%;
+    z-index: -2;
+    background:
+      radial-gradient(circle at 16% 22%, rgba(249, 221, 23, 0.09), transparent 0 22%),
+      radial-gradient(circle at 84% 18%, rgba(6, 35, 92, 0.08), transparent 0 20%),
+      radial-gradient(circle at 55% 78%, rgba(11, 105, 61, 0.06), transparent 0 18%);
+    content: "";
+    pointer-events: none;
+    filter: blur(16px);
+    opacity: 0.85;
+  }
+
   section[id] {
     scroll-margin-top: 112px;
   }
@@ -115,6 +129,83 @@
     }
   }
 
+  @keyframes dna-ambient-shift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+      opacity: 0.8;
+    }
+
+    50% {
+      transform: translate3d(1.5%, -1.5%, 0) scale(1.04);
+      opacity: 1;
+    }
+  }
+
+  @keyframes dna-orbit {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+
+    50% {
+      transform: translate3d(0, -12px, 0);
+    }
+  }
+
+  @keyframes dna-glow-pulse {
+    0%,
+    100% {
+      opacity: 0.45;
+      transform: scale(0.98);
+    }
+
+    50% {
+      opacity: 0.9;
+      transform: scale(1.02);
+    }
+  }
+
+  @keyframes dna-tilt-bob {
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+
+    25% {
+      transform: translateY(-4px) rotate(-0.7deg);
+    }
+
+    75% {
+      transform: translateY(-8px) rotate(0.7deg);
+    }
+  }
+
+  @keyframes dna-text-rise {
+    from {
+      opacity: 0;
+      transform: translateY(24px) scale(0.96);
+      filter: blur(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+
+  @keyframes dna-breathe-shadow {
+    0%,
+    100% {
+      box-shadow: 0 16px 36px rgba(249, 221, 23, 0.22);
+    }
+
+    50% {
+      box-shadow: 0 24px 48px rgba(249, 221, 23, 0.36);
+    }
+  }
+
   .reveal {
     opacity: 0;
     transform: translateY(14px);
@@ -131,6 +222,10 @@
   }
 
   @media (prefers-reduced-motion: no-preference) {
+    body::after {
+      animation: dna-ambient-shift 18s ease-in-out infinite;
+    }
+
     .hero__brand-row,
     .hero__date-band,
     .hero__headline,
@@ -193,6 +288,18 @@
 
     .program-highlights__card:nth-child(4) {
       animation-delay: 380ms;
+    }
+
+    .hero__stat:nth-child(1) {
+      animation-delay: 120ms;
+    }
+
+    .hero__stat:nth-child(2) {
+      animation-delay: 210ms;
+    }
+
+    .hero__stat:nth-child(3) {
+      animation-delay: 300ms;
     }
   }
 

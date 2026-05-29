@@ -11,7 +11,7 @@ interface Props {
 const {
   title = 'Dream Neet Academy',
   description = '20-day Re-NEET guided self-study program from Dream Neet Academy.',
-  ogImage = '/images/logo.jpeg',
+  ogImage = '/og-image.svg',
 } = Astro.props;
 
 const canonicalUrl = Astro.site
@@ -30,8 +30,9 @@ const ogImageUrl = Astro.site
     <meta name="generator" content={Astro.generator} />
     <meta name="description" content={description} />
     <link rel="canonical" href={canonicalUrl} />
-    <link rel="icon" type="image/jpeg" href="/images/logo.jpeg" />
-    <link rel="apple-touch-icon" href="/images/logo.jpeg" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

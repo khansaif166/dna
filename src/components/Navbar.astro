@@ -1,4 +1,7 @@
 ---
+import { Image } from 'astro:assets';
+import logo from '../assets/images/logo.jpeg';
+
 const links = [
   { href: '#program', label: 'Program' },
   { href: '#highlights', label: 'Highlights' },
@@ -13,7 +16,17 @@ const links = [
 <nav class="navbar" aria-label="Primary navigation">
   <div class="navbar__inner">
     <a class="navbar__brand" href="/" aria-label="Dream Neet Academy home">
-      <img class="navbar__mark" src="/images/logo.jpeg" alt="Dream Neet Academy logo" loading="eager" decoding="async" />
+      <Image
+        class="navbar__mark"
+        src={logo}
+        alt="Dream Neet Academy logo"
+        widths={[46, 92]}
+        sizes="46px"
+        format="webp"
+        quality={90}
+        loading="eager"
+        decoding="async"
+      />
       <span class="navbar__brand-copy">
         <span class="navbar__brand-name">DREAM NEET ACADEMY</span>
         <span class="navbar__brand-line">RE-NEET · 20 DAY BATCH</span>
