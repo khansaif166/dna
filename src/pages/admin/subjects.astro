@@ -1,0 +1,67 @@
+---
+export const prerender = false;
+
+import { asc } from 'drizzle-orm';
+
+import AdminNav from '../../components/AdminNav.astro';
+import Base from '../../layouts/Base.astro';
+import { db, subjects } from '../../db';
+import { requireAuth } from '../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const allSubjects = await db.select().from(subjects).orderBy(asc(subjects.order));
+---
+
+<Base title="Admin Subjects | Dream Neet Academy">
+  <main>
+    <h1>Subjects</h1>
+    <AdminNav />
+
+    <section>
+      <h2>Existing Subjects</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Order</th>
+            <th scope="col">Save</th>
+          </tr>
+        </thead>
+        <tbody>
+          {allSubjects.map((subject) => (
+            <tr>
+              <td colspan="3">
+                <form action={`/api/admin/subjects/${subject.id}`} method="POST">
+                  <input type="hidden" name="subject_id" value={subject.id} />
+                  <input type="text" name="name" value={subject.name} />
+                  <input type="number" name="order" value={subject.order} />
+                  <button type="submit">Update</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Add Subject</h2>
+      <form action="/api/admin/subjects" method="POST">
+        <label>
+          Name
+          <input type="text" name="name" required />
+        </label>
+        <label>
+          Order
+          <input type="number" name="order" required />
+        </label>
+        <button type="submit">Create Subject</button>
+      </form>
+    </section>
+  </main>
+</Base>

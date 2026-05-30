@@ -1,0 +1,155 @@
+---
+export const prerender = false;
+
+import { asc, eq } from 'drizzle-orm';
+
+import Base from '../../../layouts/Base.astro';
+import { attemptAnswers, db, questions, testAttempts, tests } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+const { attemptId } = Astro.params;
+
+if (!attemptId) {
+  return new Response(null, { status: 404 });
+}
+
+const attemptRows = await db
+  .select({
+    id: testAttempts.id,
+    studentId: testAttempts.studentId,
+    testId: testAttempts.testId,
+    submittedAt: testAttempts.submittedAt,
+    timeTakenSeconds: testAttempts.timeTakenSeconds,
+    score: testAttempts.score,
+    totalQuestions: testAttempts.totalQuestions,
+    testTitle: tests.title,
+  })
+  .from(testAttempts)
+  .innerJoin(tests, eq(testAttempts.testId, tests.id))
+  .where(eq(testAttempts.id, attemptId));
+
+if (!attemptRows || attemptRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [attempt] = attemptRows;
+
+if (attempt.studentId !== profile.id) {
+  return Astro.redirect('/student');
+}
+
+if (!attempt.submittedAt) {
+  return Astro.redirect(`/student/tests/${attempt.testId}`);
+}
+
+const reviewRows = await db
+  .select({
+    attemptAnswerId: attemptAnswers.id,
+    chosenOption: attemptAnswers.chosenOption,
+    isCorrect: attemptAnswers.isCorrect,
+    questionId: questions.id,
+    prompt: questions.prompt,
+    optionA: questions.optionA,
+    optionB: questions.optionB,
+    optionC: questions.optionC,
+    optionD: questions.optionD,
+    correctOption: questions.correctOption,
+    explanation: questions.explanation,
+    order: questions.order,
+  })
+  .from(attemptAnswers)
+  .innerJoin(questions, eq(attemptAnswers.questionId, questions.id))
+  .where(eq(attemptAnswers.attemptId, attempt.id))
+  .orderBy(asc(questions.order));
+
+const score = attempt.score ?? 0;
+const total = attempt.totalQuestions ?? reviewRows.length;
+const percentage = total ? Math.round((score / total) * 100) : 0;
+
+function formatSeconds(totalSeconds: number | null) {
+  if (totalSeconds === null) {
+    return '-';
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+const optionLabels = {
+  a: 'Option A',
+  b: 'Option B',
+  c: 'Option C',
+  d: 'Option D',
+} as const;
+
+const optionKeys = ['a', 'b', 'c', 'd'] as const;
+---
+
+<Base title={`${attempt.testTitle} Review | Dream Neet Academy`}>
+  <main>
+    <h1>{attempt.testTitle}</h1>
+
+    <section>
+      <h2>Score Summary</h2>
+      <p>{score} out of {total}</p>
+      <p>{percentage}%</p>
+      <p>Time taken: {formatSeconds(attempt.timeTakenSeconds)}</p>
+    </section>
+
+    <section>
+      <h2>Review</h2>
+      {reviewRows.map((row) => (
+        <article>
+          <h3>Question {row.order}</h3>
+          <p>{row.prompt}</p>
+
+          <ul>
+            {optionKeys.map((key) => {
+              const optionValue =
+                key === 'a'
+                  ? row.optionA
+                  : key === 'b'
+                    ? row.optionB
+                    : key === 'c'
+                      ? row.optionC
+                      : row.optionD;
+
+              const isChosen = row.chosenOption === key;
+              const isCorrect = row.correctOption === key;
+
+              return (
+                <li
+                  style={{
+                    backgroundColor: isCorrect ? '#dcfce7' : isChosen ? '#dbeafe' : 'transparent',
+                    padding: '0.5rem',
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  <strong>
+                    {optionLabels[key]}:
+                  </strong>{' '}
+                  <span>{optionValue}</span>{' '}
+                  {isChosen && <span>(Your answer)</span>}
+                  {isCorrect && <span>(Correct answer)</span>}
+                </li>
+              );
+            })}
+          </ul>
+
+          {!row.isCorrect && row.explanation && (
+            <p>Explanation: {row.explanation}</p>
+          )}
+        </article>
+      ))}
+    </section>
+  </main>
+</Base>

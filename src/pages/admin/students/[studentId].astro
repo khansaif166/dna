@@ -1,0 +1,66 @@
+---
+export const prerender = false;
+
+import { and, desc, eq, isNotNull } from 'drizzle-orm';
+
+import AdminNav from '../../../components/AdminNav.astro';
+import Base from '../../../layouts/Base.astro';
+import { db, profiles, testAttempts, tests } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const { studentId } = Astro.params;
+
+if (!studentId) {
+  return new Response(null, { status: 404 });
+}
+
+const studentRows = await db.select().from(profiles).where(eq(profiles.id, studentId));
+
+if (!studentRows || studentRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [student] = studentRows;
+
+const attempts = await db
+  .select({
+    id: testAttempts.id,
+    score: testAttempts.score,
+    totalQuestions: testAttempts.totalQuestions,
+    submittedAt: testAttempts.submittedAt,
+    testTitle: tests.title,
+  })
+  .from(testAttempts)
+  .innerJoin(tests, eq(testAttempts.testId, tests.id))
+  .where(and(eq(testAttempts.studentId, student.id), isNotNull(testAttempts.submittedAt)))
+  .orderBy(desc(testAttempts.submittedAt));
+---
+
+<Base title={`${student.fullName} | Admin | Dream Neet Academy`}>
+  <main>
+    <h1>{student.fullName}</h1>
+    <AdminNav />
+
+    <section>
+      <h2>Submitted Attempts</h2>
+      {attempts.length ? (
+        <ul>
+          {attempts.map((attempt) => (
+            <li>
+              {attempt.testTitle} - {attempt.score ?? 0}/{attempt.totalQuestions ?? 0} -{' '}
+              {attempt.submittedAt?.toLocaleString() ?? '-'}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>No submitted attempts yet.</p>
+      )}
+    </section>
+  </main>
+</Base>

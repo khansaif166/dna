@@ -1,0 +1,81 @@
+---
+export const prerender = false;
+
+import { asc, eq, sql } from 'drizzle-orm';
+
+import AdminNav from '../../../components/AdminNav.astro';
+import Base from '../../../layouts/Base.astro';
+import { db, profiles, testAttempts } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+import { getAdminSupabase } from '../../../lib/supabase';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const students = await db
+  .select({
+    id: profiles.id,
+    fullName: profiles.fullName,
+    totalAttempts: sql<number>`count(${testAttempts.id})::int`,
+    averageScore: sql<string>`coalesce(round(avg(${testAttempts.score})::numeric, 2)::text, '0')`,
+  })
+  .from(profiles)
+  .leftJoin(testAttempts, eq(testAttempts.studentId, profiles.id))
+  .where(eq(profiles.role, 'student'))
+  .groupBy(profiles.id, profiles.fullName)
+  .orderBy(asc(profiles.fullName));
+
+const adminSupabase = getAdminSupabase();
+const allUsers: Array<{ id: string; email?: string | null }> = [];
+let page = 1;
+
+while (true) {
+  const { data: usersData } = await adminSupabase.auth.admin.listUsers({
+    page,
+    perPage: 1000,
+  });
+
+  const users = usersData?.users ?? [];
+
+  allUsers.push(...users);
+
+  if (users.length < 1000) {
+    break;
+  }
+
+  page += 1;
+}
+
+const emailById = new Map(allUsers.map((user) => [user.id, user.email ?? '-']));
+---
+
+<Base title="Admin Students | Dream Neet Academy">
+  <main>
+    <h1>Students</h1>
+    <AdminNav />
+
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Email</th>
+          <th scope="col">Total Attempts</th>
+          <th scope="col">Average Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {students.map((student) => (
+          <tr>
+            <td><a href={`/admin/students/${student.id}`}>{student.fullName}</a></td>
+            <td>{emailById.get(student.id) ?? '-'}</td>
+            <td>{student.totalAttempts}</td>
+            <td>{student.averageScore}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </main>
+</Base>

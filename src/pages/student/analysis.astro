@@ -1,0 +1,309 @@
+---
+export const prerender = false;
+
+import Base from '../../layouts/Base.astro';
+import AnalyticsChart from '../../components/AnalyticsChart';
+import { requireAuth } from '../../lib/auth';
+import {
+  getRecentAttempts,
+  getSubjectAccuracy,
+  getTopicAccuracy,
+  getWeakAndStrongTopics,
+} from '../../lib/analytics';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+
+const [subjectAccuracy, topicAccuracy, recentAttempts, topicBuckets] = await Promise.all([
+  getSubjectAccuracy(profile.id),
+  getTopicAccuracy(profile.id),
+  getRecentAttempts(profile.id),
+  getWeakAndStrongTopics(profile.id),
+]);
+
+const { strong, weak } = topicBuckets;
+
+const dateFormatter = new Intl.DateTimeFormat('en-IN', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+---
+
+<Base title="Performance Analysis | Dream Neet Academy">
+  <main class="analysis-page">
+    <section class="analysis-hero">
+      <p class="eyebrow">Student analytics</p>
+      <h1>Performance analysis</h1>
+      <p>Fresh insights from your submitted attempts across subjects, topics, and recent tests.</p>
+    </section>
+
+    <section class="analysis-card">
+      <div class="section-heading">
+        <h2>Subject accuracy chart</h2>
+        <p>Interactive snapshot of your current percentage by subject.</p>
+      </div>
+
+      <AnalyticsChart
+        client:load
+        data={subjectAccuracy.map((row) => ({
+          subjectName: row.subjectName,
+          percent: row.percent,
+        }))}
+      />
+    </section>
+
+    <section class="analysis-card">
+      <div class="section-heading">
+        <h2>Subject accuracy</h2>
+        <p>
+          Every percentage below is calculated from submitted answers only. Topic insights currently
+          cover {topicAccuracy.length} topics with at least 5 answered questions.
+        </p>
+      </div>
+
+      {subjectAccuracy.length ? (
+        <div class="subject-list">
+          {subjectAccuracy.map((row) => (
+            <article class="subject-row">
+              <div class="subject-row__meta">
+                <div>
+                  <h3>{row.subjectName}</h3>
+                  <p>{row.correct}/{row.total} correct</p>
+                </div>
+                <strong>{row.percent}%</strong>
+              </div>
+              <progress max="100" value={row.percent}>{row.percent}%</progress>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p>No submitted attempts yet, so there is nothing to analyze.</p>
+      )}
+    </section>
+
+    <section class="analysis-grid">
+      <section class="analysis-card">
+        <div class="section-heading">
+          <h2>Strong topics</h2>
+          <p>Topics with at least 70% accuracy and at least 5 answered questions.</p>
+        </div>
+
+        {strong.length ? (
+          <ul class="topic-list">
+            {strong.map((topic) => (
+              <li class="topic-chip">
+                <span>{topic.topicName}</span>
+                <strong>{topic.percent}%</strong>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No strong topics yet based on the current threshold.</p>
+        )}
+      </section>
+
+      <section class="analysis-card analysis-card--danger">
+        <div class="section-heading">
+          <h2>Weak topics</h2>
+          <p>Topics below 40% accuracy, filtered to avoid tiny sample sizes.</p>
+        </div>
+
+        {weak.length ? (
+          <ul class="topic-list">
+            {weak.map((topic) => (
+              <li class="topic-chip topic-chip--weak">
+                <span>{topic.topicName}</span>
+                <strong>{topic.percent}%</strong>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No weak topics right now. Keep it going.</p>
+        )}
+      </section>
+    </section>
+
+    <section class="analysis-card">
+      <div class="section-heading">
+        <h2>Recent attempts</h2>
+        <p>Your latest submitted tests, newest first.</p>
+      </div>
+
+      {recentAttempts.length ? (
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Test</th>
+                <th scope="col">Score</th>
+                <th scope="col">Percent</th>
+                <th scope="col">Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentAttempts.map((attempt) => (
+                <tr>
+                  <td>
+                    <a href={`/student/attempts/${attempt.attemptId}`}>{attempt.testTitle}</a>
+                  </td>
+                  <td>{attempt.score}/{attempt.total}</td>
+                  <td>{attempt.percent}%</td>
+                  <td>{dateFormatter.format(attempt.submittedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p>No submitted attempts yet.</p>
+      )}
+    </section>
+  </main>
+</Base>
+
+<style>
+  .analysis-page {
+    margin: 0 auto;
+    max-width: 1080px;
+    padding: 2rem 1rem 4rem;
+  }
+
+  .analysis-hero,
+  .analysis-card {
+    border: 1px solid rgba(3, 24, 70, 0.08);
+    border-radius: 1.5rem;
+    box-shadow: 0 18px 50px rgba(3, 24, 70, 0.08);
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+  }
+
+  .eyebrow {
+    color: #0b693d;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .analysis-hero h1,
+  .section-heading h2,
+  .subject-row h3 {
+    margin: 0;
+  }
+
+  .analysis-hero p:last-child,
+  .section-heading p,
+  .subject-row p {
+    color: rgba(3, 24, 70, 0.72);
+  }
+
+  .section-heading {
+    margin-bottom: 1rem;
+  }
+
+  .subject-list,
+  .topic-list {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .subject-row {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .subject-row__meta,
+  .topic-chip {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+  }
+
+  progress {
+    appearance: none;
+    border: 0;
+    border-radius: 999px;
+    height: 0.9rem;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  progress::-webkit-progress-bar {
+    background: #e5e7eb;
+  }
+
+  progress::-webkit-progress-value {
+    background: linear-gradient(90deg, #0b693d, #f9dd17);
+  }
+
+  progress::-moz-progress-bar {
+    background: linear-gradient(90deg, #0b693d, #f9dd17);
+  }
+
+  .analysis-grid {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .topic-chip {
+    border: 1px solid rgba(3, 24, 70, 0.08);
+    border-radius: 1rem;
+    padding: 0.9rem 1rem;
+    background: rgba(248, 250, 252, 0.8);
+  }
+
+  .analysis-card--danger {
+    border-color: rgba(185, 28, 28, 0.12);
+  }
+
+  .topic-chip--weak {
+    background: rgba(254, 242, 242, 0.95);
+    border-color: rgba(220, 38, 38, 0.18);
+    color: #991b1b;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th,
+  td {
+    border-bottom: 1px solid rgba(3, 24, 70, 0.08);
+    padding: 0.9rem 0.75rem;
+    text-align: left;
+  }
+
+  th {
+    color: rgba(3, 24, 70, 0.7);
+    font-size: 0.9rem;
+  }
+
+  td a {
+    color: #0b693d;
+    font-weight: 600;
+  }
+
+  @media (min-width: 768px) {
+    .analysis-page {
+      padding-inline: 1.5rem;
+    }
+
+    .analysis-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

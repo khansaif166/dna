@@ -1,11 +1,11 @@
 ---
 export const prerender = true;
 
+import Base from '../layouts/Base.astro';
 import EnrollModal from '../components/EnrollModal.astro';
 import Footer from '../components/Footer.astro';
 import Navbar from '../components/Navbar.astro';
 import WhatsApp from '../components/WhatsApp.astro';
-import Base from '../layouts/Base.astro';
 import Advantage from '../components/sections/Advantage.astro';
 import CTABanner from '../components/sections/CTABanner.astro';
 import Hero from '../components/sections/Hero.astro';
@@ -16,19 +16,17 @@ import UrgencyBanner from '../components/sections/UrgencyBanner.astro';
 ---
 
 <Base
-  title="Dream Neet Academy | 20-Day Re-NEET Guided Self-Study Program"
-  description="Dream Neet Academy's 20-day offline guided self-study program helps Re-NEET aspirants execute 12 focused study hours every day under expert monitoring."
+  title="Dream Neet Academy"
+  description="20-day Re-NEET guided self-study program from Dream Neet Academy."
 >
   <UrgencyBanner />
   <Navbar />
-  <main>
-    <Hero />
-    <SubjectPills />
-    <ProgramHighlights />
-    <Advantage />
-    <Testimonials />
-    <CTABanner />
-  </main>
+  <Hero />
+  <SubjectPills />
+  <ProgramHighlights />
+  <Advantage />
+  <Testimonials />
+  <CTABanner />
   <Footer />
   <EnrollModal />
   <WhatsApp />

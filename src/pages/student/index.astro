@@ -1,0 +1,114 @@
+---
+export const prerender = false;
+
+import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
+
+import Base from '../../layouts/Base.astro';
+import { db, subjects, testAttempts, tests } from '../../db';
+import { requireAuth } from '../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+
+const [allSubjects, recentAttempts] = await Promise.all([
+  db.select().from(subjects).orderBy(asc(subjects.order)),
+  db
+    .select({
+      id: testAttempts.id,
+      score: testAttempts.score,
+      totalQuestions: testAttempts.totalQuestions,
+      submittedAt: testAttempts.submittedAt,
+      testTitle: tests.title,
+    })
+    .from(testAttempts)
+    .innerJoin(tests, eq(testAttempts.testId, tests.id))
+    .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt)))
+    .orderBy(desc(testAttempts.submittedAt))
+    .limit(5),
+]);
+
+const dateFormatter = new Intl.DateTimeFormat('en-IN', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+---
+
+<Base title="Student Dashboard | Dream Neet Academy">
+  <main class="min-h-screen bg-gray-950 text-white">
+    <nav class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex justify-between items-center">
+      <div>
+        <p class="text-white font-bold text-lg">Dream Neet Academy</p>
+        <p class="text-sm text-gray-400">Welcome back, {profile.fullName}</p>
+      </div>
+      <form action="/api/auth/logout" method="POST">
+        <button class="text-gray-400 hover:text-white text-sm transition-colors" type="submit">Logout</button>
+      </form>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-4 py-8">
+      <section>
+        <div class="flex items-end justify-between gap-4">
+          <div>
+            <h1 class="text-3xl font-bold text-white">Your subjects</h1>
+            <p class="mt-2 text-sm text-gray-400">Jump back into practice by choosing a subject.</p>
+          </div>
+          <a class="text-sm text-blue-400 transition-colors hover:text-blue-300" href="/student/analysis">View analysis</a>
+        </div>
+
+        {allSubjects.length ? (
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+            {allSubjects.map((subject) => (
+              <a
+                href={`/student/subjects/${subject.id}`}
+                class="bg-gray-900 rounded-xl p-5 border border-gray-800 hover:border-blue-500 transition-colors cursor-pointer"
+              >
+                <h2 class="text-white font-semibold text-lg">{subject.name}</h2>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p class="mt-6 rounded-xl border border-gray-800 bg-gray-900 p-5 text-gray-400">
+            No subjects are available yet.
+          </p>
+        )}
+      </section>
+
+      <section class="mt-10">
+        <h2 class="text-2xl font-semibold text-white">Recent attempts</h2>
+        {recentAttempts.length ? (
+          <div class="overflow-x-auto">
+            <table class="w-full mt-8 text-sm">
+              <thead>
+                <tr class="text-gray-400 border-b border-gray-800">
+                  <th class="pb-2 text-left font-medium" scope="col">Test</th>
+                  <th class="pb-2 text-left font-medium" scope="col">Score</th>
+                  <th class="pb-2 text-left font-medium" scope="col">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentAttempts.map((attempt) => (
+                  <tr class="border-b border-gray-800/50 py-3 text-gray-300">
+                    <td class="py-3">
+                      <a class="transition-colors hover:text-white" href={`/student/attempts/${attempt.id}`}>{attempt.testTitle}</a>
+                    </td>
+                    <td class="py-3">{attempt.score ?? 0}/{attempt.totalQuestions ?? 0}</td>
+                    <td class="py-3">{attempt.submittedAt ? dateFormatter.format(attempt.submittedAt) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p class="mt-6 rounded-xl border border-gray-800 bg-gray-900 p-5 text-gray-400">
+            You have not submitted any tests yet.
+          </p>
+        )}
+      </section>
+    </div>
+  </main>
+</Base>

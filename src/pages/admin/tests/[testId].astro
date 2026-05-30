@@ -1,0 +1,140 @@
+---
+export const prerender = false;
+
+import { asc, eq } from 'drizzle-orm';
+
+import AdminNav from '../../../components/AdminNav.astro';
+import Base from '../../../layouts/Base.astro';
+import { db, questions, subjects, tests, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const { testId } = Astro.params;
+
+if (!testId) {
+  return new Response(null, { status: 404 });
+}
+
+const testRows = await db
+  .select({
+    id: tests.id,
+    title: tests.title,
+    status: tests.status,
+    testType: tests.testType,
+    attemptMode: tests.attemptMode,
+    durationMinutes: tests.durationMinutes,
+    publishedAt: tests.publishedAt,
+    createdAt: tests.createdAt,
+    subjectName: subjects.name,
+    topicName: topics.name,
+  })
+  .from(tests)
+  .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+  .leftJoin(topics, eq(tests.topicId, topics.id))
+  .where(eq(tests.id, testId));
+
+if (!testRows || testRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [test] = testRows;
+
+const testQuestions = await db.select().from(questions).where(eq(questions.testId, test.id)).orderBy(asc(questions.order));
+---
+
+<Base title={`${test.title} | Admin | Dream Neet Academy`}>
+  <main>
+    <h1>{test.title}</h1>
+    <AdminNav />
+
+    <section>
+      <h2>Metadata</h2>
+      <p>Type: {test.testType}</p>
+      <p>Status: {test.status}</p>
+      <p>Attempt Mode: {test.attemptMode}</p>
+      <p>Duration: {test.durationMinutes} minutes</p>
+      <p>Subject: {test.subjectName ?? '-'}</p>
+      <p>Topic: {test.topicName ?? '-'}</p>
+      <p>Created: {test.createdAt?.toLocaleString() ?? '-'}</p>
+      <p>Published At: {test.publishedAt?.toLocaleString() ?? '-'}</p>
+
+      <form action={`/api/admin/tests/${test.id}/publish`} method="POST">
+        <input type="hidden" name="test_id" value={test.id} />
+        <button type="submit">{test.status === 'draft' ? 'Publish' : 'Unpublish'}</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+      {testQuestions.length ? (
+        <ol>
+          {testQuestions.map((question) => (
+            <li>
+              <p>{question.prompt}</p>
+              <ul>
+                <li>A. {question.optionA}</li>
+                <li>B. {question.optionB}</li>
+                <li>C. {question.optionC}</li>
+                <li>D. {question.optionD}</li>
+              </ul>
+              <p>Correct: {question.correctOption}</p>
+              <p>Explanation: {question.explanation ?? '-'}</p>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p>No questions yet.</p>
+      )}
+    </section>
+
+    <section>
+      <h2>Add Question</h2>
+      <form action="/api/admin/questions" method="POST">
+        <input type="hidden" name="test_id" value={test.id} />
+        <label>
+          Prompt
+          <textarea name="prompt" required></textarea>
+        </label>
+        <label>
+          Option A
+          <input type="text" name="option_a" required />
+        </label>
+        <label>
+          Option B
+          <input type="text" name="option_b" required />
+        </label>
+        <label>
+          Option C
+          <input type="text" name="option_c" required />
+        </label>
+        <label>
+          Option D
+          <input type="text" name="option_d" required />
+        </label>
+        <label>
+          Correct Option
+          <select name="correct_option" required>
+            <option value="a">a</option>
+            <option value="b">b</option>
+            <option value="c">c</option>
+            <option value="d">d</option>
+          </select>
+        </label>
+        <label>
+          Explanation
+          <textarea name="explanation"></textarea>
+        </label>
+        <label>
+          Order
+          <input type="number" name="order" required />
+        </label>
+        <button type="submit">Add Question</button>
+      </form>
+    </section>
+  </main>
+</Base>

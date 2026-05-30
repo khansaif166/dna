@@ -1,0 +1,83 @@
+---
+export const prerender = false;
+
+import { and, asc, eq, isNotNull } from 'drizzle-orm';
+
+import TestEngine from '../../../components/TestEngine';
+import Base from '../../../layouts/Base.astro';
+import { db, questions, testAttempts, tests } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+const { testId } = Astro.params;
+
+if (!testId) {
+  return new Response(null, { status: 404 });
+}
+
+const testRows = await db.select().from(tests).where(eq(tests.id, testId));
+
+if (!testRows || testRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [test] = testRows;
+
+if (test.status !== 'published') {
+  return Astro.redirect('/student');
+}
+
+if (test.attemptMode === 'single') {
+  const existingAttempt = await db
+    .select({
+      id: testAttempts.id,
+    })
+    .from(testAttempts)
+    .where(
+      and(
+        eq(testAttempts.studentId, profile.id),
+        eq(testAttempts.testId, test.id),
+        isNotNull(testAttempts.submittedAt)
+      )
+    )
+    .then((rows) => rows[0]);
+
+  if (existingAttempt) {
+    return Astro.redirect(`/student/attempts/${existingAttempt.id}`);
+  }
+}
+
+const [attempt] = await db
+  .insert(testAttempts)
+  .values({
+    studentId: profile.id,
+    testId: test.id,
+    startedAt: new Date(),
+  })
+  .returning({ id: testAttempts.id });
+
+const testQuestions = await db
+  .select()
+  .from(questions)
+  .where(eq(questions.testId, test.id))
+  .orderBy(asc(questions.order));
+
+const safeQuestions = testQuestions.map(({ correctOption, explanation, testId: _testId, ...question }) => question);
+const durationSeconds = test.durationMinutes * 60;
+---
+
+<Base title={`${test.title} | Dream Neet Academy`}>
+  <TestEngine
+    client:load
+    questions={safeQuestions}
+    attemptId={attempt.id}
+    durationSeconds={durationSeconds}
+    testTitle={test.title}
+  />
+</Base>

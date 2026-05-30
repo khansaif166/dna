@@ -1,0 +1,193 @@
+---
+interface Props {
+  role?: 'student' | 'admin';
+  userName?: string;
+}
+
+const { role = 'student', userName = 'Student' } = Astro.props;
+
+const pathname = Astro.url.pathname;
+const studentLinks = [
+  { label: 'Dashboard', href: '/student/dashboard' },
+  { label: 'Subjects', href: '/student/subjects' },
+  { label: 'Analysis', href: '/student/analysis' },
+];
+
+const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+---
+
+<nav class="platform-nav">
+  <div class="platform-nav__inner">
+    <a href={role === 'admin' ? '/admin' : '/student/dashboard'} class="platform-nav__brand">
+      <span class="platform-nav__mark">DNA</span>
+      <span class="platform-nav__title">Dream NEET</span>
+    </a>
+
+    {
+      role === 'student' && (
+        <div class="platform-nav__links" aria-label="Primary">
+          {studentLinks.map((link) => (
+            <a
+              href={link.href}
+              class:list={['platform-nav__link', { 'platform-nav__link--active': isActive(link.href) }]}
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      )
+    }
+
+    <div class="platform-nav__actions">
+      <span class="platform-nav__chip">{userName}</span>
+      <button type="button" class="btn-outline platform-nav__logout">Logout</button>
+    </div>
+  </div>
+</nav>
+
+<style>
+  .platform-nav {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 1000;
+    height: 64px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .platform-nav__inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    max-width: 1200px;
+    height: 100%;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .platform-nav__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex-shrink: 0;
+  }
+
+  .platform-nav__mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: var(--color-navy);
+    color: var(--color-yellow);
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
+  .platform-nav__title {
+    color: var(--color-navy);
+    font-size: 1.1rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .platform-nav__links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.75rem;
+    height: 100%;
+    margin: 0 auto;
+  }
+
+  .platform-nav__link {
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    padding-top: 2px;
+    border-bottom: 2px solid transparent;
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition:
+      color 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .platform-nav__link:hover,
+  .platform-nav__link--active {
+    color: var(--color-navy);
+  }
+
+  .platform-nav__link--active {
+    border-bottom-color: var(--color-yellow);
+  }
+
+  .platform-nav__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .platform-nav__chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    background: var(--color-navy);
+    color: var(--color-surface);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .platform-nav__logout {
+    padding: 8px 16px;
+    font-size: 0.875rem;
+  }
+
+  @media (max-width: 900px) {
+    .platform-nav__inner {
+      gap: 1rem;
+      padding: 0 16px;
+    }
+
+    .platform-nav__links {
+      gap: 1rem;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .platform-nav {
+      height: auto;
+    }
+
+    .platform-nav__inner {
+      flex-wrap: wrap;
+      justify-content: center;
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+
+    .platform-nav__links {
+      order: 3;
+      width: 100%;
+      height: auto;
+      padding-top: 0.25rem;
+      justify-content: center;
+    }
+
+    .platform-nav__link {
+      height: auto;
+      padding-bottom: 0.5rem;
+    }
+  }
+</style>

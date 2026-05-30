@@ -1,0 +1,122 @@
+---
+export const prerender = false;
+
+import { asc, count, desc, eq } from 'drizzle-orm';
+
+import AdminNav from '../../../components/AdminNav.astro';
+import Base from '../../../layouts/Base.astro';
+import { db, questions, subjects, tests, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const [allSubjects, allTopics, allTests] = await Promise.all([
+  db.select().from(subjects).orderBy(asc(subjects.order)),
+  db.select().from(topics).orderBy(asc(topics.order)),
+  db
+    .select({
+      id: tests.id,
+      title: tests.title,
+      testType: tests.testType,
+      status: tests.status,
+      createdAt: tests.createdAt,
+      subjectName: subjects.name,
+      topicName: topics.name,
+      questionCount: count(questions.id),
+    })
+    .from(tests)
+    .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+    .leftJoin(topics, eq(tests.topicId, topics.id))
+    .leftJoin(questions, eq(questions.testId, tests.id))
+    .groupBy(tests.id, subjects.name, topics.name)
+    .orderBy(desc(tests.createdAt)),
+]);
+---
+
+<Base title="Admin Tests | Dream Neet Academy">
+  <main>
+    <h1>Tests</h1>
+    <AdminNav />
+
+    <section>
+      <h2>Create Test</h2>
+      <form action="/api/admin/tests" method="POST">
+        <label>
+          Title
+          <input type="text" name="title" required />
+        </label>
+        <label>
+          Subject
+          <select name="subject_id">
+            <option value="">None</option>
+            {allSubjects.map((subject) => (
+              <option value={subject.id}>{subject.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Topic
+          <select name="topic_id">
+            <option value="">None</option>
+            {allTopics.map((topic) => (
+              <option value={topic.id}>{topic.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Duration Minutes
+          <input type="number" name="duration_minutes" min="1" required />
+        </label>
+        <label>
+          Test Type
+          <select name="test_type" required>
+            <option value="topic_practice">topic_practice</option>
+            <option value="mock_exam">mock_exam</option>
+          </select>
+        </label>
+        <label>
+          Attempt Mode
+          <select name="attempt_mode" required>
+            <option value="multiple">multiple</option>
+            <option value="single">single</option>
+          </select>
+        </label>
+        <button type="submit">Create Test</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>All Tests</h2>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Type</th>
+            <th scope="col">Status</th>
+            <th scope="col">Created</th>
+            <th scope="col">Question Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {allTests.map((test) => (
+            <tr>
+              <td>
+                <a href={`/admin/tests/${test.id}`}>{test.title}</a>
+                <div>Subject: {test.subjectName ?? '-'}</div>
+                <div>Topic: {test.topicName ?? '-'}</div>
+              </td>
+              <td>{test.testType}</td>
+              <td>{test.status}</td>
+              <td>{test.createdAt?.toLocaleString() ?? '-'}</td>
+              <td>{test.questionCount}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</Base>

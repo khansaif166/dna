@@ -1,0 +1,86 @@
+---
+export const prerender = false;
+
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+
+import Base from '../../../layouts/Base.astro';
+import { db, subjects, tests, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const { subjectId } = Astro.params;
+
+if (!subjectId) {
+  return new Response(null, { status: 404 });
+}
+
+const subjectRows = await db.select().from(subjects).where(eq(subjects.id, subjectId));
+
+if (!subjectRows || subjectRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [subject] = subjectRows;
+
+const subjectTopics = await db
+  .select()
+  .from(topics)
+  .where(eq(topics.subjectId, subject.id))
+  .orderBy(asc(topics.order));
+
+const topicIds = subjectTopics.map((topic) => topic.id);
+
+const testCountRows = topicIds.length
+  ? await db
+      .select({
+        topicId: tests.topicId,
+        testCount: sql<number>`count(*)::int`,
+      })
+      .from(tests)
+      .where(and(inArray(tests.topicId, topicIds), eq(tests.status, 'published')))
+      .groupBy(tests.topicId)
+  : [];
+
+const testCounts = new Map(
+  testCountRows
+    .filter((row): row is { topicId: string; testCount: number } => row.topicId !== null)
+    .map((row) => [row.topicId, row.testCount])
+);
+---
+
+<Base title={`${subject.name} | Dream Neet Academy`}>
+  <main class="min-h-screen bg-gray-950 text-white">
+    <div class="max-w-4xl mx-auto px-4 py-8">
+      <div class="mb-6">
+        <a href="/student" class="text-sm text-gray-400 transition-colors hover:text-white">← Back to dashboard</a>
+        <h1 class="mt-3 text-3xl font-bold text-white">{subject.name}</h1>
+        <p class="mt-2 text-sm text-gray-400">Choose a topic to continue your NEET preparation.</p>
+      </div>
+
+      {subjectTopics.length ? (
+        <div class="grid gap-4">
+          {subjectTopics.map((topic) => (
+            <a
+              href={`/student/topics/${topic.id}`}
+              class="rounded-xl border border-gray-800 bg-gray-900 p-5 transition-colors hover:border-blue-500"
+            >
+              <div class="flex items-center justify-between gap-4">
+                <h2 class="text-lg font-semibold text-white">{topic.name}</h2>
+                <span class="text-sm text-gray-400">{testCounts.get(topic.id) ?? 0} tests</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p class="rounded-xl border border-gray-800 bg-gray-900 p-5 text-gray-400">
+          No topics are available for this subject yet.
+        </p>
+      )}
+    </div>
+  </main>
+</Base>

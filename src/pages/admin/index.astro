@@ -1,0 +1,51 @@
+---
+export const prerender = false;
+
+import { count, eq, gte } from 'drizzle-orm';
+
+import AdminNav from '../../components/AdminNav.astro';
+import Base from '../../layouts/Base.astro';
+import { db, profiles, testAttempts, tests } from '../../db';
+import { requireAuth } from '../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const startOfToday = new Date();
+startOfToday.setHours(0, 0, 0, 0);
+
+const [studentCountRow, testCountRow, attemptsTodayRow] = await Promise.all([
+  db.select({ value: count() }).from(profiles).where(eq(profiles.role, 'student')),
+  db.select({ value: count() }).from(tests),
+  db.select({ value: count() }).from(testAttempts).where(gte(testAttempts.startedAt, startOfToday)),
+]);
+
+const stats = [
+  { label: 'Students', value: studentCountRow[0]?.value ?? 0, href: '/admin/students' },
+  { label: 'Tests', value: testCountRow[0]?.value ?? 0, href: '/admin/tests' },
+  { label: 'Attempts Today', value: attemptsTodayRow[0]?.value ?? 0, href: '/admin/students' },
+];
+---
+
+<Base title="Admin Dashboard | Dream Neet Academy">
+  <main>
+    <h1>Admin Dashboard</h1>
+    <AdminNav />
+
+    <section>
+      <h2>Overview</h2>
+      <div>
+        {stats.map((stat) => (
+          <article>
+            <h3>{stat.label}</h3>
+            <p>{stat.value}</p>
+            <p><a href={stat.href}>Open section</a></p>
+          </article>
+        ))}
+      </div>
+    </section>
+  </main>
+</Base>
