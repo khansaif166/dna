@@ -1,10 +1,10 @@
 ---
 export const prerender = false;
 
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
 
-import Base from '../../layouts/Base.astro';
-import { db, subjects, testAttempts, tests } from '../../db';
+import PlatformLayout from '../../layouts/PlatformLayout.astro';
+import { db, subjects, testAttempts, tests, topics } from '../../db';
 import { requireAuth } from '../../lib/auth';
 
 const authResult = await requireAuth(Astro, 'student');
@@ -15,8 +15,30 @@ if (authResult instanceof Response) {
 
 const profile = authResult;
 
-const [allSubjects, recentAttempts] = await Promise.all([
+const [allSubjects, topicCountRows, submittedAttemptRows, attemptedTopicRows, recentAttempts] = await Promise.all([
   db.select().from(subjects).orderBy(asc(subjects.order)),
+  db
+    .select({
+      subjectId: topics.subjectId,
+      topicCount: sql<number>`count(*)::int`,
+    })
+    .from(topics)
+    .groupBy(topics.subjectId),
+  db
+    .select({
+      score: testAttempts.score,
+      totalQuestions: testAttempts.totalQuestions,
+    })
+    .from(testAttempts)
+    .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt))),
+  db
+    .selectDistinct({
+      subjectId: tests.subjectId,
+      topicId: tests.topicId,
+    })
+    .from(testAttempts)
+    .innerJoin(tests, eq(testAttempts.testId, tests.id))
+    .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt))),
   db
     .select({
       id: testAttempts.id,
@@ -24,9 +46,11 @@ const [allSubjects, recentAttempts] = await Promise.all([
       totalQuestions: testAttempts.totalQuestions,
       submittedAt: testAttempts.submittedAt,
       testTitle: tests.title,
+      subjectName: subjects.name,
     })
     .from(testAttempts)
     .innerJoin(tests, eq(testAttempts.testId, tests.id))
+    .leftJoin(subjects, eq(tests.subjectId, subjects.id))
     .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt)))
     .orderBy(desc(testAttempts.submittedAt))
     .limit(5),
@@ -34,81 +58,480 @@ const [allSubjects, recentAttempts] = await Promise.all([
 
 const dateFormatter = new Intl.DateTimeFormat('en-IN', {
   dateStyle: 'medium',
-  timeStyle: 'short',
 });
+
+const subjectTopicCounts = new Map(topicCountRows.map((row) => [row.subjectId, row.topicCount]));
+
+const subjectAttemptedTopics = attemptedTopicRows.reduce((map, row) => {
+  if (!row.subjectId || !row.topicId) {
+    return map;
+  }
+
+  const topicIds = map.get(row.subjectId) ?? new Set<string>();
+  topicIds.add(row.topicId);
+  map.set(row.subjectId, topicIds);
+  return map;
+}, new Map<string, Set<string>>());
+
+const totalTestsAttempted = submittedAttemptRows.length;
+
+const averageScore =
+  submittedAttemptRows.length > 0
+    ? Math.round(
+        submittedAttemptRows.reduce((sum, attempt) => {
+          const totalQuestions = attempt.totalQuestions ?? 0;
+          const score = attempt.score ?? 0;
+          return totalQuestions > 0 ? sum + (score / totalQuestions) * 100 : sum;
+        }, 0) / submittedAttemptRows.length
+      )
+    : 0;
+
+const subjectsCovered = new Set(
+  attemptedTopicRows
+    .map((row) => row.subjectId)
+    .filter((subjectId): subjectId is string => Boolean(subjectId))
+).size;
+
+const subjectStyles = {
+  physics: {
+    accent: 'linear-gradient(90deg, #3B82F6, #1D4ED8)',
+    solid: '#3B82F6',
+    icon: 'Ph',
+  },
+  chemistry: {
+    accent: 'linear-gradient(90deg, #10B981, #059669)',
+    solid: '#10B981',
+    icon: 'Ch',
+  },
+  biology: {
+    accent: 'linear-gradient(90deg, #F59E0B, #D97706)',
+    solid: '#F59E0B',
+    icon: 'Bi',
+  },
+  default: {
+    accent: 'linear-gradient(90deg, var(--color-navy-light), var(--color-navy))',
+    solid: 'var(--color-navy-light)',
+    icon: 'Su',
+  },
+} as const;
+
+const subjectCards = allSubjects.map((subject) => {
+  const key = subject.name.toLowerCase() as keyof typeof subjectStyles;
+  const style = subjectStyles[key] ?? subjectStyles.default;
+  const totalTopics = subjectTopicCounts.get(subject.id) ?? 0;
+  const attemptedTopics = subjectAttemptedTopics.get(subject.id)?.size ?? 0;
+  const progress = totalTopics > 0 ? Math.round((attemptedTopics / totalTopics) * 100) : 0;
+
+  return {
+    ...subject,
+    style,
+    totalTopics,
+    progress,
+  };
+});
+
+const recentActivity = recentAttempts.map((attempt) => {
+  const totalQuestions = attempt.totalQuestions ?? 0;
+  const score = attempt.score ?? 0;
+  const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+  return {
+    ...attempt,
+    percent,
+  };
+});
+
+const scoreBadgeClass = (percent: number) => {
+  if (percent >= 70) return 'badge-success';
+  if (percent >= 40) return 'badge-yellow';
+  return 'badge-danger';
+};
 ---
 
-<Base title="Student Dashboard | Dream Neet Academy">
-  <main class="min-h-screen bg-gray-950 text-white">
-    <nav class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex justify-between items-center">
-      <div>
-        <p class="text-white font-bold text-lg">Dream Neet Academy</p>
-        <p class="text-sm text-gray-400">Welcome back, {profile.fullName}</p>
+<PlatformLayout title="Student Dashboard | Dream Neet Academy">
+  <section class="stats-strip">
+    <div class="stats-strip__inner">
+      <div class="stat-item">
+        <strong>{totalTestsAttempted}</strong>
+        <span>Total Tests Attempted</span>
       </div>
-      <form action="/api/auth/logout" method="POST">
-        <button class="text-gray-400 hover:text-white text-sm transition-colors" type="submit">Logout</button>
-      </form>
-    </nav>
+      <div class="stat-item">
+        <strong>{averageScore}%</strong>
+        <span>Average Score</span>
+      </div>
+      <div class="stat-item">
+        <strong>{subjectsCovered}</strong>
+        <span>Subjects Covered</span>
+      </div>
+    </div>
+  </section>
 
-    <div class="max-w-4xl mx-auto px-4 py-8">
-      <section>
-        <div class="flex items-end justify-between gap-4">
-          <div>
-            <h1 class="text-3xl font-bold text-white">Your subjects</h1>
-            <p class="mt-2 text-sm text-gray-400">Jump back into practice by choosing a subject.</p>
-          </div>
-          <a class="text-sm text-blue-400 transition-colors hover:text-blue-300" href="/student/analysis">View analysis</a>
+  <div class="dashboard-page">
+    <section class="section-block">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Welcome back</p>
+          <h1 class="heading-lg">{profile.fullName}</h1>
         </div>
+      </div>
 
-        {allSubjects.length ? (
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-            {allSubjects.map((subject) => (
-              <a
-                href={`/student/subjects/${subject.id}`}
-                class="bg-gray-900 rounded-xl p-5 border border-gray-800 hover:border-blue-500 transition-colors cursor-pointer"
-              >
-                <h2 class="text-white font-semibold text-lg">{subject.name}</h2>
-              </a>
-            ))}
-          </div>
-        ) : (
-          <p class="mt-6 rounded-xl border border-gray-800 bg-gray-900 p-5 text-gray-400">
-            No subjects are available yet.
-          </p>
-        )}
-      </section>
+      <h2 class="heading-md">Your Subjects</h2>
 
-      <section class="mt-10">
-        <h2 class="text-2xl font-semibold text-white">Recent attempts</h2>
-        {recentAttempts.length ? (
-          <div class="overflow-x-auto">
-            <table class="w-full mt-8 text-sm">
+      {subjectCards.length ? (
+        <div class="subjects-grid">
+          {subjectCards.map((subject) => (
+            <a href={`/student/subjects/${subject.id}`} class="card subject-card">
+              <span class="subject-card__accent" style={`background: ${subject.style.accent};`}></span>
+              <div class="subject-card__icon" style={`background: ${subject.style.solid};`}>
+                {subject.style.icon}
+              </div>
+              <div class="subject-card__content">
+                <h3 class="heading-md">{subject.name}</h3>
+                <p class="text-muted text-sm">{subject.totalTopics} topics</p>
+              </div>
+              <div class="progress-track" aria-hidden="true">
+                <span class="progress-fill" style={`width: ${subject.progress}%; background: ${subject.style.accent};`}></span>
+              </div>
+              <span class="subject-card__meta">{subject.progress}% covered</span>
+              <span class="subject-card__link">Explore →</span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div class="card empty-card">
+          <h3 class="heading-md">No subjects available yet</h3>
+          <p class="text-muted">Your dashboard will fill up here once subjects are added.</p>
+        </div>
+      )}
+    </section>
+
+    <section class="section-block">
+      <h2 class="heading-md">Recent Activity</h2>
+
+      <div class="card table-card">
+        {recentActivity.length ? (
+          <div class="table-wrap">
+            <table class="activity-table">
               <thead>
-                <tr class="text-gray-400 border-b border-gray-800">
-                  <th class="pb-2 text-left font-medium" scope="col">Test</th>
-                  <th class="pb-2 text-left font-medium" scope="col">Score</th>
-                  <th class="pb-2 text-left font-medium" scope="col">Date</th>
+                <tr>
+                  <th scope="col">Test Name</th>
+                  <th scope="col">Subject</th>
+                  <th scope="col">Score</th>
+                  <th scope="col">Date</th>
+                  <th scope="col">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {recentAttempts.map((attempt) => (
-                  <tr class="border-b border-gray-800/50 py-3 text-gray-300">
-                    <td class="py-3">
-                      <a class="transition-colors hover:text-white" href={`/student/attempts/${attempt.id}`}>{attempt.testTitle}</a>
+                {recentActivity.map((attempt) => (
+                  <tr>
+                    <td>{attempt.testTitle}</td>
+                    <td>{attempt.subjectName ?? 'General'}</td>
+                    <td>
+                      <span class:list={['score-badge', scoreBadgeClass(attempt.percent)]}>
+                        {attempt.percent}%
+                      </span>
                     </td>
-                    <td class="py-3">{attempt.score ?? 0}/{attempt.totalQuestions ?? 0}</td>
-                    <td class="py-3">{attempt.submittedAt ? dateFormatter.format(attempt.submittedAt) : '-'}</td>
+                    <td>{attempt.submittedAt ? dateFormatter.format(attempt.submittedAt) : '-'}</td>
+                    <td>
+                      <a href={`/student/attempts/${attempt.id}`} class="review-link">Review</a>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p class="mt-6 rounded-xl border border-gray-800 bg-gray-900 p-5 text-gray-400">
-            You have not submitted any tests yet.
-          </p>
+          <div class="empty-state">
+            <div class="empty-state__icon" aria-hidden="true">📝</div>
+            <h3 class="heading-md">No tests attempted yet</h3>
+            <p class="text-muted">Start with a subject above</p>
+          </div>
         )}
-      </section>
-    </div>
-  </main>
-</Base>
+      </div>
+    </section>
+
+    <section class="quick-action">
+      <p>🎯 Re-NEET exam approaching — keep your momentum!</p>
+      <a href="/student/analysis" class="btn-primary">Go to Analysis →</a>
+    </section>
+  </div>
+</PlatformLayout>
+
+<style>
+  .stats-strip {
+    background: var(--color-navy);
+    padding: 20px 16px;
+  }
+
+  .stats-strip__inner,
+  .dashboard-page {
+    margin: 0 auto;
+    max-width: 64rem;
+  }
+
+  .stats-strip__inner {
+    display: flex;
+    gap: 48px;
+  }
+
+  .stat-item {
+    display: grid;
+    gap: 4px;
+  }
+
+  .stat-item strong {
+    color: var(--color-yellow);
+    font-size: 1.75rem;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .stat-item span {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-page {
+    padding: 2rem 1rem 3.5rem;
+  }
+
+  .section-block + .section-block,
+  .quick-action {
+    margin-top: 2rem;
+  }
+
+  .section-head {
+    align-items: end;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+  }
+
+  .eyebrow {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.35rem;
+    text-transform: uppercase;
+  }
+
+  .heading-lg,
+  .heading-md {
+    color: var(--color-navy);
+    margin: 0;
+  }
+
+  .heading-lg {
+    font-size: clamp(1.8rem, 2.8vw, 2.5rem);
+    font-weight: 800;
+  }
+
+  .heading-md {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+
+  .subjects-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .subject-card {
+    color: inherit;
+    display: grid;
+    gap: 1rem;
+    overflow: hidden;
+    padding-top: 0;
+    position: relative;
+  }
+
+  .subject-card__accent {
+    display: block;
+    height: 4px;
+    margin: 0 -24px;
+  }
+
+  .subject-card__icon {
+    align-items: center;
+    border-radius: 999px;
+    color: var(--color-surface);
+    display: inline-flex;
+    font-size: 0.95rem;
+    font-weight: 700;
+    height: 44px;
+    justify-content: center;
+    width: 44px;
+  }
+
+  .subject-card__content {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+
+  .text-sm {
+    font-size: 0.875rem;
+  }
+
+  .progress-track {
+    background: var(--color-border);
+    border-radius: 999px;
+    height: 6px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    border-radius: 999px;
+    display: block;
+    height: 100%;
+  }
+
+  .subject-card__meta {
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .subject-card__link,
+  .review-link {
+    color: var(--color-navy);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .table-card {
+    padding: 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .activity-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .activity-table th {
+    background: #f8f9ff;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    padding: 14px 16px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .activity-table td {
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    padding: 14px 16px;
+    vertical-align: middle;
+  }
+
+  .activity-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .activity-table td:first-child {
+    color: var(--color-navy);
+    font-weight: 600;
+  }
+
+  .score-badge {
+    display: inline-flex;
+  }
+
+  .badge-danger {
+    align-items: center;
+    background: #fee2e2;
+    border-radius: 999px;
+    color: #991b1b;
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-weight: 600;
+    justify-content: center;
+    padding: 3px 10px;
+  }
+
+  .empty-card,
+  .empty-state {
+    text-align: center;
+  }
+
+  .empty-state {
+    padding: 2.5rem 1.5rem;
+  }
+
+  .empty-state__icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .empty-state p,
+  .empty-card p {
+    margin: 0;
+  }
+
+  .quick-action {
+    align-items: center;
+    background: var(--color-yellow-bg);
+    border: 1px solid rgba(245, 197, 24, 0.3);
+    border-radius: 16px;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 20px 24px;
+  }
+
+  .quick-action p {
+    color: var(--color-navy);
+    font-weight: 600;
+    margin: 0;
+  }
+
+  @media (max-width: 900px) {
+    .subjects-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .stats-strip__inner,
+    .quick-action {
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .stats-strip__inner {
+      align-items: flex-start;
+    }
+
+    .quick-action {
+      align-items: flex-start;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .dashboard-page {
+      padding-top: 1.5rem;
+    }
+
+    .subjects-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .activity-table {
+      min-width: 640px;
+    }
+  }
+</style>

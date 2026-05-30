@@ -3,8 +3,7 @@ export const prerender = false;
 
 import { asc, eq, sql } from 'drizzle-orm';
 
-import AdminNav from '../../../components/AdminNav.astro';
-import Base from '../../../layouts/Base.astro';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, profiles, testAttempts } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 import { getAdminSupabase } from '../../../lib/supabase';
@@ -14,6 +13,8 @@ const authResult = await requireAuth(Astro, 'admin');
 if (authResult instanceof Response) {
   return authResult;
 }
+
+const admin = authResult;
 
 const students = await db
   .select({
@@ -52,30 +53,126 @@ while (true) {
 const emailById = new Map(allUsers.map((user) => [user.id, user.email ?? '-']));
 ---
 
-<Base title="Admin Students | Dream Neet Academy">
-  <main>
-    <h1>Students</h1>
-    <AdminNav />
+<AdminLayout title="Admin Students | Dream Neet Academy" userName={admin.fullName}>
+  <section class="page-header">
+    <h1 class="heading-lg">Students</h1>
+  </section>
 
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">Name</th>
-          <th scope="col">Email</th>
-          <th scope="col">Total Attempts</th>
-          <th scope="col">Average Score</th>
-        </tr>
-      </thead>
-      <tbody>
-        {students.map((student) => (
-          <tr>
-            <td><a href={`/admin/students/${student.id}`}>{student.fullName}</a></td>
-            <td>{emailById.get(student.id) ?? '-'}</td>
-            <td>{student.totalAttempts}</td>
-            <td>{student.averageScore}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </main>
-</Base>
+  <section class="card table-card">
+    {students.length ? (
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Total Attempts</th>
+              <th scope="col">Average Score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.map((student) => (
+              <tr>
+                <td><a href={`/admin/students/${student.id}`} class="action-link">{student.fullName}</a></td>
+                <td>{emailById.get(student.id) ?? '-'}</td>
+                <td>{student.totalAttempts}</td>
+                <td>{student.averageScore}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div class="empty-state">
+        <div class="empty-state__icon">👤</div>
+        <h2 class="heading-md">No students yet</h2>
+        <p class="text-muted">Student records will appear here once learners sign up.</p>
+      </div>
+    )}
+  </section>
+</AdminLayout>
+
+<style>
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .heading-lg,
+  .heading-md {
+    color: var(--color-navy);
+    margin: 0;
+  }
+
+  .heading-lg {
+    font-size: clamp(1.9rem, 3vw, 2.4rem);
+    font-weight: 800;
+  }
+
+  .heading-md {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .table-card {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .admin-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .admin-table th {
+    background: #f8f9ff;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 12px 20px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .admin-table td {
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    padding: 14px 20px;
+    vertical-align: middle;
+  }
+
+  .admin-table tbody tr:hover td {
+    background: #f8f9ff;
+  }
+
+  .admin-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .action-link {
+    color: var(--color-navy);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .empty-state {
+    padding: 32px 24px;
+    text-align: center;
+  }
+
+  .empty-state__icon {
+    color: var(--color-text-muted);
+    font-size: 60px;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+</style>

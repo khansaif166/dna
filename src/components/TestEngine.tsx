@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import styles from './TestEngine.module.css';
+
 type OptionKey = 'a' | 'b' | 'c' | 'd';
 
 type Question = {
@@ -18,6 +20,12 @@ type Props = {
   durationSeconds: number;
   testTitle?: string;
 };
+
+const optionKeys = ['a', 'b', 'c', 'd'] as const;
+
+function classNames(...names: Array<string | false | null | undefined>) {
+  return names.filter(Boolean).join(' ');
+}
 
 export default function TestEngine({ questions, attemptId, durationSeconds, testTitle }: Props) {
   const draftKey = `neet_draft_${attemptId}`;
@@ -174,148 +182,165 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
   const answeredCount = Object.values(answers).filter((value) => value !== null).length;
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
+  const timerValue = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const isTimerWarning = secondsLeft <= 300;
 
   if (!currentQuestion) {
     return (
-      <section className="min-h-screen bg-gray-950 text-white flex items-center justify-center px-4">
-        <p className="rounded-xl border border-gray-800 bg-gray-900 px-5 py-4 text-gray-300">
-          No questions are available for this test yet.
-        </p>
+      <section className={styles.emptyState}>
+        <p className={styles.emptyCard}>No questions are available for this test yet.</p>
       </section>
     );
   }
 
   return (
-    <section className="min-h-screen bg-gray-950 text-white flex flex-col relative">
+    <section className={styles.engine}>
       {isSubmitting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 text-center">
-          <div className="rounded-2xl border border-gray-800 bg-gray-900 px-6 py-5 shadow-xl">
-            <p className="text-lg font-semibold text-white">Submitting... do not close this page</p>
+        <div className={styles.overlay}>
+          <div className={styles.overlayCard}>
+            <div className={styles.spinner} aria-hidden="true"></div>
+            <p className={styles.overlayTitle}>Submitting your answers...</p>
+            <p className={styles.overlayText}>Please do not close this page</p>
           </div>
         </div>
       )}
 
-      <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex justify-between items-center sticky top-0 z-10">
-        <div>
-          <p className="text-white font-semibold">{testTitle ?? 'Test'}</p>
-          <p className="text-sm text-gray-400">
-            Answered {answeredCount} of {questions.length}
-          </p>
-        </div>
-        <strong
-          className={
-            secondsLeft < 300
-              ? 'text-red-400 font-mono text-lg font-bold animate-pulse'
-              : 'text-white font-mono text-lg font-bold'
-          }
-        >
-          {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
-        </strong>
-      </div>
-
-      <div className="max-w-3xl mx-auto px-4 py-8 flex-1 w-full">
-        {autoSubmitted && (
-          <div className="mb-4 rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
-            Time is up! Submitting your answers...
-          </div>
-        )}
-
-        <h2 className="text-sm uppercase tracking-[0.18em] text-gray-400">Question {currentQuestion.order}</h2>
-        <p className="text-white text-lg mb-6 leading-relaxed mt-3">{currentQuestion.prompt}</p>
-
-        <div>
-          {([
-            ['a', currentQuestion.optionA],
-            ['b', currentQuestion.optionB],
-            ['c', currentQuestion.optionC],
-            ['d', currentQuestion.optionD],
-          ] as const).map(([optionKey, optionValue]) => (
-            <button
-              key={optionKey}
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => {
-                setAnswers((currentAnswers) => ({
-                  ...currentAnswers,
-                  [currentQuestion.id]: optionKey,
-                }));
-              }}
-              className={
-                answers[currentQuestion.id] === optionKey
-                  ? 'w-full text-left bg-blue-600/20 border border-blue-500 rounded-xl px-4 py-3 text-white mb-3 disabled:cursor-not-allowed disabled:opacity-60'
-                  : 'w-full text-left bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-gray-300 hover:border-blue-500 hover:text-white transition-colors mb-3 disabled:cursor-not-allowed disabled:opacity-60'
-              }
-            >
-              {optionValue}
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-8 flex gap-3">
+      <header className={styles.topBar}>
+        <p className={styles.title}>{testTitle ?? 'Test'}</p>
+        <div className={classNames(styles.timer, isTimerWarning && styles.timerWarning)}>{timerValue}</div>
+        <div className={styles.topBarRight}>
+          <span className={styles.progressText}>
+            {answeredCount} / {questions.length} answered
+          </span>
           <button
-            className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className={styles.submitTopButton}
             type="button"
-            disabled={isSubmitting || currentIndex === 0}
-            onClick={() => setCurrentIndex((index) => Math.max(index - 1, 0))}
+            disabled={isSubmitting}
+            onClick={() => void handleSubmit()}
           >
-            Previous
-          </button>
-          <button
-            className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-            type="button"
-            disabled={isSubmitting || currentIndex === questions.length - 1}
-            onClick={() => setCurrentIndex((index) => Math.min(index + 1, questions.length - 1))}
-          >
-            Next
+            Submit
           </button>
         </div>
+      </header>
 
-        <div className="grid grid-cols-8 sm:grid-cols-10 gap-2 mt-6">
-          {questions.map((question, index) => (
-            <button
-              key={question.id}
-              className={
-                answers[question.id]
-                  ? 'bg-green-600 text-white text-xs rounded-lg w-8 h-8 disabled:cursor-not-allowed disabled:opacity-60'
-                  : 'bg-gray-800 text-gray-400 text-xs rounded-lg w-8 h-8 disabled:cursor-not-allowed disabled:opacity-60'
-              }
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => setCurrentIndex(index)}
-            >
-              {question.order}
-            </button>
-          ))}
-        </div>
+      <div className={styles.contentArea}>
+        <main className={styles.mainPane}>
+          <div className={styles.mainPaneInner}>
+            {autoSubmitted && <div className={styles.autoSubmitNote}>Time is up! Submitting your answers...</div>}
+            {submitError && <div className={styles.errorNote}>{submitError}</div>}
+            {submitError && (
+              <button className={styles.retryButton} type="button" onClick={() => void handleSubmit()}>
+                Retry submission
+              </button>
+            )}
 
-        <div className="mt-8">
-          {submitError && (
-            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">
-              {submitError}
+            <p className={styles.questionLabel}>Question {currentQuestion.order}</p>
+            <p className={styles.questionPrompt}>{currentQuestion.prompt}</p>
+
+            <div className={styles.optionsList}>
+              {optionKeys.map((optionKey) => {
+                const optionValue =
+                  optionKey === 'a'
+                    ? currentQuestion.optionA
+                    : optionKey === 'b'
+                      ? currentQuestion.optionB
+                      : optionKey === 'c'
+                        ? currentQuestion.optionC
+                        : currentQuestion.optionD;
+                const isSelected = answers[currentQuestion.id] === optionKey;
+
+                return (
+                  <button
+                    key={optionKey}
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      setAnswers((currentAnswers) => ({
+                        ...currentAnswers,
+                        [currentQuestion.id]: optionKey,
+                      }));
+                    }}
+                    className={classNames(styles.optionButton, isSelected && styles.optionSelected)}
+                  >
+                    <span className={styles.optionBubble}>{optionKey.toUpperCase()}</span>
+                    <span className={styles.optionText}>{optionValue}</span>
+                  </button>
+                );
+              })}
             </div>
-          )}
 
-          {submitError && (
-            <button
-              className="mb-4 rounded-lg border border-red-400 px-4 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/10"
-              type="button"
-              onClick={() => void handleSubmit()}
-            >
-              Retry
-            </button>
-          )}
+            <div className={styles.navigationRow}>
+              <button
+                className={classNames(styles.navButton, styles.navButtonSecondary)}
+                type="button"
+                disabled={isSubmitting || currentIndex === 0}
+                onClick={() => setCurrentIndex((index) => Math.max(index - 1, 0))}
+              >
+                ← Previous
+              </button>
+              <button
+                className={styles.navButton}
+                type="button"
+                disabled={isSubmitting || currentIndex === questions.length - 1}
+                onClick={() => setCurrentIndex((index) => Math.min(index + 1, questions.length - 1))}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        </main>
 
-          <div>
+        <aside className={styles.sidePane}>
+          <h2 className={styles.paletteTitle}>Question Palette</h2>
+
+          <div className={styles.legendRow}>
+            <div className={styles.legendItem}>
+              <span className={classNames(styles.legendDot, styles.legendDotAnswered)}></span>
+              <span>Answered</span>
+            </div>
+            <div className={styles.legendItem}>
+              <span className={classNames(styles.legendDot, styles.legendDotSkipped)}></span>
+              <span>Not visited</span>
+            </div>
+          </div>
+
+          <div className={styles.paletteGrid}>
+            {questions.map((question, index) => {
+              const isCurrent = index === currentIndex;
+              const isAnswered = answers[question.id] !== null;
+
+              return (
+                <button
+                  key={question.id}
+                  className={classNames(
+                    styles.paletteButton,
+                    isAnswered && styles.paletteButtonAnswered,
+                    isCurrent && styles.paletteButtonCurrent
+                  )}
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={() => setCurrentIndex(index)}
+                >
+                  {question.order}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className={styles.paletteSubmit}>
+            <p className={styles.paletteSubmitText}>
+              {answeredCount} of {questions.length} answered
+            </p>
             <button
-              className="bg-green-600 hover:bg-green-500 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              className={styles.submitPaletteButton}
               type="button"
               disabled={isSubmitting}
               onClick={() => void handleSubmit()}
             >
-              {isSubmitting ? 'Submitting...' : 'Submit'}
+              Submit Test
             </button>
           </div>
-        </div>
+        </aside>
       </div>
     </section>
   );

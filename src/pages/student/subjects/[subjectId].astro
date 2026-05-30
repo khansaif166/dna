@@ -1,10 +1,10 @@
 ---
 export const prerender = false;
 
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
-import Base from '../../../layouts/Base.astro';
-import { db, subjects, tests, topics } from '../../../db';
+import PlatformLayout from '../../../layouts/PlatformLayout.astro';
+import { db, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
 const authResult = await requireAuth(Astro, 'student');
@@ -13,6 +13,7 @@ if (authResult instanceof Response) {
   return authResult;
 }
 
+const profile = authResult;
 const { subjectId } = Astro.params;
 
 if (!subjectId) {
@@ -35,52 +36,262 @@ const subjectTopics = await db
 
 const topicIds = subjectTopics.map((topic) => topic.id);
 
-const testCountRows = topicIds.length
-  ? await db
-      .select({
-        topicId: tests.topicId,
-        testCount: sql<number>`count(*)::int`,
-      })
-      .from(tests)
-      .where(and(inArray(tests.topicId, topicIds), eq(tests.status, 'published')))
-      .groupBy(tests.topicId)
-  : [];
+const [testCountRows, resourceCountRows, practicedTopicRows] = topicIds.length
+  ? await Promise.all([
+      db
+        .select({
+          topicId: tests.topicId,
+          testCount: sql<number>`count(*)::int`,
+        })
+        .from(tests)
+        .where(and(inArray(tests.topicId, topicIds), eq(tests.status, 'published')))
+        .groupBy(tests.topicId),
+      db
+        .select({
+          topicId: topicResources.topicId,
+          resourceCount: sql<number>`count(*)::int`,
+        })
+        .from(topicResources)
+        .where(inArray(topicResources.topicId, topicIds))
+        .groupBy(topicResources.topicId),
+      db
+        .selectDistinct({
+          topicId: tests.topicId,
+        })
+        .from(testAttempts)
+        .innerJoin(tests, eq(testAttempts.testId, tests.id))
+        .where(
+          and(
+            eq(testAttempts.studentId, profile.id),
+            inArray(tests.topicId, topicIds),
+            isNotNull(testAttempts.submittedAt)
+          )
+        ),
+    ])
+  : [[], [], []];
 
 const testCounts = new Map(
   testCountRows
     .filter((row): row is { topicId: string; testCount: number } => row.topicId !== null)
     .map((row) => [row.topicId, row.testCount])
 );
+
+const resourceCounts = new Map(resourceCountRows.map((row) => [row.topicId, row.resourceCount]));
+const practicedTopicIds = new Set(
+  practicedTopicRows
+    .map((row) => row.topicId)
+    .filter((topicId): topicId is string => Boolean(topicId))
+);
+
+const totalTestsAvailable = Array.from(testCounts.values()).reduce((sum, count) => sum + count, 0);
+
+const topicCards = subjectTopics.map((topic, index) => ({
+  ...topic,
+  displayOrder: String(index + 1).padStart(2, '0'),
+  videoCount: resourceCounts.get(topic.id) ?? 0,
+  testCount: testCounts.get(topic.id) ?? 0,
+  practiced: practicedTopicIds.has(topic.id),
+}));
 ---
 
-<Base title={`${subject.name} | Dream Neet Academy`}>
-  <main class="min-h-screen bg-gray-950 text-white">
-    <div class="max-w-4xl mx-auto px-4 py-8">
-      <div class="mb-6">
-        <a href="/student" class="text-sm text-gray-400 transition-colors hover:text-white">← Back to dashboard</a>
-        <h1 class="mt-3 text-3xl font-bold text-white">{subject.name}</h1>
-        <p class="mt-2 text-sm text-gray-400">Choose a topic to continue your NEET preparation.</p>
-      </div>
-
-      {subjectTopics.length ? (
-        <div class="grid gap-4">
-          {subjectTopics.map((topic) => (
-            <a
-              href={`/student/topics/${topic.id}`}
-              class="rounded-xl border border-gray-800 bg-gray-900 p-5 transition-colors hover:border-blue-500"
-            >
-              <div class="flex items-center justify-between gap-4">
-                <h2 class="text-lg font-semibold text-white">{topic.name}</h2>
-                <span class="text-sm text-gray-400">{testCounts.get(topic.id) ?? 0} tests</span>
-              </div>
-            </a>
-          ))}
-        </div>
-      ) : (
-        <p class="rounded-xl border border-gray-800 bg-gray-900 p-5 text-gray-400">
-          No topics are available for this subject yet.
-        </p>
-      )}
+<PlatformLayout title={`${subject.name} | Dream Neet Academy`}>
+  <section class="subject-hero">
+    <div class="subject-hero__inner">
+      <p class="breadcrumb">
+        <a href="/student">Dashboard</a>
+        <span>/</span>
+        <span class="breadcrumb__active">{subject.name}</span>
+      </p>
+      <h1 class="heading-xl">{subject.name}</h1>
+      <p class="subject-hero__subtitle">{subjectTopics.length} topics · {totalTestsAvailable} tests available</p>
     </div>
-  </main>
-</Base>
+  </section>
+
+  <section class="topics-section">
+    {topicCards.length ? (
+      <div class="topics-grid">
+        {topicCards.map((topic) => (
+          <a href={`/student/topics/${topic.id}`} class="card topic-card">
+            <div class="topic-card__content">
+              <span class="topic-card__number">{topic.displayOrder}</span>
+              <h2 class="topic-card__title">{topic.name}</h2>
+              <div class="topic-card__pills">
+                <span class="topic-pill topic-pill--video">{topic.videoCount} videos</span>
+                <span class="topic-pill topic-pill--test">{topic.testCount} tests</span>
+              </div>
+            </div>
+            <div class="topic-card__action">
+              <span class:list={[topic.practiced ? 'badge-success' : 'badge-pending']}>
+                {topic.practiced ? 'Practiced' : 'Not started'}
+              </span>
+              <span class="topic-card__arrow" aria-hidden="true">→</span>
+            </div>
+          </a>
+        ))}
+      </div>
+    ) : (
+      <div class="card empty-card">
+        <h2 class="heading-md">No topics available yet</h2>
+        <p class="text-muted">This subject will appear here once topics are added.</p>
+      </div>
+    )}
+  </section>
+</PlatformLayout>
+
+<style>
+  .subject-hero {
+    background: var(--color-navy);
+    padding: 40px 16px;
+  }
+
+  .subject-hero__inner,
+  .topics-section {
+    margin: 0 auto;
+    max-width: 64rem;
+  }
+
+  .breadcrumb {
+    align-items: center;
+    color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  .breadcrumb__active {
+    color: var(--color-surface);
+  }
+
+  .heading-xl,
+  .heading-md {
+    margin: 0;
+  }
+
+  .heading-xl {
+    color: var(--color-surface);
+    font-size: clamp(2rem, 3vw, 2.75rem);
+    font-weight: 800;
+    margin-top: 8px;
+  }
+
+  .heading-md {
+    color: var(--color-navy);
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .subject-hero__subtitle {
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0.5rem 0 0;
+  }
+
+  .topics-section {
+    padding: 2rem 1rem 3.5rem;
+  }
+
+  .topics-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+
+  .topic-card {
+    align-items: center;
+    border-left: 4px solid var(--color-yellow);
+    color: inherit;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .topic-card:hover {
+    border-color: var(--color-navy);
+    box-shadow: 0 4px 12px rgba(10, 15, 30, 0.1);
+    transform: translateY(-1px);
+  }
+
+  .topic-card__content {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .topic-card__number {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .topic-card__title {
+    color: var(--color-text);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .topic-card__pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .topic-pill {
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 10px;
+  }
+
+  .topic-pill--video {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .topic-pill--test {
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .topic-card__action {
+    align-items: center;
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.85rem;
+  }
+
+  .topic-card__arrow,
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+
+  .empty-card {
+    text-align: center;
+  }
+
+  .empty-card p {
+    margin: 0.5rem 0 0;
+  }
+
+  @media (min-width: 720px) {
+    .topics-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .topic-card {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .topic-card__action {
+      justify-content: space-between;
+      width: 100%;
+    }
+  }
+</style>

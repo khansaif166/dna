@@ -3,8 +3,7 @@ export const prerender = false;
 
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 
-import AdminNav from '../../../components/AdminNav.astro';
-import Base from '../../../layouts/Base.astro';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, profiles, testAttempts, tests } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
@@ -14,6 +13,7 @@ if (authResult instanceof Response) {
   return authResult;
 }
 
+const admin = authResult;
 const { studentId } = Astro.params;
 
 if (!studentId) {
@@ -42,25 +42,126 @@ const attempts = await db
   .orderBy(desc(testAttempts.submittedAt));
 ---
 
-<Base title={`${student.fullName} | Admin | Dream Neet Academy`}>
-  <main>
-    <h1>{student.fullName}</h1>
-    <AdminNav />
+<AdminLayout title={`${student.fullName} | Admin | Dream Neet Academy`} userName={admin.fullName}>
+  <section class="page-header">
+    <h1 class="heading-lg">{student.fullName}</h1>
+  </section>
 
-    <section>
-      <h2>Submitted Attempts</h2>
-      {attempts.length ? (
-        <ul>
-          {attempts.map((attempt) => (
-            <li>
-              {attempt.testTitle} - {attempt.score ?? 0}/{attempt.totalQuestions ?? 0} -{' '}
-              {attempt.submittedAt?.toLocaleString() ?? '-'}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p>No submitted attempts yet.</p>
-      )}
-    </section>
-  </main>
-</Base>
+  <section class="card table-card">
+    <div class="table-card__head">
+      <h2 class="heading-md">Submitted Attempts</h2>
+    </div>
+
+    {attempts.length ? (
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">Test</th>
+              <th scope="col">Score</th>
+              <th scope="col">Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {attempts.map((attempt) => (
+              <tr>
+                <td>{attempt.testTitle}</td>
+                <td>{attempt.score ?? 0}/{attempt.totalQuestions ?? 0}</td>
+                <td>{attempt.submittedAt?.toLocaleString() ?? '-'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div class="empty-state">
+        <div class="empty-state__icon">✅</div>
+        <h2 class="heading-md">No submitted attempts yet</h2>
+        <p class="text-muted">This student has not completed any tests so far.</p>
+      </div>
+    )}
+  </section>
+</AdminLayout>
+
+<style>
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .heading-lg,
+  .heading-md {
+    color: var(--color-navy);
+    margin: 0;
+  }
+
+  .heading-lg {
+    font-size: clamp(1.9rem, 3vw, 2.4rem);
+    font-weight: 800;
+  }
+
+  .heading-md {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .table-card {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .table-card__head {
+    padding: 20px 24px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .admin-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .admin-table th {
+    background: #f8f9ff;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 12px 20px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .admin-table td {
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    padding: 14px 20px;
+    vertical-align: middle;
+  }
+
+  .admin-table tbody tr:hover td {
+    background: #f8f9ff;
+  }
+
+  .admin-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .empty-state {
+    padding: 32px 24px;
+    text-align: center;
+  }
+
+  .empty-state__icon {
+    color: var(--color-text-muted);
+    font-size: 60px;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+</style>

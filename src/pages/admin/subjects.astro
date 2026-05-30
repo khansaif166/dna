@@ -3,8 +3,7 @@ export const prerender = false;
 
 import { asc } from 'drizzle-orm';
 
-import AdminNav from '../../components/AdminNav.astro';
-import Base from '../../layouts/Base.astro';
+import AdminLayout from '../../layouts/AdminLayout.astro';
 import { db, subjects } from '../../db';
 import { requireAuth } from '../../lib/auth';
 
@@ -14,54 +13,212 @@ if (authResult instanceof Response) {
   return authResult;
 }
 
+const admin = authResult;
 const allSubjects = await db.select().from(subjects).orderBy(asc(subjects.order));
 ---
 
-<Base title="Admin Subjects | Dream Neet Academy">
-  <main>
-    <h1>Subjects</h1>
-    <AdminNav />
+<AdminLayout title="Admin Subjects | Dream Neet Academy" userName={admin.fullName}>
+  <section class="page-header">
+    <h1 class="heading-lg">Subjects</h1>
+  </section>
 
-    <section>
-      <h2>Existing Subjects</h2>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Order</th>
-            <th scope="col">Save</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allSubjects.map((subject) => (
-            <tr>
-              <td colspan="3">
-                <form action={`/api/admin/subjects/${subject.id}`} method="POST">
-                  <input type="hidden" name="subject_id" value={subject.id} />
-                  <input type="text" name="name" value={subject.name} />
-                  <input type="number" name="order" value={subject.order} />
-                  <button type="submit">Update</button>
-                </form>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+  <section class="page-grid">
+    <div class="card form-card">
+      <div class="section-head">
+        <span class="section-pill">Create</span>
+        <h2 class="heading-md">Add Subject</h2>
+      </div>
 
-    <section>
-      <h2>Add Subject</h2>
-      <form action="/api/admin/subjects" method="POST">
-        <label>
-          Name
-          <input type="text" name="name" required />
+      <form action="/api/admin/subjects" method="POST" class="stack-form">
+        <label class="field">
+          <span>Name</span>
+          <input class="input-field" type="text" name="name" required />
         </label>
-        <label>
-          Order
-          <input type="number" name="order" required />
+        <label class="field">
+          <span>Order</span>
+          <input class="input-field" type="number" name="order" required />
         </label>
-        <button type="submit">Create Subject</button>
+        <button type="submit" class="btn-primary">Create Subject</button>
       </form>
-    </section>
-  </main>
-</Base>
+    </div>
+
+    <div class="card table-card">
+      <div class="table-card__head">
+        <h2 class="heading-md">Existing Subjects</h2>
+      </div>
+
+      {allSubjects.length ? (
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Order</th>
+                <th scope="col">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allSubjects.map((subject) => (
+                <tr>
+                  <td colspan="3">
+                    <form action={`/api/admin/subjects/${subject.id}`} method="POST" class="inline-edit">
+                      <input type="hidden" name="subject_id" value={subject.id} />
+                      <input class="input-field" type="text" name="name" value={subject.name} />
+                      <input class="input-field" type="number" name="order" value={subject.order} />
+                      <button type="submit" class="btn-primary inline-edit__button">Update</button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div class="empty-state">
+          <div class="empty-state__icon">◌</div>
+          <h3 class="heading-md">No subjects yet</h3>
+          <p class="text-muted">Create your first subject to start structuring the syllabus.</p>
+        </div>
+      )}
+    </div>
+  </section>
+</AdminLayout>
+
+<style>
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .heading-lg,
+  .heading-md {
+    color: var(--color-navy);
+    margin: 0;
+  }
+
+  .heading-lg {
+    font-size: clamp(1.9rem, 3vw, 2.4rem);
+    font-weight: 800;
+  }
+
+  .heading-md {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .page-grid {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .form-card {
+    max-width: 600px;
+  }
+
+  .section-head {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-pill {
+    background: var(--color-yellow-bg);
+    border-radius: 999px;
+    color: #92400e;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 10px;
+  }
+
+  .stack-form,
+  .field {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .stack-form {
+    gap: 1rem;
+  }
+
+  .field span {
+    color: var(--color-text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .table-card {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .table-card__head {
+    padding: 20px 24px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .admin-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .admin-table th {
+    background: #f8f9ff;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 12px 20px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .admin-table td {
+    border-bottom: 1px solid var(--color-border);
+    padding: 14px 20px;
+  }
+
+  .admin-table tbody tr:hover td {
+    background: #f8f9ff;
+  }
+
+  .admin-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .inline-edit {
+    align-items: center;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: minmax(220px, 1fr) 120px 120px;
+  }
+
+  .inline-edit__button {
+    justify-self: start;
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .empty-state {
+    padding: 32px 24px;
+    text-align: center;
+  }
+
+  .empty-state__icon {
+    color: var(--color-text-muted);
+    font-size: 60px;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+
+  @media (max-width: 760px) {
+    .inline-edit {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

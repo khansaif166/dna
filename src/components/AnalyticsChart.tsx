@@ -1,3 +1,14 @@
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+
 interface AnalyticsChartProps {
   data: Array<{
     subjectName: string;
@@ -5,61 +16,96 @@ interface AnalyticsChartProps {
   }>;
 }
 
-export default function AnalyticsChart({ data }: AnalyticsChartProps) {
-  if (!data.length) {
-    return <p>No submitted subject data yet.</p>;
+type TooltipProps = {
+  active?: boolean;
+  payload?: Array<{
+    payload: {
+      subjectName: string;
+      percent: number;
+    };
+    value: number;
+  }>;
+};
+
+function CustomTooltip({ active, payload }: TooltipProps) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const row = payload[0]?.payload;
+
+  if (!row) {
+    return null;
   }
 
   return (
     <div
       style={{
-        display: 'grid',
-        gap: '0.875rem',
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+        borderRadius: '12px',
+        boxShadow: '0 10px 24px rgba(10, 15, 30, 0.12)',
+        color: 'var(--color-navy)',
+        padding: '10px 12px',
       }}
     >
-      {data.map((row) => (
-        <div
-          key={row.subjectName}
-          style={{
-            display: 'grid',
-            gap: '0.375rem',
-          }}
-        >
-          <div
-            style={{
-              alignItems: 'center',
-              display: 'flex',
-              fontSize: '0.95rem',
-              fontWeight: 600,
-              gap: '0.75rem',
-              justifyContent: 'space-between',
-            }}
-          >
-            <span>{row.subjectName}</span>
-            <span>{row.percent}%</span>
-          </div>
+      <p
+        style={{
+          fontSize: '0.9rem',
+          fontWeight: 700,
+          margin: 0,
+        }}
+      >
+        {row.subjectName}
+      </p>
+      <p
+        style={{
+          fontSize: '0.85rem',
+          margin: '0.25rem 0 0',
+        }}
+      >
+        {row.percent}%
+      </p>
+    </div>
+  );
+}
 
-          <div
-            aria-hidden="true"
-            style={{
-              backgroundColor: '#e5e7eb',
-              borderRadius: '999px',
-              height: '0.85rem',
-              overflow: 'hidden',
+export default function AnalyticsChart({ data }: AnalyticsChartProps) {
+  if (!data.length) {
+    return <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>No submitted subject data yet.</p>;
+  }
+
+  return (
+    <div style={{ height: '240px', width: '100%' }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
+          <CartesianGrid stroke="var(--color-border)" strokeOpacity={0.5} vertical={false} />
+          <XAxis
+            dataKey="subjectName"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }}
+          />
+          <YAxis
+            domain={[0, 100]}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }}
+          />
+          <Tooltip cursor={{ fill: 'rgba(245, 197, 24, 0.08)' }} content={<CustomTooltip />} />
+          <Bar
+            dataKey="percent"
+            radius={[8, 8, 0, 0]}
+            activeBar={{
+              fill: 'var(--color-yellow)',
             }}
           >
-            <div
-              style={{
-                background: 'linear-gradient(90deg, #0b693d, #f9dd17)',
-                borderRadius: '999px',
-                height: '100%',
-                transition: 'width 400ms ease',
-                width: `${Math.max(0, Math.min(100, row.percent))}%`,
-              }}
-            />
-          </div>
-        </div>
-      ))}
+            {data.map((row) => (
+              <Cell key={row.subjectName} fill="var(--color-navy)" />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

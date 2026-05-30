@@ -3,8 +3,7 @@ export const prerender = false;
 
 import { asc } from 'drizzle-orm';
 
-import AdminNav from '../../components/AdminNav.astro';
-import Base from '../../layouts/Base.astro';
+import AdminLayout from '../../layouts/AdminLayout.astro';
 import { db, subjects, topics } from '../../db';
 import { requireAuth } from '../../lib/auth';
 
@@ -14,80 +13,244 @@ if (authResult instanceof Response) {
   return authResult;
 }
 
+const admin = authResult;
 const allSubjects = await db.select().from(subjects).orderBy(asc(subjects.order));
 const allTopics = await db.select().from(topics).orderBy(asc(topics.subjectId), asc(topics.order));
 ---
 
-<Base title="Admin Topics | Dream Neet Academy">
-  <main>
-    <h1>Topics & Resources</h1>
-    <AdminNav />
+<AdminLayout title="Admin Topics | Dream Neet Academy" userName={admin.fullName}>
+  <section class="page-header">
+    <h1 class="heading-lg">Topics & Resources</h1>
+  </section>
 
-    <section>
-      <h2>Add Topic</h2>
-      <form action="/api/admin/topics" method="POST">
-        <label>
-          Subject
-          <select name="subject_id" required>
+  <section class="page-grid">
+    <div class="card form-card">
+      <div class="section-head">
+        <span class="section-pill">Create</span>
+        <h2 class="heading-md">Add Topic</h2>
+      </div>
+
+      <form action="/api/admin/topics" method="POST" class="stack-form">
+        <label class="field">
+          <span>Subject</span>
+          <select class="input-field input-select" name="subject_id" required>
             {allSubjects.map((subject) => (
               <option value={subject.id}>{subject.name}</option>
             ))}
           </select>
         </label>
-        <label>
-          Name
-          <input type="text" name="name" required />
+        <label class="field">
+          <span>Name</span>
+          <input class="input-field" type="text" name="name" required />
         </label>
-        <label>
-          Order
-          <input type="number" name="order" required />
+        <label class="field">
+          <span>Order</span>
+          <input class="input-field" type="number" name="order" required />
         </label>
-        <button type="submit">Create Topic</button>
+        <button type="submit" class="btn-primary">Create Topic</button>
       </form>
-    </section>
+    </div>
 
-    <section>
-      <h2>Topics by Subject</h2>
+    <div class="topics-list">
       {allSubjects.map((subject) => {
         const subjectTopics = allTopics.filter((topic) => topic.subjectId === subject.id);
 
         return (
-          <section>
-            <h3>{subject.name}</h3>
+          <section class="card subject-card">
+            <div class="subject-card__head">
+              <h2 class="heading-md">{subject.name}</h2>
+              <span class="subject-card__count">{subjectTopics.length} topics</span>
+            </div>
+
             {subjectTopics.length ? (
-              <ul>
+              <div class="topic-stack">
                 {subjectTopics.map((topic) => (
-                  <li>
-                    <p>{topic.name} (Order: {topic.order})</p>
-                    <form action="/api/admin/resources" method="POST">
+                  <article class="topic-entry">
+                    <div class="topic-entry__meta">
+                      <h3>{topic.name}</h3>
+                      <p>Order {topic.order}</p>
+                    </div>
+
+                    <form action="/api/admin/resources" method="POST" class="resource-form">
                       <input type="hidden" name="topic_id" value={topic.id} />
-                      <label>
-                        Title
-                        <input type="text" name="title" required />
+                      <label class="field">
+                        <span>Title</span>
+                        <input class="input-field" type="text" name="title" required />
                       </label>
-                      <label>
-                        YouTube URL
-                        <input type="url" name="youtube_url" required />
+                      <label class="field">
+                        <span>YouTube URL</span>
+                        <input class="input-field" type="url" name="youtube_url" required />
                       </label>
-                      <label>
-                        Notes
-                        <textarea name="notes"></textarea>
+                      <label class="field">
+                        <span>Notes</span>
+                        <textarea class="input-field textarea-field" name="notes"></textarea>
                       </label>
-                      <label>
-                        Order
-                        <input type="number" name="order" required />
+                      <label class="field">
+                        <span>Order</span>
+                        <input class="input-field" type="number" name="order" required />
                       </label>
-                      <button type="submit">Add Resource</button>
+                      <button type="submit" class="btn-primary">Add Resource</button>
                     </form>
-                  </li>
+                  </article>
                 ))}
-              </ul>
+              </div>
             ) : (
-              <p>No topics added yet.</p>
+              <div class="empty-state empty-state--compact">
+                <div class="empty-state__icon">◎</div>
+                <h3 class="heading-md">No topics added yet</h3>
+                <p class="text-muted">Create a topic above, then attach video resources here.</p>
+              </div>
             )}
           </section>
         );
       })}
-    </section>
-  </main>
-</Base>
+    </div>
+  </section>
+</AdminLayout>
+
+<style>
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .heading-lg,
+  .heading-md {
+    color: var(--color-navy);
+    margin: 0;
+  }
+
+  .heading-lg {
+    font-size: clamp(1.9rem, 3vw, 2.4rem);
+    font-weight: 800;
+  }
+
+  .heading-md {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .page-grid,
+  .stack-form,
+  .field,
+  .topics-list,
+  .topic-stack {
+    display: grid;
+  }
+
+  .page-grid,
+  .topics-list {
+    gap: 1.25rem;
+  }
+
+  .form-card {
+    max-width: 600px;
+  }
+
+  .stack-form {
+    gap: 1rem;
+  }
+
+  .section-head {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-pill {
+    background: var(--color-yellow-bg);
+    border-radius: 999px;
+    color: #92400e;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 10px;
+  }
+
+  .field {
+    gap: 0.45rem;
+  }
+
+  .field span {
+    color: var(--color-text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .input-select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--color-text-secondary) 50%),
+      linear-gradient(135deg, var(--color-text-secondary) 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 12px) calc(50% - 2px);
+    background-repeat: no-repeat;
+    background-size: 6px 6px, 6px 6px;
+    padding-right: 38px;
+  }
+
+  .textarea-field {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  .subject-card__head {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .subject-card__count {
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .topic-stack {
+    gap: 1rem;
+  }
+
+  .topic-entry {
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    padding: 16px;
+  }
+
+  .topic-entry__meta h3 {
+    color: var(--color-navy);
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .topic-entry__meta p {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin: 0.35rem 0 1rem;
+  }
+
+  .resource-form {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .empty-state {
+    text-align: center;
+  }
+
+  .empty-state--compact {
+    padding: 16px 0 4px;
+  }
+
+  .empty-state__icon {
+    color: var(--color-text-muted);
+    font-size: 60px;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+</style>

@@ -3,8 +3,7 @@ export const prerender = false;
 
 import { asc, count, desc, eq } from 'drizzle-orm';
 
-import AdminNav from '../../../components/AdminNav.astro';
-import Base from '../../../layouts/Base.astro';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, questions, subjects, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
@@ -13,6 +12,8 @@ const authResult = await requireAuth(Astro, 'admin');
 if (authResult instanceof Response) {
   return authResult;
 }
+
+const admin = authResult;
 
 const [allSubjects, allTopics, allTests] = await Promise.all([
   db.select().from(subjects).orderBy(asc(subjects.order)),
@@ -37,86 +38,259 @@ const [allSubjects, allTopics, allTests] = await Promise.all([
 ]);
 ---
 
-<Base title="Admin Tests | Dream Neet Academy">
-  <main>
-    <h1>Tests</h1>
-    <AdminNav />
+<AdminLayout title="Admin Tests | Dream Neet Academy" userName={admin.fullName}>
+  <section class="page-header">
+    <h1 class="heading-lg">Tests</h1>
+  </section>
 
-    <section>
-      <h2>Create Test</h2>
-      <form action="/api/admin/tests" method="POST">
-        <label>
-          Title
-          <input type="text" name="title" required />
+  <section class="page-grid">
+    <div class="card form-card">
+      <div class="section-head">
+        <span class="section-pill">Create</span>
+        <h2 class="heading-md">Create Test</h2>
+      </div>
+
+      <form action="/api/admin/tests" method="POST" class="stack-form">
+        <label class="field">
+          <span>Title</span>
+          <input class="input-field" type="text" name="title" required />
         </label>
-        <label>
-          Subject
-          <select name="subject_id">
+        <label class="field">
+          <span>Subject</span>
+          <select class="input-field input-select" name="subject_id">
             <option value="">None</option>
             {allSubjects.map((subject) => (
               <option value={subject.id}>{subject.name}</option>
             ))}
           </select>
         </label>
-        <label>
-          Topic
-          <select name="topic_id">
+        <label class="field">
+          <span>Topic</span>
+          <select class="input-field input-select" name="topic_id">
             <option value="">None</option>
             {allTopics.map((topic) => (
               <option value={topic.id}>{topic.name}</option>
             ))}
           </select>
         </label>
-        <label>
-          Duration Minutes
-          <input type="number" name="duration_minutes" min="1" required />
+        <label class="field">
+          <span>Duration Minutes</span>
+          <input class="input-field" type="number" name="duration_minutes" min="1" required />
         </label>
-        <label>
-          Test Type
-          <select name="test_type" required>
+        <label class="field">
+          <span>Test Type</span>
+          <select class="input-field input-select" name="test_type" required>
             <option value="topic_practice">topic_practice</option>
             <option value="mock_exam">mock_exam</option>
           </select>
         </label>
-        <label>
-          Attempt Mode
-          <select name="attempt_mode" required>
+        <label class="field">
+          <span>Attempt Mode</span>
+          <select class="input-field input-select" name="attempt_mode" required>
             <option value="multiple">multiple</option>
             <option value="single">single</option>
           </select>
         </label>
-        <button type="submit">Create Test</button>
+        <button type="submit" class="btn-primary">Create Test</button>
       </form>
-    </section>
+    </div>
 
-    <section>
-      <h2>All Tests</h2>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Title</th>
-            <th scope="col">Type</th>
-            <th scope="col">Status</th>
-            <th scope="col">Created</th>
-            <th scope="col">Question Count</th>
-          </tr>
-        </thead>
-        <tbody>
-          {allTests.map((test) => (
-            <tr>
-              <td>
-                <a href={`/admin/tests/${test.id}`}>{test.title}</a>
-                <div>Subject: {test.subjectName ?? '-'}</div>
-                <div>Topic: {test.topicName ?? '-'}</div>
-              </td>
-              <td>{test.testType}</td>
-              <td>{test.status}</td>
-              <td>{test.createdAt?.toLocaleString() ?? '-'}</td>
-              <td>{test.questionCount}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  </main>
-</Base>
+    <div class="card table-card">
+      <div class="table-card__head">
+        <h2 class="heading-md">All Tests</h2>
+      </div>
+
+      {allTests.length ? (
+        <div class="table-wrap">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th scope="col">Title</th>
+                <th scope="col">Type</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+                <th scope="col">Questions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allTests.map((test) => (
+                <tr>
+                  <td>
+                    <a href={`/admin/tests/${test.id}`} class="action-link">{test.title}</a>
+                    <div class="row-meta">Subject: {test.subjectName ?? '-'}</div>
+                    <div class="row-meta">Topic: {test.topicName ?? '-'}</div>
+                  </td>
+                  <td>{test.testType}</td>
+                  <td>
+                    <span class:list={[test.status === 'published' ? 'badge-success' : 'badge-pending']}>
+                      {test.status}
+                    </span>
+                  </td>
+                  <td>{test.createdAt?.toLocaleString() ?? '-'}</td>
+                  <td>{test.questionCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div class="empty-state">
+          <div class="empty-state__icon">▣</div>
+          <h3 class="heading-md">No tests created yet</h3>
+          <p class="text-muted">Create a test to start building question sets.</p>
+        </div>
+      )}
+    </div>
+  </section>
+</AdminLayout>
+
+<style>
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .heading-lg,
+  .heading-md {
+    color: var(--color-navy);
+    margin: 0;
+  }
+
+  .heading-lg {
+    font-size: clamp(1.9rem, 3vw, 2.4rem);
+    font-weight: 800;
+  }
+
+  .heading-md {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .page-grid,
+  .stack-form,
+  .field {
+    display: grid;
+  }
+
+  .page-grid {
+    gap: 1.25rem;
+  }
+
+  .form-card {
+    max-width: 600px;
+  }
+
+  .stack-form {
+    gap: 1rem;
+  }
+
+  .section-head {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-pill {
+    background: var(--color-yellow-bg);
+    border-radius: 999px;
+    color: #92400e;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 10px;
+  }
+
+  .field {
+    gap: 0.45rem;
+  }
+
+  .field span {
+    color: var(--color-text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .input-select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--color-text-secondary) 50%),
+      linear-gradient(135deg, var(--color-text-secondary) 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 12px) calc(50% - 2px);
+    background-repeat: no-repeat;
+    background-size: 6px 6px, 6px 6px;
+    padding-right: 38px;
+  }
+
+  .table-card {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .table-card__head {
+    padding: 20px 24px 0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .admin-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .admin-table th {
+    background: #f8f9ff;
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 12px 20px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .admin-table td {
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    padding: 14px 20px;
+    vertical-align: top;
+  }
+
+  .admin-table tbody tr:hover td {
+    background: #f8f9ff;
+  }
+
+  .admin-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .action-link {
+    color: var(--color-navy);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .row-meta {
+    font-size: 0.82rem;
+    margin-top: 0.25rem;
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .empty-state {
+    padding: 32px 24px;
+    text-align: center;
+  }
+
+  .empty-state__icon {
+    color: var(--color-text-muted);
+    font-size: 60px;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+</style>

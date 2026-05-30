@@ -3,8 +3,7 @@ export const prerender = false;
 
 import { asc, eq } from 'drizzle-orm';
 
-import AdminNav from '../../../components/AdminNav.astro';
-import Base from '../../../layouts/Base.astro';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, questions, subjects, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
@@ -14,6 +13,7 @@ if (authResult instanceof Response) {
   return authResult;
 }
 
+const admin = authResult;
 const { testId } = Astro.params;
 
 if (!testId) {
@@ -47,94 +47,381 @@ const [test] = testRows;
 const testQuestions = await db.select().from(questions).where(eq(questions.testId, test.id)).orderBy(asc(questions.order));
 ---
 
-<Base title={`${test.title} | Admin | Dream Neet Academy`}>
-  <main>
-    <h1>{test.title}</h1>
-    <AdminNav />
+<AdminLayout title={`${test.title} | Admin | Dream Neet Academy`} userName={admin.fullName}>
+  <section class="page-header">
+    <h1 class="heading-lg">{test.title}</h1>
+  </section>
 
-    <section>
-      <h2>Metadata</h2>
-      <p>Type: {test.testType}</p>
-      <p>Status: {test.status}</p>
-      <p>Attempt Mode: {test.attemptMode}</p>
-      <p>Duration: {test.durationMinutes} minutes</p>
-      <p>Subject: {test.subjectName ?? '-'}</p>
-      <p>Topic: {test.topicName ?? '-'}</p>
-      <p>Created: {test.createdAt?.toLocaleString() ?? '-'}</p>
-      <p>Published At: {test.publishedAt?.toLocaleString() ?? '-'}</p>
+  <section class="page-grid">
+    <div class="card meta-card">
+      <div class="meta-card__head">
+        <div>
+          <p class="meta-label">Metadata</p>
+          <h2 class="heading-md">Test Details</h2>
+        </div>
+        <form action={`/api/admin/tests/${test.id}/publish`} method="POST">
+          <input type="hidden" name="test_id" value={test.id} />
+          <button
+            type="submit"
+            class:list={[
+              test.status === 'draft' ? 'btn-yellow publish-button' : 'publish-button publish-button--published',
+            ]}
+          >
+            {test.status === 'draft' ? 'Publish Test →' : '✓ Published · Unpublish'}
+          </button>
+        </form>
+      </div>
 
-      <form action={`/api/admin/tests/${test.id}/publish`} method="POST">
-        <input type="hidden" name="test_id" value={test.id} />
-        <button type="submit">{test.status === 'draft' ? 'Publish' : 'Unpublish'}</button>
-      </form>
-    </section>
+      <div class="meta-grid">
+        <div><span>Type</span><strong>{test.testType}</strong></div>
+        <div><span>Status</span><strong>{test.status}</strong></div>
+        <div><span>Attempt Mode</span><strong>{test.attemptMode}</strong></div>
+        <div><span>Duration</span><strong>{test.durationMinutes} minutes</strong></div>
+        <div><span>Subject</span><strong>{test.subjectName ?? '-'}</strong></div>
+        <div><span>Topic</span><strong>{test.topicName ?? '-'}</strong></div>
+        <div><span>Created</span><strong>{test.createdAt?.toLocaleString() ?? '-'}</strong></div>
+        <div><span>Published</span><strong>{test.publishedAt?.toLocaleString() ?? '-'}</strong></div>
+      </div>
+    </div>
 
-    <section>
-      <h2>Questions</h2>
+    <div class="card questions-card">
+      <div class="section-head">
+        <span class="section-pill">Library</span>
+        <h2 class="heading-md">Questions</h2>
+      </div>
+
       {testQuestions.length ? (
-        <ol>
+        <div class="question-list">
           {testQuestions.map((question) => (
-            <li>
-              <p>{question.prompt}</p>
-              <ul>
+            <article class="question-entry">
+              <div class="question-entry__head">
+                <span class="question-order">Q{question.order}</span>
+                <span class="badge-yellow">Correct: {question.correctOption.toUpperCase()}</span>
+              </div>
+              <p class="question-entry__prompt">{question.prompt}</p>
+              <ul class="question-options">
                 <li>A. {question.optionA}</li>
                 <li>B. {question.optionB}</li>
                 <li>C. {question.optionC}</li>
                 <li>D. {question.optionD}</li>
               </ul>
-              <p>Correct: {question.correctOption}</p>
-              <p>Explanation: {question.explanation ?? '-'}</p>
-            </li>
+              <p class="question-entry__explanation">
+                <strong>Explanation:</strong> {question.explanation ?? '-'}
+              </p>
+            </article>
           ))}
-        </ol>
+        </div>
       ) : (
-        <p>No questions yet.</p>
+        <div class="empty-state empty-state--compact">
+          <div class="empty-state__icon">📝</div>
+          <h3 class="heading-md">No questions yet</h3>
+          <p class="text-muted">Use the form below to add the first question to this test.</p>
+        </div>
       )}
-    </section>
+    </div>
 
-    <section>
-      <h2>Add Question</h2>
-      <form action="/api/admin/questions" method="POST">
+    <div class="card form-card">
+      <div class="section-head">
+        <span class="section-pill">Create</span>
+        <h2 class="heading-md">Add Question</h2>
+      </div>
+
+      <form action="/api/admin/questions" method="POST" class="stack-form">
         <input type="hidden" name="test_id" value={test.id} />
-        <label>
-          Prompt
-          <textarea name="prompt" required></textarea>
+        <label class="field">
+          <span>Prompt</span>
+          <textarea class="input-field textarea-field" name="prompt" required></textarea>
         </label>
-        <label>
-          Option A
-          <input type="text" name="option_a" required />
+        <label class="field">
+          <span>Option A</span>
+          <input class="input-field" type="text" name="option_a" required />
         </label>
-        <label>
-          Option B
-          <input type="text" name="option_b" required />
+        <label class="field">
+          <span>Option B</span>
+          <input class="input-field" type="text" name="option_b" required />
         </label>
-        <label>
-          Option C
-          <input type="text" name="option_c" required />
+        <label class="field">
+          <span>Option C</span>
+          <input class="input-field" type="text" name="option_c" required />
         </label>
-        <label>
-          Option D
-          <input type="text" name="option_d" required />
+        <label class="field">
+          <span>Option D</span>
+          <input class="input-field" type="text" name="option_d" required />
         </label>
-        <label>
-          Correct Option
-          <select name="correct_option" required>
-            <option value="a">a</option>
-            <option value="b">b</option>
-            <option value="c">c</option>
-            <option value="d">d</option>
-          </select>
+
+        <fieldset class="radio-group">
+          <legend>Correct Option</legend>
+          <div class="radio-grid">
+            {(['a', 'b', 'c', 'd'] as const).map((option) => (
+              <label class="radio-card">
+                <input type="radio" name="correct_option" value={option} required />
+                <span>{option.toUpperCase()}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <label class="field">
+          <span>Explanation</span>
+          <textarea class="input-field textarea-field" name="explanation"></textarea>
         </label>
-        <label>
-          Explanation
-          <textarea name="explanation"></textarea>
+        <label class="field">
+          <span>Order</span>
+          <input class="input-field" type="number" name="order" required />
         </label>
-        <label>
-          Order
-          <input type="number" name="order" required />
-        </label>
-        <button type="submit">Add Question</button>
+        <button type="submit" class="btn-primary">Add Question</button>
       </form>
-    </section>
-  </main>
-</Base>
+    </div>
+  </section>
+</AdminLayout>
+
+<style>
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .heading-lg,
+  .heading-md {
+    color: var(--color-navy);
+    margin: 0;
+  }
+
+  .heading-lg {
+    font-size: clamp(1.9rem, 3vw, 2.4rem);
+    font-weight: 800;
+  }
+
+  .heading-md {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .page-grid {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .meta-card__head,
+  .section-head {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+  }
+
+  .section-head {
+    justify-content: flex-start;
+    margin-bottom: 1rem;
+  }
+
+  .meta-label {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.25rem;
+    text-transform: uppercase;
+  }
+
+  .section-pill {
+    background: var(--color-yellow-bg);
+    border-radius: 999px;
+    color: #92400e;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 4px 10px;
+  }
+
+  .publish-button {
+    padding: 10px 18px;
+  }
+
+  .publish-button--published {
+    align-items: center;
+    background: #d1fae5;
+    border: 1px solid #a7f3d0;
+    border-radius: 10px;
+    color: #065f46;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 10px 18px;
+  }
+
+  .meta-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 1.25rem;
+  }
+
+  .meta-grid span {
+    color: var(--color-text-muted);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+  }
+
+  .meta-grid strong {
+    color: var(--color-navy);
+    font-size: 0.95rem;
+  }
+
+  .question-list {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .question-entry {
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    padding: 16px;
+  }
+
+  .question-entry__head {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .question-order {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-navy);
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 4px 10px;
+  }
+
+  .question-entry__prompt,
+  .question-entry__explanation {
+    color: var(--color-text-secondary);
+  }
+
+  .question-entry__prompt {
+    margin: 0.85rem 0;
+  }
+
+  .question-options {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0 0 0.85rem;
+    padding-left: 1.1rem;
+  }
+
+  .question-entry__explanation {
+    margin: 0;
+  }
+
+  .form-card {
+    max-width: 600px;
+  }
+
+  .stack-form,
+  .field {
+    display: grid;
+  }
+
+  .stack-form {
+    gap: 1rem;
+  }
+
+  .field {
+    gap: 0.45rem;
+  }
+
+  .field span,
+  .radio-group legend {
+    color: var(--color-text-secondary);
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+
+  .textarea-field {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  .radio-group {
+    border: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .radio-grid {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 0.5rem;
+  }
+
+  .radio-card {
+    position: relative;
+  }
+
+  .radio-card input {
+    inset: 0;
+    opacity: 0;
+    position: absolute;
+  }
+
+  .radio-card span {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    color: var(--color-text);
+    display: block;
+    padding: 10px 16px;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+
+  .radio-card input:checked + span {
+    background: rgba(10, 15, 30, 0.04);
+    border-color: var(--color-navy);
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+
+  .empty-state {
+    text-align: center;
+  }
+
+  .empty-state--compact {
+    padding: 16px 0 4px;
+  }
+
+  .empty-state__icon {
+    color: var(--color-text-muted);
+    font-size: 60px;
+    line-height: 1;
+    margin-bottom: 0.75rem;
+  }
+
+  @media (max-width: 1080px) {
+    .meta-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .meta-card__head {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .meta-grid,
+    .radio-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

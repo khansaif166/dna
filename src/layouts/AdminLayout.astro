@@ -1,0 +1,220 @@
+---
+import '../styles/platform.css';
+
+interface Props {
+  title: string;
+  userName?: string;
+}
+
+const { title, userName = 'Admin' } = Astro.props;
+
+const pathname = Astro.url.pathname;
+const navItems = [
+  { label: 'Dashboard', href: '/admin' },
+  { label: 'Subjects', href: '/admin/subjects' },
+  { label: 'Topics', href: '/admin/topics' },
+  { label: 'Tests', href: '/admin/tests' },
+  { label: 'Students', href: '/admin/students' },
+];
+
+const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <title>{title}</title>
+  </head>
+  <body class="admin-shell">
+    <aside class="admin-sidebar">
+      <a href="/admin" class="admin-sidebar__brand">
+        <span class="admin-sidebar__mark">DNA</span>
+        <span class="admin-sidebar__title">Dream NEET</span>
+      </a>
+
+      <p class="admin-sidebar__label">Admin Panel</p>
+
+      <nav class="admin-sidebar__nav" aria-label="Admin sections">
+        {navItems.map((item) => (
+          <a
+            href={item.href}
+            class:list={['admin-sidebar__link', { 'admin-sidebar__link--active': isActive(item.href) }]}
+          >
+            <span class="admin-sidebar__icon" aria-hidden="true">
+              {item.label === 'Dashboard'
+                ? '◫'
+                : item.label === 'Subjects'
+                  ? '◌'
+                  : item.label === 'Topics'
+                    ? '◎'
+                    : item.label === 'Tests'
+                      ? '▣'
+                      : '◍'}
+            </span>
+            <span>{item.label}</span>
+          </a>
+        ))}
+      </nav>
+
+      <div class="admin-sidebar__footer">
+        <span class="admin-sidebar__chip">{userName}</span>
+        <form action="/api/auth/logout" method="POST">
+          <button type="submit" class="admin-sidebar__logout">Logout</button>
+        </form>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style>
+  .admin-shell {
+    background: var(--color-bg);
+    font-family: 'Inter', sans-serif;
+  }
+
+  .admin-sidebar {
+    background: var(--color-navy);
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    left: 0;
+    padding: 24px 16px;
+    position: fixed;
+    top: 0;
+    width: 220px;
+  }
+
+  .admin-sidebar__brand {
+    align-items: center;
+    color: var(--color-surface);
+    display: inline-flex;
+    gap: 0.85rem;
+    margin-bottom: 32px;
+  }
+
+  .admin-sidebar__mark {
+    align-items: center;
+    background: rgba(245, 197, 24, 0.12);
+    border-radius: 999px;
+    color: var(--color-yellow);
+    display: inline-flex;
+    font-size: 0.82rem;
+    font-weight: 800;
+    height: 38px;
+    justify-content: center;
+    letter-spacing: 0.04em;
+    width: 38px;
+  }
+
+  .admin-sidebar__title {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .admin-sidebar__label {
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    margin: 0 0 12px;
+    text-transform: uppercase;
+  }
+
+  .admin-sidebar__nav {
+    display: grid;
+    gap: 4px;
+  }
+
+  .admin-sidebar__link {
+    align-items: center;
+    border-left: 3px solid transparent;
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.65);
+    cursor: pointer;
+    display: flex;
+    font-size: 0.9rem;
+    font-weight: 500;
+    gap: 10px;
+    margin-bottom: 0;
+    padding: 10px 14px;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .admin-sidebar__link:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--color-surface);
+  }
+
+  .admin-sidebar__link--active {
+    background: rgba(245, 197, 24, 0.15);
+    border-left-color: var(--color-yellow);
+    color: var(--color-yellow);
+  }
+
+  .admin-sidebar__icon {
+    font-size: 0.8rem;
+    width: 14px;
+  }
+
+  .admin-sidebar__footer {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: auto;
+  }
+
+  .admin-sidebar__chip {
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  .admin-sidebar__logout {
+    background: transparent;
+    border: none;
+    color: rgba(239, 68, 68, 0.8);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0;
+    text-align: left;
+    transition: color 0.15s ease;
+  }
+
+  .admin-sidebar__logout:hover {
+    color: #ef4444;
+  }
+
+  .admin-main {
+    margin-left: 220px;
+    min-height: 100vh;
+    padding: 32px;
+  }
+
+  @media (max-width: 880px) {
+    .admin-sidebar {
+      height: auto;
+      position: static;
+      width: 100%;
+    }
+
+    .admin-main {
+      margin-left: 0;
+      padding: 24px 16px 32px;
+    }
+  }
+</style>
