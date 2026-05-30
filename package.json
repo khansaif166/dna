@@ -12,11 +12,20 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "11.2.0",
+    "@astrojs/cloudflare": "^11.2.0",
+    "@astrojs/react": "^5.0.6",
     "@iconify-json/tabler": "^1.2.35",
+    "@supabase/supabase-js": "^2.106.2",
     "@tailwindcss/vite": "4.3.0",
     "astro": "4.16.19",
     "astro-icon": "1.1.5",
-    "tailwindcss": "4.3.0"
+    "drizzle-orm": "^0.45.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwindcss": "4.3.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.10"
   }
 }
