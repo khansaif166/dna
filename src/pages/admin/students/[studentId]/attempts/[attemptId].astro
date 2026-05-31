@@ -3,7 +3,7 @@ export const prerender = false;
 
 import { asc, eq } from 'drizzle-orm';
 
-import PlatformLayout from '../../../../../layouts/PlatformLayout.astro';
+import AdminLayout from '../../../../../layouts/AdminLayout.astro';
 import { attemptAnswers, db, profiles, questions, testAttempts, tests } from '../../../../../db';
 import { requireAuth } from '../../../../../lib/auth';
 
@@ -13,6 +13,7 @@ if (authResult instanceof Response) {
   return authResult;
 }
 
+const admin = authResult;
 const { studentId, attemptId } = Astro.params;
 
 if (!studentId || !attemptId) {
@@ -127,11 +128,16 @@ const reviewCards = reviewRows.map((row) => {
 });
 ---
 
-<PlatformLayout title={`${attempt.testTitle} Review | Admin | Dream Neet Academy`}>
+<AdminLayout
+  title={`${attempt.testTitle} Review | Admin | Dream Neet Academy`}
+  pageTitle="Attempt Review"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <a slot="actions" href={`/admin/students/${student.id}`} class="top-action">← Back to {student.fullName}</a>
   <section class="score-hero">
     <div class="score-hero__inner">
       <div class="score-hero__content">
-        <a href={`/admin/students/${student.id}`} class="back-link">← Back to {student.fullName}</a>
         <span class="hero-pill">Admin Review</span>
         <h1 class="heading-xl">{attempt.testTitle}</h1>
         <p class="score-hero__meta">Submitted by {student.fullName} on {submittedFormatter.format(attempt.submittedAt)}</p>
@@ -276,9 +282,29 @@ const reviewCards = reviewRows.map((row) => {
       });
     }
   </script>
-</PlatformLayout>
+</AdminLayout>
 
 <style>
+  .top-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 700;
+    transition: all 0.15s ease;
+  }
+
+  .top-action:hover {
+    border-color: #0a0f1e;
+    background: #0a0f1e;
+    color: #fff;
+  }
+
   .score-hero {
     background: var(--color-navy);
     padding: 40px 16px;
@@ -295,14 +321,6 @@ const reviewCards = reviewRows.map((row) => {
     display: flex;
     gap: 2rem;
     justify-content: space-between;
-  }
-
-  .back-link {
-    display: inline-block;
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 0.88rem;
-    font-weight: 700;
-    margin-bottom: 1rem;
   }
 
   .hero-pill {

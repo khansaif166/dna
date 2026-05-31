@@ -179,6 +179,12 @@ const relativeDays = (value: Date | string | null) => {
     <section class="students-grid">
       {filteredStudents.map((student, index) => (
         <article class="student-card">
+          <a
+            href={`/admin/students/${student.id}`}
+            class="student-card__overlay"
+            aria-label={`Open profile for ${student.fullName}`}
+          ></a>
+
           <div class="student-card__top">
             <div class="student-card__avatar" style={`background:${gradients[index % gradients.length]};`}>
               {initialsFor(student.fullName)}
@@ -361,15 +367,36 @@ const relativeDays = (value: Date | string | null) => {
   }
 
   .student-card {
+    position: relative;
     padding: 20px;
-    transition: box-shadow 0.15s ease;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .student-card:hover {
-    box-shadow: 0 4px 16px rgba(10, 15, 30, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(10, 15, 30, 0.08);
+    border-color: #d7deea;
+  }
+
+  .student-card:focus-within {
+    border-color: #cbd5e1;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14), 0 10px 24px rgba(10, 15, 30, 0.08);
+  }
+
+  .student-card__overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 1;
+  }
+
+  .student-card__overlay:focus-visible {
+    outline: none;
   }
 
   .student-card__top {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -429,6 +456,8 @@ const relativeDays = (value: Date | string | null) => {
   }
 
   .student-card__stats {
+    position: relative;
+    z-index: 2;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
@@ -453,6 +482,8 @@ const relativeDays = (value: Date | string | null) => {
   }
 
   .student-card__link {
+    position: relative;
+    z-index: 2;
     display: inline-flex;
     align-items: center;
     color: #0a0f1e;
@@ -461,6 +492,8 @@ const relativeDays = (value: Date | string | null) => {
   }
 
   .student-card__actions {
+    position: relative;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: space-between;

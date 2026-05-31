@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-import { and, asc, count, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import PlatformLayout from '../../../layouts/PlatformLayout.astro';
 import { db, questions, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
@@ -59,10 +59,13 @@ const [resources, testRows] = await Promise.all([
 
 const testIds = testRows.map((test) => test.id);
 
-const submittedAttempts = testIds.length
+const attemptRows = testIds.length
   ? await db
       .select({
         testId: testAttempts.testId,
+        score: testAttempts.score,
+        totalQuestions: testAttempts.totalQuestions,
+        submittedAt: testAttempts.submittedAt,
       })
       .from(testAttempts)
       .where(
@@ -72,9 +75,88 @@ const submittedAttempts = testIds.length
           isNotNull(testAttempts.submittedAt)
         )
       )
+      .orderBy(desc(testAttempts.submittedAt))
   : [];
 
-const attemptedTestIds = new Set(submittedAttempts.map((attempt) => attempt.testId));
+const attemptsByTestId = new Map<string, typeof attemptRows>();
+
+for (const attempt of attemptRows) {
+  const existing = attemptsByTestId.get(attempt.testId) ?? [];
+  existing.push(attempt);
+  attemptsByTestId.set(attempt.testId, existing);
+}
+
+const attemptedTestIds = new Set(attemptRows.map((attempt) => attempt.testId));
+
+const subjectType = topic.subjectName.toLowerCase().includes('physics')
+  ? 'physics'
+  : topic.subjectName.toLowerCase().includes('chemistry')
+    ? 'chemistry'
+    : 'biology';
+
+const theme = {
+  physics: {
+    color: '#3B82F6',
+    colorDark: '#1D4ED8',
+    bgLight: '#EFF6FF',
+    textColor: '#1D4ED8',
+    border: '#BFDBFE',
+    shadowRgb: '59,130,246',
+    gradientFrom: '#1D4ED8',
+    gradientTo: '#3B82F6',
+  },
+  chemistry: {
+    color: '#10B981',
+    colorDark: '#059669',
+    bgLight: '#F0FDF4',
+    textColor: '#166534',
+    border: '#BBF7D0',
+    shadowRgb: '16,185,129',
+    gradientFrom: '#059669',
+    gradientTo: '#10B981',
+  },
+  biology: {
+    color: '#F59E0B',
+    colorDark: '#D97706',
+    bgLight: '#FFFBEB',
+    textColor: '#92400E',
+    border: '#FDE68A',
+    shadowRgb: '245,158,11',
+    gradientFrom: '#D97706',
+    gradientTo: '#F59E0B',
+  },
+}[subjectType];
+
+const practiced = attemptedTestIds.size > 0;
+
+const enrichedTests = testRows.map((test) => {
+  const attempts = attemptsByTestId.get(test.id) ?? [];
+  const bestAttempt = attempts.reduce<
+    | {
+        score: number;
+        totalQuestions: number;
+        percent: number;
+      }
+    | null
+  >((best, attempt) => {
+    const score = attempt.score ?? 0;
+    const totalQuestions = attempt.totalQuestions ?? test.questionCount;
+    const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+    if (!best || percent > best.percent) {
+      return { score, totalQuestions, percent };
+    }
+
+    return best;
+  }, null);
+
+  return {
+    ...test,
+    attempted: attempts.length > 0,
+    attemptCount: attempts.length,
+    bestAttempt,
+  };
+});
 
 function toEmbedUrl(youtubeUrl: string) {
   if (youtubeUrl.includes('watch?v=')) {
@@ -87,78 +169,181 @@ function toEmbedUrl(youtubeUrl: string) {
 
   return youtubeUrl;
 }
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function scoreTone(percent: number) {
+  if (percent >= 70) {
+    return {
+      dot: '#10B981',
+      text: '#10B981',
+    };
+  }
+
+  if (percent >= 40) {
+    return {
+      dot: '#F59E0B',
+      text: '#F59E0B',
+    };
+  }
+
+  return {
+    dot: '#EF4444',
+    text: '#EF4444',
+  };
+}
 ---
 
 <PlatformLayout title={`${topic.name} | Dream Neet Academy`}>
-  <section class="topic-hero">
-    <div class="topic-hero__inner">
-      <p class="breadcrumb">
-        <a href="/student">Dashboard</a>
-        <span>/</span>
-        <a href={`/student/subjects/${topic.subjectId}`}>{topic.subjectName}</a>
-        <span>/</span>
-        <span class="breadcrumb__active">{topic.name}</span>
-      </p>
-      <h1 class="heading-xl">{topic.name}</h1>
-      <a href={`/student/subjects/${topic.subjectId}`} class="topic-hero__back">← Back to {topic.subjectName}</a>
-    </div>
-  </section>
-
   <section class="topic-page">
+    <header class="topic-header">
+      <div class="topic-header__left">
+        <div class="topic-breadcrumbs">
+          <a href="/student">Dashboard</a>
+          <span>›</span>
+          <a href={`/student/subjects/${topic.subjectId}`}>{topic.subjectName}</a>
+          <span>›</span>
+          <span class="topic-breadcrumbs__current">{topic.name}</span>
+        </div>
+
+        <div class="topic-title-row">
+          <span class="topic-title-row__dot" style={`background:${theme.color};`}></span>
+          <h1>{topic.name}</h1>
+        </div>
+
+        <div class="topic-stats">
+          <span>▶ {pluralize(resources.length, 'video')}</span>
+          <span>📝 {pluralize(testRows.length, 'test')}</span>
+        </div>
+      </div>
+
+      <div class="topic-header__right">
+        <div class:list={['completion-pill', { 'completion-pill--done': practiced }]}>
+          <span>{practiced ? '✓' : '○'}</span>
+          <span>{practiced ? 'Practiced' : 'Not started'}</span>
+        </div>
+        <a href={`/student/subjects/${topic.subjectId}`} class="topic-header__back">← Back to {topic.subjectName}</a>
+      </div>
+    </header>
+
     <div class="topic-layout">
       <div class="topic-layout__main">
-        <h2 class="heading-md">Video Resources</h2>
+        <div class="section-head">
+          <h2>Video Resources</h2>
+          <span class="section-count" style={`background:${theme.bgLight}; color:${theme.textColor};`}>
+            {resources.length} videos
+          </span>
+        </div>
 
         {resources.length ? (
           <div>
             {resources.map((resource, index) => (
-              <article class="card video-card">
-                <div class="video-card__badge">{index + 1}</div>
-                <iframe
-                  class="video-card__frame"
-                  src={toEmbedUrl(resource.youtubeUrl)}
-                  title={resource.title}
-                  loading="lazy"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowfullscreen
-                />
-                <h3 class="video-card__title">{resource.title}</h3>
-                {resource.notes && <p class="video-card__notes">{resource.notes}</p>}
+              <article class="video-card">
+                <div
+                  class="video-card__accent"
+                  style={`background:linear-gradient(90deg, ${theme.gradientFrom}, ${theme.gradientTo});`}
+                ></div>
+
+                <div class="video-card__media">
+                  <iframe
+                    class="video-card__frame"
+                    src={toEmbedUrl(resource.youtubeUrl)}
+                    title={resource.title}
+                    loading="lazy"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen
+                  />
+                  <div class="video-card__overlay">VIDEO {index + 1}</div>
+                </div>
+
+                <div class="video-card__body">
+                  <div class="video-card__title-row">
+                    <h3 class="video-card__title">{resource.title}</h3>
+                  </div>
+
+                  {resource.notes && (
+                    <div class="video-card__notes">
+                      <div class="video-card__notes-label">📌 Note</div>
+                      <div class="video-card__notes-text">{resource.notes}</div>
+                    </div>
+                  )}
+                </div>
               </article>
             ))}
           </div>
         ) : (
-          <div class="card empty-card">
-            <h3 class="heading-md">No video resources yet</h3>
-            <p class="text-muted">Video lessons for this topic will appear here.</p>
+          <div class="empty-card">
+            <div class="empty-card__icon">▶</div>
+            <h3>No videos yet</h3>
+            <p>Videos for this topic will appear here soon</p>
           </div>
         )}
       </div>
 
       <aside class="topic-layout__side">
         <div class="tests-panel">
-          <h2 class="heading-md">Practice Tests</h2>
+          <div class="section-head section-head--tests">
+            <h2>Practice Tests</h2>
+            <span class="section-count section-count--tests">{testRows.length} tests</span>
+          </div>
 
-          {testRows.length ? (
+          {enrichedTests.length ? (
             <div>
-              {testRows.map((test) => {
-                const attempted = attemptedTestIds.has(test.id);
+              {enrichedTests.map((test) => {
+                const tone = test.bestAttempt ? scoreTone(test.bestAttempt.percent) : null;
 
                 return (
-                  <article class="card test-card">
-                    <h3 class="test-card__title">{test.title}</h3>
-                    <p class="test-card__meta">⏱ {test.durationMinutes} minutes</p>
-                    <p class="test-card__meta">{test.questionCount} questions</p>
+                  <article
+                    class="test-card"
+                    style={`--subject-color:${theme.color}; --subject-shadow-rgb:${theme.shadowRgb};`}
+                  >
+                    <div class="test-card__top">
+                      <h3 class="test-card__title">{test.title}</h3>
+
+                      <div class="test-card__meta">
+                        <span>⏱ {test.durationMinutes} min</span>
+                        <span>·</span>
+                        <span>{test.questionCount} questions</span>
+                      </div>
+
+                      {test.bestAttempt && tone && (
+                        <div class="test-card__score" style={`color:${tone.text};`}>
+                          <span class="test-card__score-dot" style={`background:${tone.dot};`}></span>
+                          <span>
+                            Your best: {test.bestAttempt.score}/{test.bestAttempt.totalQuestions} ({test.bestAttempt.percent}%)
+                          </span>
+                          <span class="test-card__score-attempts">
+                            ({pluralize(test.attemptCount, 'attempt')})
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
                     <div class="test-card__divider"></div>
-                    <div class="test-card__footer">
-                      <span class:list={[attempted ? 'badge-success' : 'badge-pending']}>
-                        {attempted ? 'Attempted' : 'Not attempted'}
-                      </span>
+
+                    <div class="test-card__bottom">
+                      {test.attempted ? (
+                        <div class="test-card__status">
+                          <span class="test-card__status-dot">✓</span>
+                          <span>Practiced</span>
+                        </div>
+                      ) : (
+                        <span
+                          class="test-card__new"
+                          style={`background:${theme.bgLight}; color:${theme.textColor};`}
+                        >
+                          New
+                        </span>
+                      )}
+
                       <a
                         href={`/student/tests/${test.id}`}
-                        class:list={[attempted ? 'btn-outline test-card__button' : 'btn-yellow test-card__button']}
+                        class:list={['test-card__button', { 'test-card__button--retake': test.attempted }]}
+                        style={!test.attempted ? `background:${theme.color};` : undefined}
                       >
-                        {attempted ? 'Retake' : 'Start Test'}
+                        {test.attempted ? 'Retake' : 'Start Test →'}
                       </a>
                     </div>
                   </article>
@@ -166,9 +351,10 @@ function toEmbedUrl(youtubeUrl: string) {
               })}
             </div>
           ) : (
-            <div class="card empty-card">
-              <h3 class="heading-md">No practice tests yet</h3>
-              <p class="text-muted">Published tests for this topic will show up here.</p>
+            <div class="empty-card empty-card--tests">
+              <div class="empty-card__emoji">📝</div>
+              <h3>No tests yet</h3>
+              <p>Tests for this topic will be added soon</p>
             </div>
           )}
         </div>
@@ -178,173 +364,474 @@ function toEmbedUrl(youtubeUrl: string) {
 </PlatformLayout>
 
 <style>
-  .topic-hero {
-    background: var(--color-navy);
-    padding: 40px 16px;
-  }
-
-  .topic-hero__inner,
   .topic-page {
+    max-width: 1100px;
     margin: 0 auto;
-    max-width: 64rem;
+    padding: 24px;
   }
 
-  .breadcrumb {
+  .topic-header {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(10, 15, 30, 0.05);
+    display: flex;
     align-items: center;
-    color: rgba(255, 255, 255, 0.5);
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .topic-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    margin-bottom: 8px;
+  }
+
+  .topic-breadcrumbs a {
+    color: #9aa5b4;
+    transition: color 0.15s ease;
+  }
+
+  .topic-breadcrumbs a:hover {
+    color: #0a0f1e;
+  }
+
+  .topic-breadcrumbs span {
+    color: #e2e8f0;
+  }
+
+  .topic-breadcrumbs__current {
+    color: #0a0f1e !important;
+    font-weight: 600;
+  }
+
+  .topic-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topic-title-row__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .topic-title-row h1 {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #0a0f1e;
+  }
+
+  .topic-stats {
+    margin-top: 6px;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
-    font-size: 0.875rem;
-    margin: 0;
+    gap: 14px;
+    font-size: 0.78rem;
+    color: #9aa5b4;
   }
 
-  .breadcrumb__active,
-  .topic-hero__back {
-    color: var(--color-surface);
+  .topic-header__right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
   }
 
-  .heading-xl,
-  .heading-md {
-    margin: 0;
+  .completion-pill {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #9aa5b4;
+    font-size: 0.82rem;
+    font-weight: 500;
   }
 
-  .heading-xl {
-    color: var(--color-surface);
-    font-size: clamp(2rem, 3vw, 2.75rem);
+  .completion-pill--done {
+    background: #d1fae5;
+    border-color: #a7f3d0;
+    color: #065f46;
+    font-weight: 600;
+  }
+
+  .completion-pill span:first-child {
+    font-size: 0.85rem;
     font-weight: 800;
-    margin-top: 8px;
   }
 
-  .heading-md {
-    color: var(--color-navy);
-    font-size: 1.25rem;
-    font-weight: 700;
-    margin-bottom: 1rem;
+  .topic-header__back {
+    font-size: 0.75rem;
+    color: #9aa5b4;
+    transition: color 0.15s ease;
   }
 
-  .topic-hero__back {
-    display: inline-flex;
-    font-size: 0.875rem;
-    margin-top: 0.75rem;
-  }
-
-  .topic-page {
-    padding: 2rem 1rem 3.5rem;
+  .topic-header__back:hover {
+    color: #0a0f1e;
   }
 
   .topic-layout {
-    display: grid;
-    gap: 1.5rem;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
   }
 
   .topic-layout__main {
+    flex: 1;
     min-width: 0;
   }
 
-  .video-card,
-  .test-card {
-    margin-bottom: 16px;
-  }
-
-  .video-card {
-    position: relative;
-  }
-
-  .video-card__badge {
-    align-items: center;
-    background: var(--color-yellow);
-    border-radius: 999px;
-    color: var(--color-navy);
-    display: inline-flex;
-    font-size: 0.75rem;
-    font-weight: 700;
-    height: 28px;
-    justify-content: center;
-    left: 16px;
-    position: absolute;
-    top: 16px;
-    width: 28px;
-  }
-
-  .video-card__frame {
-    aspect-ratio: 16 / 9;
-    background: #000;
-    border: none;
-    border-radius: 10px;
-    margin-bottom: 12px;
-    width: 100%;
-  }
-
-  .video-card__title,
-  .test-card__title {
-    color: var(--color-text);
-    font-size: 1rem;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .video-card__notes {
-    background: var(--color-bg);
-    border-left: 3px solid var(--color-yellow);
-    border-radius: 8px;
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
-    margin: 8px 0 0;
-    padding: 8px 12px;
+  .topic-layout__side {
+    width: 320px;
+    flex-shrink: 0;
   }
 
   .tests-panel {
     position: sticky;
-    top: 6rem;
+    top: 80px;
   }
 
-  .test-card__meta,
-  .text-muted {
-    color: var(--color-text-muted);
-    font-size: 0.875rem;
-  }
-
-  .test-card__meta {
-    margin: 0.35rem 0 0;
-  }
-
-  .test-card__divider {
-    background: var(--color-border);
-    height: 1px;
-    margin: 14px 0 12px;
-  }
-
-  .test-card__footer {
-    align-items: center;
+  .section-head {
     display: flex;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .section-head--tests {
     justify-content: space-between;
   }
 
+  .section-head h2 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #0a0f1e;
+  }
+
+  .section-count {
+    background: #eff6ff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .section-count--tests {
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .video-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 16px;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .video-card:hover {
+    box-shadow: 0 6px 20px rgba(10, 15, 30, 0.08);
+  }
+
+  .video-card__accent {
+    height: 4px;
+  }
+
+  .video-card__media {
+    position: relative;
+  }
+
+  .video-card__frame {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: none;
+    display: block;
+    background: #0a0f1e;
+  }
+
+  .video-card__overlay {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(10, 15, 30, 0.7);
+    backdrop-filter: blur(4px);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  .video-card__body {
+    padding: 16px 18px;
+  }
+
+  .video-card__title-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .video-card__title {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #0a0f1e;
+  }
+
+  .video-card__notes {
+    margin-top: 10px;
+    background: #fffbeb;
+    border-left: 3px solid #f5c518;
+    border-radius: 0 8px 8px 0;
+    padding: 8px 12px;
+  }
+
+  .video-card__notes-label {
+    margin-bottom: 3px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #92400e;
+  }
+
+  .video-card__notes-text {
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: #4a5568;
+  }
+
+  .test-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1.5px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+  }
+
+  .test-card:hover {
+    border-color: var(--subject-color);
+    box-shadow: 0 4px 16px rgba(var(--subject-shadow-rgb), 0.1);
+    transform: translateY(-1px);
+  }
+
+  .test-card__top {
+    padding: 16px 16px 12px;
+  }
+
+  .test-card__title {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: #0a0f1e;
+  }
+
+  .test-card__meta {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: #9aa5b4;
+  }
+
+  .test-card__score {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .test-card__score-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .test-card__score-attempts {
+    font-size: 0.72rem;
+    color: #9aa5b4;
+    font-weight: 500;
+  }
+
+  .test-card__divider {
+    height: 1px;
+    background: #f1f3f9;
+  }
+
+  .test-card__bottom {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .test-card__status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #065f46;
+  }
+
+  .test-card__status-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #d1fae5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #065f46;
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  .test-card__new {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
   .test-card__button {
-    font-size: 0.85rem;
-    padding: 6px 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fff;
+    transition: all 0.15s ease;
+  }
+
+  .test-card__button:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+  }
+
+  .test-card__button--retake {
+    background: transparent;
+    border: 1.5px solid #e2e8f0;
+    color: #4a5568;
+    padding: 7px 16px;
+    font-weight: 600;
+  }
+
+  .test-card__button--retake:hover {
+    opacity: 1;
+    border-color: #0a0f1e;
+    color: #0a0f1e;
   }
 
   .empty-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 40px 24px;
     text-align: center;
   }
 
-  .empty-card p {
-    margin: 0.5rem 0 0;
+  .empty-card--tests {
+    border-radius: 14px;
+    border-style: dashed;
+    padding: 28px 20px;
   }
 
-  @media (min-width: 920px) {
+  .empty-card__icon {
+    font-size: 2rem;
+    color: #e2e8f0;
+    margin-bottom: 12px;
+  }
+
+  .empty-card__emoji {
+    font-size: 1.3rem;
+    margin-bottom: 8px;
+  }
+
+  .empty-card h3 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #0a0f1e;
+  }
+
+  .empty-card p {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: #9aa5b4;
+  }
+
+  @media (max-width: 768px) {
+    .topic-page {
+      padding: 20px 16px 36px;
+    }
+
+    .topic-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .topic-header__right {
+      align-items: flex-start;
+    }
+
     .topic-layout {
-      grid-template-columns: minmax(0, 1.85fr) minmax(280px, 1fr);
+      flex-direction: column;
+    }
+
+    .topic-layout__side {
+      width: 100%;
+      order: -1;
+    }
+
+    .tests-panel {
+      position: static;
     }
   }
 
-  @media (max-width: 640px) {
-    .test-card__footer {
-      align-items: flex-start;
+  @media (max-width: 560px) {
+    .topic-header {
+      padding: 18px 16px;
+    }
+
+    .topic-layout__side,
+    .topic-layout__main {
+      min-width: 0;
+    }
+
+    .test-card__bottom,
+    .video-card__title-row {
       flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .test-card__button {
+      width: 100%;
     }
   }
 </style>

@@ -101,7 +101,6 @@ const subjectType = subject.name.toLowerCase().includes('physics')
 
 const subjectTheme = {
   physics: {
-    icon: '⚛',
     gradient: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
     color: '#3B82F6',
     colorDark: '#1D4ED8',
@@ -113,7 +112,6 @@ const subjectTheme = {
     tip: 'Focus on understanding concepts before memorizing formulas. Practice numerical problems daily and prioritize chapters like Mechanics, Optics, and Modern Physics for NEET.',
   },
   chemistry: {
-    icon: '⚗',
     gradient: 'linear-gradient(135deg, #10B981, #059669)',
     color: '#10B981',
     colorDark: '#059669',
@@ -125,7 +123,6 @@ const subjectTheme = {
     tip: 'Divide your time equally between Physical, Organic, and Inorganic Chemistry. NCERT is your bible for Inorganic — read it multiple times.',
   },
   biology: {
-    icon: '🧬',
     gradient: 'linear-gradient(135deg, #F59E0B, #D97706)',
     color: '#F59E0B',
     colorDark: '#D97706',
@@ -152,55 +149,93 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
 <PlatformLayout title={`${subject.name} | Dream Neet Academy`}>
   <section class="subject-page">
     <header class="subject-header">
-      <div class="subject-header__info">
-        <div class="subject-breadcrumbs">
-          <a href="/student" class="subject-breadcrumbs__back">← Back</a>
-          <span>/</span>
-          <span>Subjects</span>
-          <span>/</span>
-          <span class="subject-breadcrumbs__current">{subject.name}</span>
-        </div>
+      <div class="subject-breadcrumbs">
+        <a href="/student" class="subject-breadcrumbs__back">← Back</a>
+        <span class="subject-breadcrumbs__sep">/</span>
+        <span>Subjects</span>
+        <span class="subject-breadcrumbs__sep">/</span>
+        <span class="subject-breadcrumbs__current">{subject.name}</span>
+      </div>
 
+      <div class="subject-hero">
         <div class="subject-identity">
           <div
             class="subject-identity__icon"
-            style={`background:${subjectTheme.gradient}; box-shadow:0 4px 12px rgba(${subjectTheme.shadowRgb}, 0.3);`}
+            style={`background:${subjectTheme.gradient}; box-shadow:0 16px 32px rgba(${subjectTheme.shadowRgb}, 0.28);`}
           >
-            {subjectTheme.icon}
+            {subjectType === 'physics' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="1.8"></circle>
+                <path d="M4 12c2.1-3.7 5.1-5.7 8-5.7s5.9 2 8 5.7c-2.1 3.7-5.1 5.7-8 5.7S6.1 15.7 4 12z"></path>
+                <path d="M7.2 5.6c4.2.2 7.4 1.8 8.8 4.4 1.4 2.6.9 6-1.2 9.4-4.2-.2-7.4-1.8-8.8-4.4-1.4-2.6-.9-6 1.2-9.4z"></path>
+                <path d="M7.2 18.4c-.2-4.2 1.3-7.5 3.9-8.9 2.6-1.4 6-1 9.4 1-0.2 4.2-1.7 7.5-4.3 8.9-2.6 1.4-6 1-9-1z"></path>
+              </svg>
+            ) : subjectType === 'chemistry' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 3v5.2l-4.7 7.8A3 3 0 0 0 7.9 21h8.2a3 3 0 0 0 2.6-5l-4.7-7.8V3"></path>
+                <path d="M9 8h6"></path>
+                <path d="M8.4 14.5h7.2"></path>
+                <path d="M9.5 17c.7-.7 1.4-1 2.5-1s1.8.3 2.5 1"></path>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 4.5c-1.5 1.7-2.1 4-.9 5.8l5 7c1.2 1.7.7 4-1 5.2"></path>
+                <path d="M16 4.5c1.5 1.7 2.1 4 .9 5.8l-5 7c-1.2 1.7-.7 4 1 5.2"></path>
+                <path d="M8 6.5h8"></path>
+                <path d="M6.8 10.5h10.4"></path>
+                <path d="M7.8 14.5h8.4"></path>
+                <path d="M10 2.8c.5.8 1.2 1.2 2 1.2s1.5-.4 2-1.2"></path>
+                <circle cx="9" cy="8.3" r="0.7" fill="currentColor" stroke="none"></circle>
+                <circle cx="15" cy="12.2" r="0.7" fill="currentColor" stroke="none"></circle>
+                <circle cx="10.2" cy="16.1" r="0.7" fill="currentColor" stroke="none"></circle>
+              </svg>
+            )}
           </div>
 
           <div class="subject-identity__text">
+            <div class="subject-identity__eyebrow" style={`color:${subjectTheme.colorDark};`}>
+              NEET Subject Track
+            </div>
             <h1>{subject.name}</h1>
+            <p class="subject-identity__summary">
+              Build momentum topic by topic with structured practice, revision, and test readiness.
+            </p>
             <div class="subject-identity__meta">
-              <span>{pluralize(topicCards.length, 'topic')}</span>
-              <span>·</span>
-              <span>{pluralize(totalTestsAvailable, 'test')}</span>
-              <span>·</span>
-              <span style={`color:${subjectTheme.colorDark}; font-weight:600;`}>
+              <span class="subject-stat">{pluralize(topicCards.length, 'topic')}</span>
+              <span class="subject-stat">{pluralize(totalTestsAvailable, 'test')}</span>
+              <span class="subject-stat subject-stat--accent" style={`background:${subjectTheme.bgLight}; color:${subjectTheme.colorDark}; border-color:${subjectTheme.border};`}>
                 {practicedTopicsCount} practiced
               </span>
             </div>
           </div>
         </div>
-      </div>
 
-      <div class="subject-progress">
-        <svg viewBox="0 0 64 64" class="subject-progress__ring" aria-hidden="true">
-          <circle cx="32" cy="32" r={ringRadius} class="subject-progress__ring-base"></circle>
-          <circle
-            cx="32"
-            cy="32"
-            r={ringRadius}
-            class="subject-progress__ring-fill"
-            style={`stroke:${subjectTheme.color}; stroke-dasharray:${ringCircumference}; stroke-dashoffset:${ringOffset};`}
-          ></circle>
-          <text x="32" y="35" text-anchor="middle" class="subject-progress__ring-text">{progressPercent}%</text>
-        </svg>
+        <div class="subject-progress">
+          <div class="subject-progress__ring-wrap">
+            <svg viewBox="0 0 64 64" class="subject-progress__ring" aria-hidden="true">
+              <circle cx="32" cy="32" r={ringRadius} class="subject-progress__ring-base"></circle>
+              <circle
+                cx="32"
+                cy="32"
+                r={ringRadius}
+                class="subject-progress__ring-fill"
+                style={`stroke:${subjectTheme.color}; stroke-dasharray:${ringCircumference}; stroke-dashoffset:${ringOffset};`}
+              ></circle>
+              <text x="32" y="35" text-anchor="middle" class="subject-progress__ring-text">{progressPercent}%</text>
+            </svg>
+          </div>
 
-        <div class="subject-progress__content">
-          <div class="subject-progress__label">Progress</div>
-          <div class="subject-progress__value">{practicedTopicsCount} of {topicCards.length} topics</div>
-          <div class="subject-progress__sub">started</div>
+          <div class="subject-progress__content">
+            <div class="subject-progress__label">Overall Progress</div>
+            <div class="subject-progress__value">{practicedTopicsCount} of {topicCards.length} topics started</div>
+            <div class="subject-progress__bar">
+              <span
+                class="subject-progress__bar-fill"
+                style={`width:${progressPercent}%; background:${subjectTheme.gradient};`}
+              ></span>
+            </div>
+            <div class="subject-progress__sub">Keep going to unlock stronger retention before full-length tests.</div>
+          </div>
         </div>
       </div>
     </header>
@@ -279,7 +314,33 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
           class="subject-empty__icon"
           style={`background:${subjectTheme.gradient}; box-shadow:0 8px 20px rgba(${subjectTheme.shadowRgb}, 0.28);`}
         >
-          {subjectTheme.icon}
+          {subjectType === 'physics' ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="1.8"></circle>
+              <path d="M4 12c2.1-3.7 5.1-5.7 8-5.7s5.9 2 8 5.7c-2.1 3.7-5.1 5.7-8 5.7S6.1 15.7 4 12z"></path>
+              <path d="M7.2 5.6c4.2.2 7.4 1.8 8.8 4.4 1.4 2.6.9 6-1.2 9.4-4.2-.2-7.4-1.8-8.8-4.4-1.4-2.6-.9-6 1.2-9.4z"></path>
+              <path d="M7.2 18.4c-.2-4.2 1.3-7.5 3.9-8.9 2.6-1.4 6-1 9.4 1-0.2 4.2-1.7 7.5-4.3 8.9-2.6 1.4-6 1-9-1z"></path>
+            </svg>
+          ) : subjectType === 'chemistry' ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 3v5.2l-4.7 7.8A3 3 0 0 0 7.9 21h8.2a3 3 0 0 0 2.6-5l-4.7-7.8V3"></path>
+              <path d="M9 8h6"></path>
+              <path d="M8.4 14.5h7.2"></path>
+              <path d="M9.5 17c.7-.7 1.4-1 2.5-1s1.8.3 2.5 1"></path>
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 4.5c-1.5 1.7-2.1 4-.9 5.8l5 7c1.2 1.7.7 4-1 5.2"></path>
+              <path d="M16 4.5c1.5 1.7 2.1 4 .9 5.8l-5 7c-1.2 1.7-.7 4 1 5.2"></path>
+              <path d="M8 6.5h8"></path>
+              <path d="M6.8 10.5h10.4"></path>
+              <path d="M7.8 14.5h8.4"></path>
+              <path d="M10 2.8c.5.8 1.2 1.2 2 1.2s1.5-.4 2-1.2"></path>
+              <circle cx="9" cy="8.3" r="0.7" fill="currentColor" stroke="none"></circle>
+              <circle cx="15" cy="12.2" r="0.7" fill="currentColor" stroke="none"></circle>
+              <circle cx="10.2" cy="16.1" r="0.7" fill="currentColor" stroke="none"></circle>
+            </svg>
+          )}
         </div>
         <h2>No topics yet</h2>
         <p>Topics for {subject.name} haven't been added yet.</p>
@@ -297,88 +358,180 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
   }
 
   .subject-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 20px;
-    align-items: center;
     margin-bottom: 28px;
+  }
+
+  .subject-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+    gap: 24px;
+    align-items: stretch;
+    padding: 24px;
+    border: 1px solid #e2e8f0;
+    border-radius: 28px;
+    background:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.82) 44%, rgba(248, 250, 252, 0.96) 100%);
+    box-shadow: 0 18px 40px rgba(10, 15, 30, 0.07);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .subject-hero::after {
+    content: '';
+    position: absolute;
+    inset: auto -80px -120px auto;
+    width: 240px;
+    height: 240px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    filter: blur(10px);
+    pointer-events: none;
   }
 
   .subject-breadcrumbs {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-bottom: 10px;
-    font-size: 0.78rem;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+    font-size: 0.8rem;
     color: #9aa5b4;
+    font-weight: 600;
   }
 
   .subject-breadcrumbs__back {
-    color: #9aa5b4;
-    font-weight: 600;
-    transition: color 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
   }
 
   .subject-breadcrumbs__back:hover {
     color: #0a0f1e;
+    border-color: #cbd5e1;
+    transform: translateX(-1px);
+  }
+
+  .subject-breadcrumbs__sep {
+    color: #cbd5e1;
   }
 
   .subject-breadcrumbs__current {
     color: #0a0f1e;
-    font-size: 0.78rem;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .subject-identity {
     display: flex;
-    align-items: center;
-    gap: 16px;
+    align-items: flex-start;
+    gap: 20px;
+    position: relative;
+    z-index: 1;
   }
 
   .subject-identity__icon {
-    width: 52px;
-    height: 52px;
-    border-radius: 16px;
+    width: 84px;
+    height: 84px;
+    border-radius: 26px;
     display: grid;
     place-items: center;
     color: #fff;
-    font-size: 1.3rem;
+    font-size: 2rem;
     font-weight: 800;
     flex-shrink: 0;
   }
 
+  .subject-identity__icon svg,
+  .subject-empty__icon svg {
+    width: 42px;
+    height: 42px;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .subject-identity__eyebrow {
+    margin-bottom: 8px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
   .subject-identity__text h1 {
     margin: 0;
-    font-size: 1.6rem;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    line-height: 0.95;
     font-weight: 900;
     color: #0a0f1e;
   }
 
+  .subject-identity__summary {
+    margin: 10px 0 0;
+    max-width: 580px;
+    font-size: 0.98rem;
+    line-height: 1.65;
+    color: #64748b;
+  }
+
   .subject-identity__meta {
-    margin-top: 4px;
+    margin-top: 16px;
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
+  }
+
+  .subject-stat {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #e2e8f0;
+    color: #475569;
     font-size: 0.82rem;
-    color: #9aa5b4;
-    font-weight: 500;
+    font-weight: 700;
+  }
+
+  .subject-stat--accent {
+    border-width: 1px;
   }
 
   .subject-progress {
-    background: #fff;
-    border-radius: 16px;
+    position: relative;
+    z-index: 1;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(10px);
+    border-radius: 24px;
     border: 1px solid #e2e8f0;
-    padding: 16px 24px;
-    display: flex;
-    align-items: center;
+    padding: 20px;
+    display: grid;
     gap: 16px;
-    box-shadow: 0 1px 4px rgba(10, 15, 30, 0.05);
+    align-content: start;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .subject-progress__ring-wrap {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, #fff, #f8fafc);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 22px rgba(10, 15, 30, 0.07);
   }
 
   .subject-progress__ring {
     width: 64px;
     height: 64px;
-    flex-shrink: 0;
     transform: rotate(-90deg);
   }
 
@@ -405,23 +558,40 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
   }
 
   .subject-progress__label {
-    font-size: 0.68rem;
+    font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #9aa5b4;
+    letter-spacing: 0.12em;
+    color: #94a3b8;
   }
 
   .subject-progress__value {
-    margin-top: 2px;
-    font-size: 0.875rem;
-    font-weight: 600;
+    margin-top: 4px;
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 700;
     color: #0a0f1e;
   }
 
+  .subject-progress__bar {
+    margin-top: 14px;
+    height: 10px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+  }
+
+  .subject-progress__bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+
   .subject-progress__sub {
-    font-size: 0.75rem;
-    color: #9aa5b4;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: #64748b;
   }
 
   .topics-section__head {
@@ -640,7 +810,7 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
   }
 
   @media (max-width: 900px) {
-    .subject-header {
+    .subject-hero {
       grid-template-columns: 1fr;
     }
   }
@@ -648,6 +818,35 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
   @media (max-width: 640px) {
     .subject-page {
       padding: 24px 16px 40px;
+    }
+
+    .subject-hero {
+      padding: 18px;
+      border-radius: 22px;
+    }
+
+    .subject-identity {
+      gap: 14px;
+    }
+
+    .subject-identity__icon {
+      width: 68px;
+      height: 68px;
+      border-radius: 20px;
+    }
+
+    .subject-identity__icon svg,
+    .subject-empty__icon svg {
+      width: 34px;
+      height: 34px;
+    }
+
+    .subject-identity__summary {
+      font-size: 0.9rem;
+    }
+
+    .subject-progress {
+      padding: 16px;
     }
 
     .topics-grid {

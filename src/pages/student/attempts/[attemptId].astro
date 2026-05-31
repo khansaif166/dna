@@ -1,10 +1,10 @@
 ---
 export const prerender = false;
 
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt } from 'drizzle-orm';
 
 import PlatformLayout from '../../../layouts/PlatformLayout.astro';
-import { attemptAnswers, db, questions, testAttempts, tests } from '../../../db';
+import { attemptAnswers, db, questions, subjects, testAttempts, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
 const authResult = await requireAuth(Astro, 'student');
@@ -30,9 +30,17 @@ const attemptRows = await db
     score: testAttempts.score,
     totalQuestions: testAttempts.totalQuestions,
     testTitle: tests.title,
+    topicId: tests.topicId,
+    subjectId: tests.subjectId,
+    topicName: topics.name,
+    topicOrder: topics.order,
+    topicSubjectId: topics.subjectId,
+    subjectName: subjects.name,
   })
   .from(testAttempts)
   .innerJoin(tests, eq(testAttempts.testId, tests.id))
+  .leftJoin(topics, eq(tests.topicId, topics.id))
+  .leftJoin(subjects, eq(topics.subjectId, subjects.id))
   .where(eq(testAttempts.id, attemptId));
 
 if (!attemptRows || attemptRows.length === 0) {
@@ -48,6 +56,21 @@ if (attempt.studentId !== profile.id) {
 if (!attempt.submittedAt) {
   return Astro.redirect(`/student/tests/${attempt.testId}`);
 }
+
+const nextTopicRows =
+  attempt.topicSubjectId && attempt.topicOrder !== null
+    ? await db
+        .select({
+          id: topics.id,
+          name: topics.name,
+        })
+        .from(topics)
+        .where(and(eq(topics.subjectId, attempt.topicSubjectId), gt(topics.order, attempt.topicOrder)))
+        .orderBy(asc(topics.order))
+        .limit(1)
+    : [];
+
+const nextTopic = nextTopicRows[0] ?? null;
 
 const reviewRows = await db
   .select({
@@ -72,7 +95,6 @@ const reviewRows = await db
 const score = attempt.score ?? 0;
 const total = attempt.totalQuestions ?? reviewRows.length;
 const percentage = total ? Math.round((score / total) * 100) : 0;
-const accuracy = `${percentage}%`;
 
 function formatSeconds(totalSeconds: number | null) {
   if (totalSeconds === null) {
@@ -103,12 +125,10 @@ const optionLabels = {
 } as const;
 
 const optionKeys = ['a', 'b', 'c', 'd'] as const;
-const circleRadius = 50;
-const circumference = 2 * Math.PI * circleRadius;
-const dashOffset = circumference - (percentage / 100) * circumference;
+const ringCircumference = 263.9;
+const ringOffset = ringCircumference * (1 - percentage / 100);
 
-const scoreRingColor =
-  percentage >= 70 ? 'var(--color-yellow)' : percentage >= 40 ? '#10B981' : '#EF4444';
+const scoreRingColor = percentage >= 70 ? '#10B981' : percentage >= 40 ? '#F5C518' : '#EF4444';
 
 const reviewCards = reviewRows.map((row) => {
   const status = row.chosenOption === null ? 'skipped' : row.isCorrect ? 'correct' : 'incorrect';
@@ -118,378 +138,539 @@ const reviewCards = reviewRows.map((row) => {
     status,
   };
 });
+
+const correctCount = reviewCards.filter((row) => row.status === 'correct').length;
+const incorrectCount = reviewCards.filter((row) => row.status === 'incorrect').length;
+const skippedCount = reviewCards.filter((row) => row.status === 'skipped').length;
 ---
 
 <PlatformLayout title={`${attempt.testTitle} Review | Dream Neet Academy`}>
-  <section class="score-hero">
-    <div class="score-hero__inner">
-      <div class="score-hero__content">
-        <span class="hero-pill">Test Complete</span>
-        <h1 class="heading-xl">{attempt.testTitle}</h1>
-        <p class="score-hero__meta">Submitted at {submittedFormatter.format(attempt.submittedAt)}</p>
-      </div>
-
-      <div class="score-hero__score">
+  <section class="attempt-review">
+    <section class="hero-card">
+      <div class="hero-card__ring-wrap">
         <div class="score-ring">
-          <svg viewBox="0 0 120 120" class="score-ring__svg" aria-hidden="true">
-            <circle class="score-ring__track" cx="60" cy="60" r={circleRadius}></circle>
+          <svg viewBox="0 0 100 100" class="score-ring__svg" aria-hidden="true">
+            <circle class="score-ring__track" cx="50" cy="50" r="42"></circle>
             <circle
               class="score-ring__progress"
-              cx="60"
-              cy="60"
-              r={circleRadius}
-              style={`stroke: ${scoreRingColor}; stroke-dasharray: ${circumference}; stroke-dashoffset: ${dashOffset};`}
+              cx="50"
+              cy="50"
+              r="42"
+              style={`stroke:${scoreRingColor}; stroke-dasharray:${ringCircumference}; stroke-dashoffset:${ringOffset};`}
             ></circle>
+            <text x="50" y="50" class="score-ring__text">{percentage}%</text>
           </svg>
-          <div class="score-ring__center">
-            <strong>{percentage}%</strong>
-          </div>
         </div>
-        <p class="score-hero__subscore">{score} / {total} correct</p>
+        <p class="hero-card__ring-copy">{score} / {total} correct</p>
       </div>
-    </div>
-  </section>
 
-  <section class="stats-strip">
-    <div class="stats-strip__inner">
-      <div class="stat-item">
-        <span>Score</span>
-        <strong>{score} / {total}</strong>
+      <div class="hero-card__main">
+        <span class="hero-pill">✓ Test Complete</span>
+        <h1>{attempt.testTitle}</h1>
+        <p>Submitted {submittedFormatter.format(attempt.submittedAt)}</p>
       </div>
-      <div class="stat-item">
-        <span>Time Taken</span>
-        <strong>{formatSeconds(attempt.timeTakenSeconds)}</strong>
-      </div>
-      <div class="stat-item">
-        <span>Accuracy</span>
-        <strong>{accuracy}</strong>
-      </div>
-    </div>
-  </section>
 
-  <section class="review-section">
-    <div class="filter-bar" data-filter-bar>
-      <button type="button" class="filter-pill is-active" data-filter="all">All</button>
-      <button type="button" class="filter-pill" data-filter="correct">Correct</button>
-      <button type="button" class="filter-pill" data-filter="incorrect">Incorrect</button>
-    </div>
+      <div class="hero-card__stats">
+        <div class="hero-stat">
+          <strong>{score} / {total}</strong>
+          <span>Score</span>
+        </div>
+        <div class="hero-stat">
+          <strong style={`color:${scoreRingColor};`}>{percentage}%</strong>
+          <span>Accuracy</span>
+        </div>
+        <div class="hero-stat">
+          <strong>{formatSeconds(attempt.timeTakenSeconds)}</strong>
+          <span>Time Taken</span>
+        </div>
+        <div class="hero-stat">
+          <strong>{total}</strong>
+          <span>Questions</span>
+        </div>
+      </div>
+    </section>
 
-    <div class="review-list">
+    <section class="action-strip">
+      <a
+        href={attempt.topicId ? `/student/topics/${attempt.topicId}` : '/student'}
+        class="action-strip__back"
+      >
+        ← Back to {attempt.topicName ?? 'Dashboard'}
+      </a>
+
+      <div class="action-strip__buttons">
+        <a href={`/student/tests/${attempt.testId}`} class="action-strip__button action-strip__button--ghost">Retake Test</a>
+        <a href="/student/analysis" class="action-strip__button action-strip__button--solid">View Analysis →</a>
+      </div>
+    </section>
+
+    <section class="filter-row">
+      <div class="filter-group" data-filter-bar>
+        <button type="button" class="filter-pill filter-pill--all is-active" data-filter="all">
+          All <span>( {reviewCards.length} )</span>
+        </button>
+        <button type="button" class="filter-pill filter-pill--correct" data-filter="correct">
+          Correct <span>( {correctCount} )</span>
+        </button>
+        <button type="button" class="filter-pill filter-pill--incorrect" data-filter="incorrect">
+          Incorrect <span>( {incorrectCount + skippedCount} )</span>
+        </button>
+      </div>
+
+      <div class="filter-summary">
+        {correctCount} correct · {incorrectCount} incorrect · {skippedCount} skipped
+      </div>
+    </section>
+
+    <section class="review-list">
       {reviewCards.map((row) => (
-        <article class="card review-card" data-status={row.status}>
+        <article
+          class:list={[
+            'review-card',
+            row.status === 'correct'
+              ? 'review-card--correct'
+              : row.status === 'incorrect'
+                ? 'review-card--incorrect'
+                : 'review-card--skipped',
+          ]}
+          data-status={row.status}
+        >
           <div class="review-card__header">
             <span class="question-badge">Q.{row.order}</span>
             <span
               class:list={[
-                'status-badge',
+                'result-badge',
                 row.status === 'correct'
-                  ? 'badge-success'
+                  ? 'result-badge--correct'
                   : row.status === 'incorrect'
-                    ? 'badge-incorrect'
-                    : 'badge-pending',
+                    ? 'result-badge--incorrect'
+                    : 'result-badge--skipped',
               ]}
             >
-              {row.status === 'correct' ? 'Correct' : row.status === 'incorrect' ? 'Incorrect' : 'Skipped'}
+              {row.status === 'correct' ? '✓ Correct' : row.status === 'incorrect' ? '✗ Incorrect' : '— Skipped'}
             </span>
           </div>
 
-          <p class="review-card__prompt">{row.prompt}</p>
+          <div class="review-card__body">
+            <p class="review-card__prompt">{row.prompt}</p>
 
-          <div class="options-list">
-            {optionKeys.map((key) => {
-              const optionValue =
-                key === 'a'
-                  ? row.optionA
-                  : key === 'b'
-                    ? row.optionB
-                    : key === 'c'
-                      ? row.optionC
-                      : row.optionD;
+            <div class="options-list">
+              {optionKeys.map((key) => {
+                const optionValue =
+                  key === 'a'
+                    ? row.optionA
+                    : key === 'b'
+                      ? row.optionB
+                      : key === 'c'
+                        ? row.optionC
+                        : row.optionD;
 
-              const isChosen = row.chosenOption === key;
-              const isCorrectOption = row.correctOption === key;
-              const optionClass = isCorrectOption
-                ? 'option-row option-row--correct'
-                : isChosen && row.chosenOption !== row.correctOption
-                  ? 'option-row option-row--wrong'
-                  : 'option-row option-row--neutral';
-              const bubbleClass = isCorrectOption
-                ? 'option-bubble option-bubble--correct'
-                : isChosen && row.chosenOption !== row.correctOption
-                  ? 'option-bubble option-bubble--wrong'
-                  : 'option-bubble';
+                const isChosen = row.chosenOption === key;
+                const isCorrectOption = row.correctOption === key;
+                const optionClass = isCorrectOption
+                  ? 'option-row option-row--correct'
+                  : isChosen && row.chosenOption !== row.correctOption
+                    ? 'option-row option-row--wrong'
+                    : 'option-row option-row--neutral';
+                const bubbleClass = isCorrectOption
+                  ? 'option-bubble option-bubble--correct'
+                  : isChosen && row.chosenOption !== row.correctOption
+                    ? 'option-bubble option-bubble--wrong'
+                    : 'option-bubble option-bubble--neutral';
 
-              return (
-                <div class={optionClass}>
-                  <span class={bubbleClass}>{optionLabels[key]}</span>
-                  <span class="option-text">{optionValue}</span>
-                  {isCorrectOption && <span class="option-mark option-mark--correct">✓</span>}
-                  {!isCorrectOption && isChosen && row.chosenOption !== row.correctOption && (
-                    <span class="option-mark option-mark--wrong">✗</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {row.explanation && (
-            <div class="explanation-box">
-              <p class="explanation-box__label">Explanation:</p>
-              <p class="explanation-box__text">{row.explanation}</p>
+                return (
+                  <div class={optionClass}>
+                    <span class={bubbleClass}>{optionLabels[key]}</span>
+                    <span class="option-text">{optionValue}</span>
+                    {isCorrectOption && <span class="option-mark option-mark--correct">✓</span>}
+                    {!isCorrectOption && isChosen && row.chosenOption !== row.correctOption && (
+                      <span class="option-mark option-mark--wrong">✗</span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          )}
+
+            {row.explanation && (
+              <div class="explanation-box">
+                <div class="explanation-box__head">
+                  <span>💡</span>
+                  <span>Explanation</span>
+                </div>
+                <p class="explanation-box__text">{row.explanation}</p>
+              </div>
+            )}
+          </div>
         </article>
       ))}
-    </div>
-  </section>
+    </section>
 
-  <script is:inline>
-    const filterBar = document.querySelector('[data-filter-bar]');
-    const reviewCards = Array.from(document.querySelectorAll('[data-status]'));
+    <section class="bottom-cta">
+      <div>
+        <div class="bottom-cta__title">🎯 Keep the momentum going!</div>
+        <div class="bottom-cta__sub">{attempt.subjectName ?? 'Your practice'} · {attempt.topicName ?? attempt.testTitle}</div>
+      </div>
 
-    if (filterBar) {
-      const buttons = Array.from(filterBar.querySelectorAll('[data-filter]'));
+      <div class="bottom-cta__actions">
+        <a href={`/student/tests/${attempt.testId}`} class="bottom-cta__button bottom-cta__button--ghost">Retake Test</a>
+        <a
+          href={nextTopic ? `/student/topics/${nextTopic.id}` : attempt.topicId ? `/student/topics/${attempt.topicId}` : '/student'}
+          class="bottom-cta__button bottom-cta__button--next"
+        >
+          {nextTopic ? 'Next Topic →' : 'Back to Topic →'}
+        </a>
+      </div>
+    </section>
 
-      buttons.forEach((button) => {
-        button.addEventListener('click', () => {
-          const filter = button.getAttribute('data-filter');
+    <script is:inline>
+      const filterBar = document.querySelector('[data-filter-bar]');
+      const reviewCards = Array.from(document.querySelectorAll('[data-status]'));
 
-          buttons.forEach((item) => item.classList.remove('is-active'));
-          button.classList.add('is-active');
+      if (filterBar) {
+        const buttons = Array.from(filterBar.querySelectorAll('[data-filter]'));
 
-          reviewCards.forEach((card) => {
-            const status = card.getAttribute('data-status');
-            const shouldShow =
-              filter === 'all' || status === filter || (filter === 'incorrect' && status === 'skipped');
+        buttons.forEach((button) => {
+          button.addEventListener('click', () => {
+            const filter = button.getAttribute('data-filter');
 
-            card.style.display = shouldShow ? '' : 'none';
+            buttons.forEach((item) => item.classList.remove('is-active'));
+            button.classList.add('is-active');
+
+            reviewCards.forEach((card) => {
+              const status = card.getAttribute('data-status');
+              const shouldShow =
+                filter === 'all' || status === filter || (filter === 'incorrect' && status === 'skipped');
+
+              card.style.display = shouldShow ? '' : 'none';
+            });
           });
         });
-      });
-    }
-  </script>
+      }
+    </script>
+  </section>
 </PlatformLayout>
 
 <style>
-  .score-hero {
-    background: var(--color-navy);
-    padding: 40px 16px;
+  .attempt-review {
+    padding: 28px 16px 40px;
   }
 
-  .score-hero__inner,
-  .stats-strip__inner {
-    margin: 0 auto;
-    max-width: 64rem;
+  .hero-card,
+  .action-strip,
+  .filter-row,
+  .review-list,
+  .bottom-cta {
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
-  .score-hero__inner {
-    align-items: center;
+  .hero-card {
+    background: linear-gradient(135deg, #0a0f1e 0%, #1a2544 100%);
+    border-radius: 20px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
     display: flex;
-    gap: 2rem;
-    justify-content: space-between;
-  }
-
-  .hero-pill {
     align-items: center;
-    background: var(--color-yellow);
-    border-radius: 999px;
-    color: var(--color-navy);
-    display: inline-flex;
-    font-size: 0.8rem;
-    font-weight: 700;
-    padding: 6px 12px;
+    gap: 28px;
   }
 
-  .heading-xl,
-  .heading-md {
-    margin: 0;
-  }
-
-  .heading-xl {
-    color: var(--color-surface);
-    font-size: clamp(2rem, 3vw, 2.8rem);
-    font-weight: 800;
-    margin-top: 0.75rem;
-  }
-
-  .heading-md {
-    color: var(--color-navy);
-    font-size: 1.25rem;
-    font-weight: 700;
-  }
-
-  .score-hero__meta {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.875rem;
-    margin: 0.5rem 0 0;
-  }
-
-  .score-hero__score {
-    align-items: center;
-    display: flex;
-    flex-direction: column;
+  .hero-card__ring-wrap {
+    width: 100px;
     flex-shrink: 0;
   }
 
   .score-ring {
-    height: 120px;
+    width: 100px;
+    height: 100px;
     position: relative;
-    width: 120px;
   }
 
   .score-ring__svg {
-    height: 120px;
+    width: 100px;
+    height: 100px;
     transform: rotate(-90deg);
-    width: 120px;
   }
 
   .score-ring__track,
   .score-ring__progress {
-    cx: 60;
-    cy: 60;
     fill: none;
-    r: 50;
+    stroke-width: 8;
     stroke-linecap: round;
-    stroke-width: 6;
   }
 
   .score-ring__track {
-    stroke: rgba(255, 255, 255, 0.15);
+    stroke: rgba(255, 255, 255, 0.08);
   }
 
-  .score-ring__progress {
-    transition: stroke-dashoffset 0.4s ease;
+  .score-ring__text {
+    fill: white;
+    font-size: 18px;
+    font-weight: 900;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    transform: rotate(90deg);
+    transform-origin: center;
   }
 
-  .score-ring__center {
-    align-items: center;
-    color: var(--color-surface);
-    display: flex;
-    inset: 0;
-    justify-content: center;
-    position: absolute;
+  .hero-card__ring-copy {
+    margin: 8px 0 0;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+    font-weight: 500;
   }
 
-  .score-ring__center strong {
-    font-size: 1.75rem;
+  .hero-card__main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hero-pill {
+    background: rgba(245, 197, 24, 0.15);
+    border: 1px solid rgba(245, 197, 24, 0.25);
+    color: #f5c518;
+    font-size: 0.65rem;
     font-weight: 800;
-  }
-
-  .score-hero__subscore {
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
-    margin: 0.75rem 0 0;
-  }
-
-  .stats-strip {
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
-    padding: 20px 16px;
-  }
-
-  .stats-strip__inner {
-    display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .stat-item span {
-    color: var(--color-text-muted);
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.45rem;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
-  .stat-item strong {
-    color: var(--color-navy);
-    font-size: 1.25rem;
-    font-weight: 700;
+  .hero-card__main h1 {
+    margin: 10px 0 6px;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: white;
   }
 
-  .review-section {
-    margin: 0 auto;
-    max-width: 56rem;
-    padding: 32px 16px 3.5rem;
+  .hero-card__main p {
+    margin: 0;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.35);
   }
 
-  .filter-bar {
-    backdrop-filter: blur(8px);
-    background: rgba(248, 249, 255, 0.92);
+  .hero-card__stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(100px, 1fr));
+    gap: 10px;
+  }
+
+  .hero-stat {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px 14px;
+    min-width: 100px;
+  }
+
+  .hero-stat strong {
+    display: block;
+    font-size: 1rem;
+    font-weight: 800;
+    color: white;
+  }
+
+  .hero-stat span {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .action-strip {
+    margin-bottom: 20px;
     display: flex;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-    padding: 0.25rem 0;
-    position: sticky;
-    top: 84px;
-    z-index: 10;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .action-strip__back {
+    font-size: 0.78rem;
+    color: #9aa5b4;
+    font-weight: 600;
+    transition: color 0.15s ease;
+  }
+
+  .action-strip__back:hover {
+    color: #0a0f1e;
+  }
+
+  .action-strip__buttons {
+    display: flex;
+    gap: 10px;
+  }
+
+  .action-strip__button {
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .action-strip__button--ghost {
+    background: transparent;
+    border: 1.5px solid #e2e8f0;
+    color: #4a5568;
+  }
+
+  .action-strip__button--ghost:hover {
+    border-color: #0a0f1e;
+    color: #0a0f1e;
+  }
+
+  .action-strip__button--solid {
+    background: #0a0f1e;
+    color: white;
+  }
+
+  .action-strip__button--solid:hover {
+    background: #1a2544;
+  }
+
+  .filter-row {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .filter-group {
+    display: inline-flex;
+    gap: 6px;
+    background: white;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    padding: 4px;
   }
 
   .filter-pill {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
+    padding: 6px 16px;
     border-radius: 999px;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 600;
-    padding: 9px 16px;
-    transition:
-      background 0.2s ease,
-      border-color 0.2s ease,
-      color 0.2s ease;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
+    background: transparent;
+    color: #9aa5b4;
   }
 
-  .filter-pill.is-active {
-    background: var(--color-navy);
-    border-color: var(--color-navy);
-    color: var(--color-surface);
+  .filter-pill span {
+    font-weight: 500;
+    opacity: 0.8;
+  }
+
+  .filter-pill--all.is-active {
+    background: #0a0f1e;
+    color: white;
+  }
+
+  .filter-pill--correct.is-active {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .filter-pill--incorrect.is-active {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .filter-summary {
+    font-size: 0.78rem;
+    color: #9aa5b4;
+  }
+
+  .review-list {
+    margin-bottom: 20px;
   }
 
   .review-card {
-    margin-bottom: 16px;
+    background: white;
+    border-radius: 16px;
+    border: 1.5px solid #e2e8f0;
+    border-left-width: 4px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: box-shadow 0.15s ease;
+  }
+
+  .review-card:hover {
+    box-shadow: 0 4px 16px rgba(10, 15, 30, 0.07);
+  }
+
+  .review-card--correct {
+    border-left-color: #10b981;
+  }
+
+  .review-card--incorrect {
+    border-left-color: #ef4444;
+  }
+
+  .review-card--skipped {
+    border-left-color: #e2e8f0;
   }
 
   .review-card__header {
-    align-items: center;
+    padding: 14px 18px;
+    border-bottom: 1px solid #f8f9ff;
     display: flex;
     justify-content: space-between;
-    gap: 1rem;
+    align-items: center;
+    gap: 12px;
   }
 
   .question-badge {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
     border-radius: 8px;
-    color: var(--color-navy);
-    font-size: 0.9rem;
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #374151;
+  }
+
+  .result-badge {
+    font-size: 0.72rem;
     font-weight: 700;
     padding: 4px 12px;
-  }
-
-  .status-badge {
-    display: inline-flex;
-  }
-
-  .badge-incorrect {
-    align-items: center;
-    background: #fee2e2;
     border-radius: 999px;
+  }
+
+  .result-badge--correct {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .result-badge--incorrect {
+    background: #fee2e2;
     color: #991b1b;
-    display: inline-flex;
-    font-size: 0.75rem;
-    font-weight: 600;
-    justify-content: center;
-    padding: 3px 10px;
+  }
+
+  .result-badge--skipped {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .review-card__body {
+    padding: 16px 18px;
   }
 
   .review-card__prompt {
-    color: var(--color-text);
-    font-size: 1rem;
-    line-height: 1.6;
-    margin: 14px 0;
+    margin: 0 0 16px;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: #0a0f1e;
+    font-weight: 500;
   }
 
   .options-list {
@@ -498,117 +679,221 @@ const reviewCards = reviewRows.map((row) => {
   }
 
   .option-row {
-    align-items: center;
-    border-radius: 10px;
     display: flex;
+    align-items: center;
     gap: 12px;
-    margin-bottom: 0;
     padding: 10px 14px;
+    border-radius: 10px;
+    margin-bottom: 0;
+    border: 1.5px solid transparent;
+    transition: all 0.1s ease;
   }
 
   .option-row--correct {
-    background: #d1fae5;
-    border: 1px solid #a7f3d0;
+    background: #f0fdf4;
+    border-color: #a7f3d0;
   }
 
   .option-row--wrong {
-    background: #fee2e2;
-    border: 1px solid #fecaca;
+    background: #fef2f2;
+    border-color: #fecaca;
   }
 
   .option-row--neutral {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    opacity: 0.7;
+    background: #f8f9ff;
+    opacity: 0.55;
   }
 
   .option-bubble {
-    align-items: center;
-    background: var(--color-bg);
-    border: 1.5px solid var(--color-border);
+    width: 32px;
+    height: 32px;
     border-radius: 999px;
-    color: var(--color-text-secondary);
     display: inline-flex;
-    flex-shrink: 0;
-    font-size: 0.8rem;
-    font-weight: 700;
-    height: 30px;
+    align-items: center;
     justify-content: center;
-    width: 30px;
+    flex-shrink: 0;
+    font-weight: 800;
+    font-size: 0.8rem;
   }
 
   .option-bubble--correct {
     background: #10b981;
-    border-color: transparent;
-    color: var(--color-surface);
+    color: white;
   }
 
   .option-bubble--wrong {
     background: #ef4444;
-    border-color: transparent;
-    color: var(--color-surface);
+    color: white;
+  }
+
+  .option-bubble--neutral {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #9ca3af;
   }
 
   .option-text {
-    color: var(--color-text);
     flex: 1;
+    color: #6b7280;
     line-height: 1.5;
   }
 
-  .option-mark {
-    font-size: 1rem;
-    font-weight: 700;
-  }
-
-  .option-mark--correct {
+  .option-row--correct .option-text {
+    font-weight: 600;
     color: #065f46;
   }
 
-  .option-mark--wrong {
+  .option-row--wrong .option-text {
+    font-weight: 500;
     color: #991b1b;
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  .option-mark {
+    margin-left: auto;
+    font-weight: 800;
+  }
+
+  .option-mark--correct {
+    color: #10b981;
+  }
+
+  .option-mark--wrong {
+    color: #ef4444;
   }
 
   .explanation-box {
-    background: var(--color-yellow-bg);
-    border: 1px solid rgba(245, 197, 24, 0.3);
-    border-left: 4px solid var(--color-yellow);
-    border-radius: 0 10px 10px 0;
     margin-top: 12px;
+    background: #fffbeb;
+    border: 1px solid rgba(245, 197, 24, 0.25);
+    border-left: 4px solid #f5c518;
+    border-radius: 0 10px 10px 0;
     padding: 12px 16px;
   }
 
-  .explanation-box__label,
+  .explanation-box__head {
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #92400e;
+  }
+
   .explanation-box__text {
-    color: var(--color-text);
-    font-size: 0.9rem;
     margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #4a5568;
   }
 
-  .explanation-box__label {
+  .bottom-cta {
+    margin-bottom: 40px;
+    background: linear-gradient(135deg, #0a0f1e, #1a2544);
+    border-radius: 16px;
+    padding: 24px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .bottom-cta__title {
+    color: white;
     font-weight: 700;
-    margin-bottom: 4px;
+    font-size: 0.95rem;
   }
 
-  @media (max-width: 820px) {
-    .score-hero__inner {
-      align-items: flex-start;
+  .bottom-cta__sub {
+    margin-top: 3px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.78rem;
+  }
+
+  .bottom-cta__actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .bottom-cta__button {
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+
+  .bottom-cta__button--ghost {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: white;
+  }
+
+  .bottom-cta__button--ghost:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .bottom-cta__button--next {
+    background: #f5c518;
+    color: #0a0f1e;
+    font-weight: 800;
+  }
+
+  .bottom-cta__button--next:hover {
+    background: #e6b800;
+  }
+
+  @media (max-width: 900px) {
+    .hero-card {
       flex-direction: column;
+      align-items: flex-start;
+      padding: 24px;
     }
 
-    .stats-strip__inner {
-      grid-template-columns: 1fr;
+    .hero-card__stats {
+      width: 100%;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .action-strip,
+    .filter-row,
+    .bottom-cta {
+      flex-direction: column;
+      align-items: flex-start;
     }
   }
 
   @media (max-width: 640px) {
-    .filter-bar {
+    .attempt-review {
+      padding: 24px 12px 32px;
+    }
+
+    .hero-card__stats {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-group,
+    .action-strip__buttons,
+    .bottom-cta__actions {
+      width: 100%;
       flex-wrap: wrap;
-      top: 76px;
+    }
+
+    .action-strip__button,
+    .bottom-cta__button {
+      width: 100%;
+      text-align: center;
+      justify-content: center;
+      display: inline-flex;
     }
 
     .review-card__header {
-      align-items: flex-start;
       flex-direction: column;
+      align-items: flex-start;
     }
   }
 </style>

@@ -87,6 +87,7 @@ const statCards = [
   {
     label: 'Total Students',
     value: totalStudents,
+    href: '/admin/students',
     footerTone: 'stat-card__footer--blue',
     iconClass: 'stat-card__icon--blue',
     icon: 'students',
@@ -94,6 +95,7 @@ const statCards = [
   {
     label: 'Active Tests',
     value: publishedTests,
+    href: '/admin/tests',
     footerTone: 'stat-card__footer--yellow',
     iconClass: 'stat-card__icon--yellow',
     icon: 'tests',
@@ -101,6 +103,7 @@ const statCards = [
   {
     label: 'Attempts Today',
     value: attemptsToday,
+    href: '/admin/students',
     footerTone: 'stat-card__footer--green',
     iconClass: 'stat-card__icon--green',
     icon: 'attempts',
@@ -108,6 +111,7 @@ const statCards = [
   {
     label: 'Avg Platform Score',
     value: `${platformAverageScore}%`,
+    href: '/admin/students',
     footerTone: 'stat-card__footer--orange',
     iconClass: 'stat-card__icon--orange',
     icon: 'chart',
@@ -161,7 +165,11 @@ const initialsFor = (fullName: string) => {
 >
   <section class="stats-grid">
     {statCards.map((stat) => (
-      <article class="stat-card">
+      <a
+        href={stat.href}
+        class="stat-card"
+        aria-label={`Open ${stat.label}`}
+      >
         <div class:list={['stat-card__icon', stat.iconClass]}>
           {
             stat.icon === 'students' ? (
@@ -195,7 +203,7 @@ const initialsFor = (fullName: string) => {
         <div class="stat-card__value">{stat.value}</div>
         <div class="stat-card__label">{stat.label}</div>
         <div class:list={['stat-card__footer', stat.footerTone]}></div>
-      </article>
+      </a>
     ))}
   </section>
 
@@ -303,8 +311,22 @@ const initialsFor = (fullName: string) => {
 
   .stat-card {
     position: relative;
+    display: block;
     overflow: hidden;
     padding: 20px 24px 18px;
+    text-decoration: none;
+    transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+    border-color: #cbd5e1;
+  }
+
+  .stat-card:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.22);
+    outline-offset: 3px;
   }
 
   .stat-card__icon {
