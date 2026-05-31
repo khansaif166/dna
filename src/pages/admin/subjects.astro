@@ -4,7 +4,7 @@ export const prerender = false;
 import { asc } from 'drizzle-orm';
 
 import AdminLayout from '../../layouts/AdminLayout.astro';
-import { db, subjects } from '../../db';
+import { db, subjects, topicResources, topics } from '../../db';
 import { requireAuth } from '../../lib/auth';
 
 const authResult = await requireAuth(Astro, 'admin');
@@ -14,211 +14,854 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
-const allSubjects = await db.select().from(subjects).orderBy(asc(subjects.order));
+const [allSubjects, allTopics, allResources] = await Promise.all([
+  db.select().from(subjects).orderBy(asc(subjects.order)),
+  db.select().from(topics).orderBy(asc(topics.subjectId), asc(topics.order)),
+  db.select().from(topicResources).orderBy(asc(topicResources.topicId), asc(topicResources.order)),
+]);
+
+const successParam = Astro.url.searchParams.get('success');
+const errorParam = Astro.url.searchParams.get('error');
+const selectedSubjectId = Astro.url.searchParams.get('subject');
+const selectedTopicId = Astro.url.searchParams.get('topic');
+
+const subjectThemes = [
+  {
+    name: 'Blue',
+    dot: '#3B82F6',
+    tint: '#EFF6FF',
+    ring: 'rgba(59, 130, 246, 0.22)',
+    optionDot: '🔵',
+  },
+  {
+    name: 'Green',
+    dot: '#10B981',
+    tint: '#ECFDF5',
+    ring: 'rgba(16, 185, 129, 0.2)',
+    optionDot: '🟢',
+  },
+  {
+    name: 'Amber',
+    dot: '#F59E0B',
+    tint: '#FFFBEB',
+    ring: 'rgba(245, 158, 11, 0.22)',
+    optionDot: '🟠',
+  },
+] as const;
+
+function getSubjectTheme(order: number) {
+  return subjectThemes[Math.max(order - 1, 0) % subjectThemes.length];
+}
+
+function formatFlashMessage(value: string | null, fallback: string) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.replace(/[-_]+/g, ' ').trim();
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+const subjectTopicMap = new Map(
+  allSubjects.map((subject) => [
+    subject.id,
+    allTopics.filter((topic) => topic.subjectId === subject.id).sort((a, b) => a.order - b.order),
+  ])
+);
+
+const resourceCountMap = new Map<string, number>();
+
+for (const resource of allResources) {
+  resourceCountMap.set(resource.topicId, (resourceCountMap.get(resource.topicId) ?? 0) + 1);
+}
+
+const subjectRows = allSubjects.map((subject) => {
+  const subjectTopics = subjectTopicMap.get(subject.id) ?? [];
+
+  return {
+    ...subject,
+    theme: getSubjectTheme(subject.order),
+    topicCount: subjectTopics.length,
+    topics: subjectTopics.map((topic) => ({
+      ...topic,
+      resourceCount: resourceCountMap.get(topic.id) ?? 0,
+    })),
+  };
+});
+
+const successMessage = formatFlashMessage(successParam, 'Action completed successfully.');
+const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Please try again.');
 ---
 
-<AdminLayout title="Admin Subjects | Dream Neet Academy" userName={admin.fullName}>
-  <section class="page-header">
-    <h1 class="heading-lg">Subjects</h1>
+<AdminLayout
+  title="Admin Subjects | Dream Neet Academy"
+  pageTitle="Subjects & Topics"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <section class="page-intro">
+    <p class="breadcrumb">Admin / <span class="breadcrumb__active">Subjects & Topics</span></p>
   </section>
 
-  <section class="page-grid">
-    <div class="card form-card">
-      <div class="section-head">
-        <span class="section-pill">Create</span>
-        <h2 class="heading-md">Add Subject</h2>
+  <section class="workspace">
+    <aside class="workspace__forms">
+      <div class="forms-sticky">
+        {successMessage && (
+          <p class="flash-message flash-message--success">{successMessage}</p>
+        )}
+        {errorMessage && (
+          <p class="flash-message flash-message--error">{errorMessage}</p>
+        )}
+
+        <article class="editor-card">
+          <div class="editor-card__header editor-card__header--subject">
+            <span class="editor-card__accent editor-card__accent--subject"></span>
+            <div class="editor-card__title-row">
+              <span class="editor-card__icon editor-card__icon--subject" aria-hidden="true">+</span>
+              <div>
+                <h2>Add Subject</h2>
+                <p>Add a new subject to the syllabus</p>
+              </div>
+            </div>
+          </div>
+
+          <form action="/api/admin/subjects" method="POST" class="editor-card__body">
+            <label class="form-field">
+              <span>Subject Name</span>
+              <input class="form-input" type="text" name="name" placeholder="e.g. Physics" required />
+            </label>
+
+            <label class="form-field">
+              <span>Display Order</span>
+              <small>Lower number appears first (Physics=1, Chemistry=2, Biology=3)</small>
+              <input class="form-input form-input--compact" type="number" name="order" min="1" required />
+            </label>
+
+            <div class="form-field">
+              <span>Subject Color Theme</span>
+              <div class="color-preview-row" aria-hidden="true">
+                {subjectThemes.map((theme, index) => (
+                  <div class="color-preview">
+                    <span
+                      class:list={['color-preview__swatch', { 'color-preview__swatch--selected': index === 0 }]}
+                      style={`--swatch:${theme.dot}; --ring:${theme.ring};`}
+                    ></span>
+                    <small>{theme.name}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button type="submit" class="submit-button submit-button--dark">+ Create Subject</button>
+          </form>
+        </article>
+
+        <article class="editor-card">
+          <div class="editor-card__header editor-card__header--topic">
+            <span class="editor-card__accent editor-card__accent--topic"></span>
+            <div class="editor-card__title-row">
+              <span class="editor-card__icon editor-card__icon--topic" aria-hidden="true">T</span>
+              <div>
+                <h2>Add Topic</h2>
+                <p>Add a topic under a subject</p>
+              </div>
+            </div>
+          </div>
+
+          <form action="/api/admin/topics" method="POST" class="editor-card__body">
+            <label class="form-field">
+              <span>Parent Subject</span>
+              <select class="form-input form-select" name="subject_id" required>
+                <option value="" disabled selected={!selectedSubjectId}>Select subject</option>
+                {subjectRows.map((subject) => (
+                  <option value={subject.id} selected={selectedSubjectId === subject.id}>
+                    {subject.theme.optionDot} {subject.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span>Topic Name</span>
+              <input class="form-input" type="text" name="name" placeholder="e.g. Laws of Motion" required />
+            </label>
+
+            <label class="form-field">
+              <span>Order within Subject</span>
+              <input class="form-input form-input--compact" type="number" name="order" min="1" required />
+            </label>
+
+            <button type="submit" class="submit-button submit-button--gold">+ Add Topic</button>
+          </form>
+        </article>
+
+        <article class="editor-card" id="video-resource-form">
+          <div class="editor-card__header editor-card__header--resource">
+            <span class="editor-card__accent editor-card__accent--resource"></span>
+            <div class="editor-card__title-row">
+              <span class="editor-card__icon editor-card__icon--resource" aria-hidden="true">▶</span>
+              <div>
+                <h2>Add Video Resource</h2>
+                <p>Link a YouTube video to a topic</p>
+              </div>
+            </div>
+          </div>
+
+          <form action="/api/admin/resources" method="POST" class="editor-card__body">
+            <label class="form-field">
+              <span>Topic</span>
+              <select class="form-input form-select" name="topic_id" required>
+                <option value="" disabled selected={!selectedTopicId}>Select topic</option>
+                {subjectRows.map((subject) => (
+                  <optgroup label={subject.name}>
+                    {subject.topics.map((topic) => (
+                      <option value={topic.id} selected={selectedTopicId === topic.id}>
+                        {topic.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span>Video Title</span>
+              <input class="form-input" type="text" name="title" placeholder="e.g. Newton's Laws - Complete" required />
+            </label>
+
+            <label class="form-field">
+              <span>YouTube URL</span>
+              <input
+                class="form-input"
+                type="url"
+                name="youtube_url"
+                placeholder="https://youtube.com/watch?v=..."
+                required
+              />
+              <small>Paste the full YouTube URL or short link</small>
+            </label>
+
+            <label class="form-field">
+              <span>Notes (optional)</span>
+              <textarea
+                class="form-input form-textarea"
+                name="notes"
+                placeholder="Optional: add context or timestamps"
+              ></textarea>
+            </label>
+
+            <label class="form-field">
+              <span>Display Order</span>
+              <input class="form-input form-input--compact" type="number" name="order" min="1" required />
+            </label>
+
+            <button type="submit" class="submit-button submit-button--green">+ Add Video</button>
+          </form>
+        </article>
       </div>
+    </aside>
 
-      <form action="/api/admin/subjects" method="POST" class="stack-form">
-        <label class="field">
-          <span>Name</span>
-          <input class="input-field" type="text" name="name" required />
-        </label>
-        <label class="field">
-          <span>Order</span>
-          <input class="input-field" type="number" name="order" required />
-        </label>
-        <button type="submit" class="btn-primary">Create Subject</button>
-      </form>
-    </div>
-
-    <div class="card table-card">
-      <div class="table-card__head">
-        <h2 class="heading-md">Existing Subjects</h2>
-      </div>
-
-      {allSubjects.length ? (
-        <div class="table-wrap">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Order</th>
-                <th scope="col">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allSubjects.map((subject) => (
-                <tr>
-                  <td colspan="3">
-                    <form action={`/api/admin/subjects/${subject.id}`} method="POST" class="inline-edit">
-                      <input type="hidden" name="subject_id" value={subject.id} />
-                      <input class="input-field" type="text" name="name" value={subject.name} />
-                      <input class="input-field" type="number" name="order" value={subject.order} />
-                      <button type="submit" class="btn-primary inline-edit__button">Update</button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div class="workspace__data">
+      <article class="data-card">
+        <div class="data-card__header">
+          <h2>Subjects</h2>
+          <span class="count-badge">{subjectRows.length} subjects</span>
         </div>
-      ) : (
-        <div class="empty-state">
-          <div class="empty-state__icon">◌</div>
-          <h3 class="heading-md">No subjects yet</h3>
-          <p class="text-muted">Create your first subject to start structuring the syllabus.</p>
-        </div>
-      )}
+
+        {subjectRows.length ? (
+          <div>
+            {subjectRows.map((subject) => (
+              <div class="subject-row">
+                <div class="subject-row__info">
+                  <span class="subject-row__dot" style={`--subject-dot:${subject.theme.dot};`}></span>
+                  <div>
+                    <div class="subject-row__name">{subject.name}</div>
+                    <div class="subject-row__meta">{subject.topicCount} topics</div>
+                  </div>
+                </div>
+
+                <div class="subject-row__side">
+                  <span class="order-badge">#{subject.order}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div class="empty-panel">
+            <p>No subjects yet — add one using the form on the left.</p>
+          </div>
+        )}
+      </article>
+
+      <section class="topics-groups">
+        {subjectRows.map((subject) => (
+          <article class="topic-group-card">
+            <div class="topic-group-card__header" style={`--subject-color:${subject.theme.dot};`}>
+              <span class="topic-group-card__accent"></span>
+              <div class="topic-group-card__title">
+                <span class="subject-row__dot" style={`--subject-dot:${subject.theme.dot};`}></span>
+                <span>{subject.name}</span>
+              </div>
+              <span class="count-badge">{subject.topicCount} topics</span>
+            </div>
+
+            {subject.topics.length ? (
+              <div>
+                {subject.topics.map((topic) => (
+                  <div class="topic-row">
+                    <span class="topic-row__order">{String(topic.order).padStart(2, '0')}</span>
+                    <span class="topic-row__name">{topic.name}</span>
+                    <span
+                      class:list={[
+                        'video-pill',
+                        { 'video-pill--empty': topic.resourceCount === 0 },
+                      ]}
+                    >
+                      {topic.resourceCount === 0 ? '▶ No videos' : `▶ ${topic.resourceCount} videos`}
+                    </span>
+                    <a
+                      href={`/admin/subjects?subject=${subject.id}&topic=${topic.id}#video-resource-form`}
+                      class="ghost-button"
+                    >
+                      Add Video
+                    </a>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div class="empty-panel empty-panel--tight">
+                <p>No topics yet — add one using the form on the left</p>
+              </div>
+            )}
+          </article>
+        ))}
+      </section>
     </div>
   </section>
 </AdminLayout>
 
 <style>
-  .page-header {
-    margin-bottom: 24px;
+  .page-intro {
+    margin-bottom: 18px;
   }
 
-  .heading-lg,
-  .heading-md {
-    color: var(--color-navy);
+  .breadcrumb {
     margin: 0;
-  }
-
-  .heading-lg {
-    font-size: clamp(1.9rem, 3vw, 2.4rem);
-    font-weight: 800;
-  }
-
-  .heading-md {
-    font-size: 1.15rem;
-    font-weight: 700;
-  }
-
-  .page-grid {
-    display: grid;
-    gap: 1.25rem;
-  }
-
-  .form-card {
-    max-width: 600px;
-  }
-
-  .section-head {
-    align-items: center;
-    display: flex;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-  }
-
-  .section-pill {
-    background: var(--color-yellow-bg);
-    border-radius: 999px;
-    color: #92400e;
+    color: #9aa5b4;
     font-size: 0.75rem;
-    font-weight: 700;
-    padding: 4px 10px;
-  }
-
-  .stack-form,
-  .field {
-    display: grid;
-    gap: 0.45rem;
-  }
-
-  .stack-form {
-    gap: 1rem;
-  }
-
-  .field span {
-    color: var(--color-text-secondary);
-    font-size: 0.88rem;
     font-weight: 600;
   }
 
-  .table-card {
+  .breadcrumb__active {
+    color: #7b8794;
+  }
+
+  .workspace {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  .workspace__forms {
+    width: 380px;
+    flex-shrink: 0;
+  }
+
+  .workspace__data {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .forms-sticky {
+    position: sticky;
+    top: 0;
+  }
+
+  .flash-message {
+    margin: 0 0 14px;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+  }
+
+  .flash-message--error {
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+  }
+
+  .flash-message--success {
+    background: #d1fae5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+  }
+
+  .editor-card,
+  .data-card,
+  .topic-group-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
     overflow: hidden;
-    padding: 0;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
   }
 
-  .table-card__head {
-    padding: 20px 24px 0;
+  .editor-card {
+    margin-bottom: 16px;
   }
 
-  .table-wrap {
-    overflow-x: auto;
+  .editor-card__header {
+    position: relative;
+    padding: 16px 20px;
+    border-bottom: 1px solid #e2e8f0;
   }
 
-  .admin-table {
-    border-collapse: collapse;
-    width: 100%;
+  .editor-card__header--subject {
+    background: linear-gradient(135deg, #f8f9ff 0%, #eef0ff 100%);
   }
 
-  .admin-table th {
-    background: #f8f9ff;
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
+  .editor-card__header--topic {
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  }
+
+  .editor-card__header--resource {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  }
+
+  .editor-card__accent {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+  }
+
+  .editor-card__accent--subject {
+    background: linear-gradient(180deg, #0a0f1e, #2d3a6b);
+  }
+
+  .editor-card__accent--topic {
+    background: linear-gradient(180deg, #f5c518, #e6b800);
+  }
+
+  .editor-card__accent--resource {
+    background: #10b981;
+  }
+
+  .editor-card__title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .editor-card__title-row h2,
+  .data-card__header h2 {
+    margin: 0;
+    color: #0a0f1e;
+    font-size: 0.95rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 12px 20px;
-    text-align: left;
-    text-transform: uppercase;
   }
 
-  .admin-table td {
-    border-bottom: 1px solid var(--color-border);
+  .editor-card__title-row p {
+    margin: 3px 0 0;
+    color: #7b8794;
+    font-size: 0.75rem;
+  }
+
+  .editor-card__icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .editor-card__icon--subject {
+    background: #0a0f1e;
+    color: #fff;
+  }
+
+  .editor-card__icon--topic {
+    background: #f5c518;
+    color: #0a0f1e;
+  }
+
+  .editor-card__icon--resource {
+    background: #10b981;
+    color: #fff;
+  }
+
+  .editor-card__body {
+    padding: 20px;
+    display: grid;
+    gap: 14px;
+  }
+
+  .form-field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .form-field span {
+    color: #4a5568;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .form-field small {
+    color: #9aa5b4;
+    font-size: 0.72rem;
+    line-height: 1.45;
+  }
+
+  .form-input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8f9ff;
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.15s ease;
+  }
+
+  .form-input::placeholder {
+    color: #9aa5b4;
+  }
+
+  .form-input:focus,
+  .form-select:focus,
+  .form-textarea:focus {
+    border-color: #0a0f1e;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(10, 15, 30, 0.06);
+  }
+
+  .form-input--compact {
+    max-width: 120px;
+  }
+
+  .form-select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, #64748b 50%),
+      linear-gradient(135deg, #64748b 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 12px) calc(50% - 2px);
+    background-repeat: no-repeat;
+    background-size: 6px 6px, 6px 6px;
+    padding-right: 38px;
+  }
+
+  .form-textarea {
+    min-height: 60px;
+    resize: vertical;
+  }
+
+  .color-preview-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .color-preview {
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+  }
+
+  .color-preview small {
+    font-size: 0.7rem;
+  }
+
+  .color-preview__swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: var(--swatch);
+    border: 2px solid transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+
+  .color-preview__swatch--selected {
+    border-color: #0a0f1e;
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+
+  .submit-button {
+    width: 100%;
+    border: none;
+    border-radius: 10px;
+    padding: 11px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .submit-button--dark {
+    background: #0a0f1e;
+    color: #fff;
+  }
+
+  .submit-button--dark:hover {
+    background: #1a2544;
+  }
+
+  .submit-button--gold {
+    background: #f5c518;
+    color: #0a0f1e;
+  }
+
+  .submit-button--gold:hover {
+    background: #e6b800;
+  }
+
+  .submit-button--green {
+    background: #10b981;
+    color: #fff;
+  }
+
+  .submit-button--green:hover {
+    background: #0f9f70;
+  }
+
+  .data-card {
+    margin-bottom: 20px;
+  }
+
+  .data-card__header,
+  .topic-group-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+  }
+
+  .data-card__header {
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #f3f4f6;
+    color: #6b7280;
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .subject-row,
+  .topic-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
     padding: 14px 20px;
   }
 
-  .admin-table tbody tr:hover td {
-    background: #f8f9ff;
+  .subject-row {
+    justify-content: space-between;
+    border-bottom: 1px solid #f8f9ff;
   }
 
-  .admin-table tbody tr:last-child td {
+  .subject-row:last-child {
     border-bottom: none;
   }
 
-  .inline-edit {
+  .subject-row:hover,
+  .topic-row:hover {
+    background: #fafbff;
+  }
+
+  .subject-row__info,
+  .topic-group-card__title {
+    display: flex;
     align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .subject-row__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--subject-dot);
+    flex-shrink: 0;
+  }
+
+  .subject-row__name {
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .subject-row__meta {
+    margin-top: 2px;
+    color: #9aa5b4;
+    font-size: 0.75rem;
+  }
+
+  .order-badge {
+    background: #f3f4f6;
+    color: #6b7280;
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  .topics-groups {
     display: grid;
-    gap: 0.75rem;
-    grid-template-columns: minmax(220px, 1fr) 120px 120px;
+    gap: 16px;
   }
 
-  .inline-edit__button {
-    justify-self: start;
+  .topic-group-card__header {
+    position: relative;
   }
 
-  .text-muted {
-    color: var(--color-text-muted);
-    margin: 0;
+  .topic-group-card__accent {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--subject-color);
   }
 
-  .empty-state {
-    padding: 32px 24px;
+  .topic-group-card__title {
+    color: #0a0f1e;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .topic-row {
+    gap: 12px;
+    padding: 12px 20px 12px 28px;
+    border-top: 1px solid #f8f9ff;
+  }
+
+  .topic-row__order {
+    width: 24px;
+    flex-shrink: 0;
+    text-align: right;
+    color: #9aa5b4;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+
+  .topic-row__name {
+    min-width: 0;
+    flex: 1;
+    color: #0a0f1e;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .video-pill {
+    background: #f0fdf4;
+    color: #065f46;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .video-pill--empty {
+    background: #fef2f2;
+    color: #991b1b;
+  }
+
+  .ghost-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px 10px;
+    color: #4a5568;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+
+  .ghost-button:hover {
+    border-color: #0a0f1e;
+    color: #0a0f1e;
+  }
+
+  .empty-panel {
+    padding: 20px;
     text-align: center;
   }
 
-  .empty-state__icon {
-    color: var(--color-text-muted);
-    font-size: 60px;
-    line-height: 1;
-    margin-bottom: 0.75rem;
+  .empty-panel--tight {
+    font-size: 0.82rem;
+  }
+
+  .empty-panel p {
+    margin: 0;
+    color: #9aa5b4;
+    font-size: 0.82rem;
+  }
+
+  @media (max-width: 1100px) {
+    .workspace {
+      flex-direction: column;
+    }
+
+    .workspace__forms {
+      width: 100%;
+    }
+
+    .forms-sticky {
+      position: static;
+    }
   }
 
   @media (max-width: 760px) {
-    .inline-edit {
-      grid-template-columns: 1fr;
+    .page-intro {
+      margin-bottom: 14px;
+    }
+
+    .workspace {
+      gap: 18px;
+    }
+
+    .subject-row,
+    .topic-row,
+    .data-card__header,
+    .topic-group-card__header {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    .topic-row {
+      flex-wrap: wrap;
+      padding-left: 20px;
+    }
+
+    .topic-row__name {
+      flex-basis: calc(100% - 40px);
+    }
+
+    .ghost-button {
+      margin-left: 36px;
     }
   }
 </style>

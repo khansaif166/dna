@@ -14,6 +14,8 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+const statusFilter = Astro.url.searchParams.get('status')?.trim() ?? 'all';
 
 const [allSubjects, allTopics, allTests] = await Promise.all([
   db.select().from(subjects).orderBy(asc(subjects.order)),
@@ -23,6 +25,7 @@ const [allSubjects, allTopics, allTests] = await Promise.all([
       id: tests.id,
       title: tests.title,
       testType: tests.testType,
+      durationMinutes: tests.durationMinutes,
       status: tests.status,
       createdAt: tests.createdAt,
       subjectName: subjects.name,
@@ -36,184 +39,459 @@ const [allSubjects, allTopics, allTests] = await Promise.all([
     .groupBy(tests.id, subjects.name, topics.name)
     .orderBy(desc(tests.createdAt)),
 ]);
+
+const filteredTests = allTests.filter((test) => {
+  const matchesQuery =
+    !query ||
+    test.title.toLowerCase().includes(query.toLowerCase()) ||
+    (test.subjectName ?? '').toLowerCase().includes(query.toLowerCase()) ||
+    (test.topicName ?? '').toLowerCase().includes(query.toLowerCase());
+  const matchesStatus = statusFilter === 'all' || test.status === statusFilter;
+  return matchesQuery && matchesStatus;
+});
+
+const filterHref = (status: string) => {
+  const params = new URLSearchParams();
+
+  if (query) {
+    params.set('q', query);
+  }
+
+  if (status !== 'all') {
+    params.set('status', status);
+  }
+
+  const search = params.toString();
+  return search ? `/admin/tests?${search}` : '/admin/tests';
+};
 ---
 
-<AdminLayout title="Admin Tests | Dream Neet Academy" userName={admin.fullName}>
-  <section class="page-header">
-    <h1 class="heading-lg">Tests</h1>
+<AdminLayout
+  title="Admin Tests | Dream Neet Academy"
+  pageTitle="Tests"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <a slot="actions" href="#create-test" class="top-action">+ Add Test</a>
+
+  <section class="filters-card">
+    <form action="/admin/tests" method="GET" class="filters-form">
+      <label class="search-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input type="search" name="q" value={query} placeholder="Search tests, subjects, or topics" />
+      </label>
+
+      <div class="filter-pills" aria-label="Status filters">
+        <a href={filterHref('all')} class:list={['filter-pill', { 'filter-pill--active': statusFilter === 'all' }]}>All</a>
+        <a
+          href={filterHref('published')}
+          class:list={['filter-pill', { 'filter-pill--active': statusFilter === 'published' }]}
+        >
+          Published
+        </a>
+        <a href={filterHref('draft')} class:list={['filter-pill', { 'filter-pill--active': statusFilter === 'draft' }]}>
+          Draft
+        </a>
+      </div>
+    </form>
   </section>
 
-  <section class="page-grid">
-    <div class="card form-card">
-      <div class="section-head">
-        <span class="section-pill">Create</span>
-        <h2 class="heading-md">Create Test</h2>
+  <section class="tests-card">
+    <div class="tests-card__header">
+      <div class="tests-card__header-row tests-card__header-row--labels">
+        <span>Test</span>
+        <span>Details</span>
+        <span>Status</span>
       </div>
-
-      <form action="/api/admin/tests" method="POST" class="stack-form">
-        <label class="field">
-          <span>Title</span>
-          <input class="input-field" type="text" name="title" required />
-        </label>
-        <label class="field">
-          <span>Subject</span>
-          <select class="input-field input-select" name="subject_id">
-            <option value="">None</option>
-            {allSubjects.map((subject) => (
-              <option value={subject.id}>{subject.name}</option>
-            ))}
-          </select>
-        </label>
-        <label class="field">
-          <span>Topic</span>
-          <select class="input-field input-select" name="topic_id">
-            <option value="">None</option>
-            {allTopics.map((topic) => (
-              <option value={topic.id}>{topic.name}</option>
-            ))}
-          </select>
-        </label>
-        <label class="field">
-          <span>Duration Minutes</span>
-          <input class="input-field" type="number" name="duration_minutes" min="1" required />
-        </label>
-        <label class="field">
-          <span>Test Type</span>
-          <select class="input-field input-select" name="test_type" required>
-            <option value="topic_practice">topic_practice</option>
-            <option value="mock_exam">mock_exam</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Attempt Mode</span>
-          <select class="input-field input-select" name="attempt_mode" required>
-            <option value="multiple">multiple</option>
-            <option value="single">single</option>
-          </select>
-        </label>
-        <button type="submit" class="btn-primary">Create Test</button>
-      </form>
     </div>
 
-    <div class="card table-card">
-      <div class="table-card__head">
-        <h2 class="heading-md">All Tests</h2>
-      </div>
+    {filteredTests.length ? (
+      <div class="tests-list">
+        {filteredTests.map((test) => (
+          <article class="test-row">
+            <div class="test-row__title-block">
+              <div class="test-row__title-line">
+                <span class:list={['test-row__dot', { 'test-row__dot--published': test.status === 'published' }]}></span>
+                <a href={`/admin/tests/${test.id}`} class="test-row__title">{test.title}</a>
+              </div>
+              <div class="test-row__meta">
+                <span>{test.subjectName ?? 'General'}</span>
+                <span>·</span>
+                <span>{test.topicName ?? 'No topic'}</span>
+              </div>
+            </div>
 
-      {allTests.length ? (
-        <div class="table-wrap">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th scope="col">Title</th>
-                <th scope="col">Type</th>
-                <th scope="col">Status</th>
-                <th scope="col">Created</th>
-                <th scope="col">Questions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {allTests.map((test) => (
-                <tr>
-                  <td>
-                    <a href={`/admin/tests/${test.id}`} class="action-link">{test.title}</a>
-                    <div class="row-meta">Subject: {test.subjectName ?? '-'}</div>
-                    <div class="row-meta">Topic: {test.topicName ?? '-'}</div>
-                  </td>
-                  <td>{test.testType}</td>
-                  <td>
-                    <span class:list={[test.status === 'published' ? 'badge-success' : 'badge-pending']}>
-                      {test.status}
-                    </span>
-                  </td>
-                  <td>{test.createdAt?.toLocaleString() ?? '-'}</td>
-                  <td>{test.questionCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div class="empty-state">
-          <div class="empty-state__icon">▣</div>
-          <h3 class="heading-md">No tests created yet</h3>
-          <p class="text-muted">Create a test to start building question sets.</p>
-        </div>
-      )}
+            <div class="test-row__chips">
+              <span class="meta-chip">{test.questionCount} questions</span>
+              <span class="meta-chip">{test.durationMinutes} min</span>
+            </div>
+
+            <div class="test-row__actions">
+              <span class:list={['status-badge', test.status === 'published' ? 'status-badge--published' : 'status-badge--draft']}>
+                {test.status}
+              </span>
+              <a href={`/admin/tests/${test.id}`} class="edit-link">Edit</a>
+              <form action={`/api/admin/tests/${test.id}/publish`} method="POST">
+                <input type="hidden" name="test_id" value={test.id} />
+                <button
+                  type="submit"
+                  class="toggle-btn"
+                  aria-label={test.status === 'published' ? 'Unpublish test' : 'Publish test'}
+                >
+                  {test.status === 'published' ? '↺' : '↑'}
+                </button>
+              </form>
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div class="empty-state">No tests matched this filter. Try another search or create a new test.</div>
+    )}
+  </section>
+
+  <section id="create-test" class="create-card">
+    <div class="create-card__head">
+      <div>
+        <p class="eyebrow">Create New</p>
+        <h2>Add Test</h2>
+      </div>
     </div>
+
+    <form action="/api/admin/tests" method="POST" class="create-form">
+      <label class="field field--wide">
+        <span>Title</span>
+        <input class="input-field" type="text" name="title" required />
+      </label>
+      <label class="field">
+        <span>Subject</span>
+        <select class="input-field input-select" name="subject_id">
+          <option value="">None</option>
+          {allSubjects.map((subject) => (
+            <option value={subject.id}>{subject.name}</option>
+          ))}
+        </select>
+      </label>
+      <label class="field">
+        <span>Topic</span>
+        <select class="input-field input-select" name="topic_id">
+          <option value="">None</option>
+          {allTopics.map((topic) => (
+            <option value={topic.id}>{topic.name}</option>
+          ))}
+        </select>
+      </label>
+      <label class="field">
+        <span>Duration Minutes</span>
+        <input class="input-field" type="number" name="duration_minutes" min="1" required />
+      </label>
+      <label class="field">
+        <span>Test Type</span>
+        <select class="input-field input-select" name="test_type" required>
+          <option value="topic_practice">Topic Practice</option>
+          <option value="mock_exam">Mock Exam</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Attempt Mode</span>
+        <select class="input-field input-select" name="attempt_mode" required>
+          <option value="multiple">Multiple Attempts</option>
+          <option value="single">Single Attempt</option>
+        </select>
+      </label>
+      <button type="submit" class="submit-btn">Create Test →</button>
+    </form>
   </section>
 </AdminLayout>
 
 <style>
-  .page-header {
-    margin-bottom: 24px;
-  }
-
-  .heading-lg,
-  .heading-md {
-    color: var(--color-navy);
-    margin: 0;
-  }
-
-  .heading-lg {
-    font-size: clamp(1.9rem, 3vw, 2.4rem);
-    font-weight: 800;
-  }
-
-  .heading-md {
-    font-size: 1.15rem;
+  .top-action,
+  .submit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #0a0f1e;
+    color: #fff;
+    font-size: 0.82rem;
     font-weight: 700;
+    padding: 9px 14px;
   }
 
-  .page-grid,
-  .stack-form,
-  .field {
+  .filters-card,
+  .tests-card,
+  .create-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+  }
+
+  .filters-card {
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+
+  .filters-form {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .search-field {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .search-field svg {
+    width: 18px;
+    height: 18px;
+    stroke: #9aa5b4;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  .search-field input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.9rem;
+    color: #0a0f1e;
+  }
+
+  .filter-pills {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filter-pill {
+    padding: 4px 14px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .filter-pill--active {
+    background: #0a0f1e;
+    color: #fff;
+  }
+
+  .tests-card {
+    overflow: hidden;
+  }
+
+  .tests-card__header {
+    background: #f8f9ff;
+    border-bottom: 1px solid #f1f3f9;
+  }
+
+  .tests-card__header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.8fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 20px;
+  }
+
+  .tests-card__header-row--labels {
+    color: #9aa5b4;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tests-list {
     display: grid;
   }
 
-  .page-grid {
-    gap: 1.25rem;
-  }
-
-  .form-card {
-    max-width: 600px;
-  }
-
-  .stack-form {
-    gap: 1rem;
-  }
-
-  .section-head {
+  .test-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.8fr) auto;
+    gap: 16px;
     align-items: center;
-    display: flex;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
+    padding: 16px 20px;
+    border-bottom: 1px solid #f1f3f9;
+    transition: background 0.15s ease;
   }
 
-  .section-pill {
-    background: var(--color-yellow-bg);
+  .test-row:hover {
+    background: #fafbff;
+  }
+
+  .test-row:last-child {
+    border-bottom: none;
+  }
+
+  .test-row__title-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .test-row__dot {
+    width: 8px;
+    height: 8px;
     border-radius: 999px;
-    color: #92400e;
+    background: #9ca3af;
+    flex-shrink: 0;
+  }
+
+  .test-row__dot--published {
+    background: #10b981;
+  }
+
+  .test-row__title {
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .test-row__meta {
+    margin-top: 6px;
+    color: #9aa5b4;
     font-size: 0.75rem;
-    font-weight: 700;
+  }
+
+  .test-row__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .meta-chip {
+    background: #f3f4f6;
+    color: #6b7280;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .test-row__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+
+  .status-badge--published {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .status-badge--draft {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .edit-link {
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .toggle-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .empty-state {
+    padding: 28px 20px;
+    color: #9aa5b4;
+    font-size: 0.875rem;
+  }
+
+  .create-card {
+    margin-top: 18px;
+    padding: 20px;
+  }
+
+  .create-card__head {
+    margin-bottom: 14px;
+  }
+
+  .eyebrow {
+    margin: 0 0 4px;
+    color: #9aa5b4;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .create-card__head h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .create-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    align-items: end;
   }
 
   .field {
-    gap: 0.45rem;
+    display: grid;
+    gap: 6px;
+  }
+
+  .field--wide {
+    grid-column: 1 / -1;
   }
 
   .field span {
-    color: var(--color-text-secondary);
-    font-size: 0.88rem;
+    color: #4a5568;
+    font-size: 0.82rem;
     font-weight: 600;
+  }
+
+  .input-field {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.9rem;
   }
 
   .input-select {
     appearance: none;
     background-image:
-      linear-gradient(45deg, transparent 50%, var(--color-text-secondary) 50%),
-      linear-gradient(135deg, var(--color-text-secondary) 50%, transparent 50%);
+      linear-gradient(45deg, transparent 50%, #64748b 50%),
+      linear-gradient(135deg, #64748b 50%, transparent 50%);
     background-position:
       calc(100% - 18px) calc(50% - 2px),
       calc(100% - 12px) calc(50% - 2px);
@@ -222,75 +500,33 @@ const [allSubjects, allTopics, allTests] = await Promise.all([
     padding-right: 38px;
   }
 
-  .table-card {
-    overflow: hidden;
-    padding: 0;
+  @media (max-width: 1080px) {
+    .tests-card__header-row,
+    .test-row {
+      grid-template-columns: 1fr;
+    }
+
+    .test-row__actions {
+      justify-content: flex-start;
+    }
+
+    .create-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
-  .table-card__head {
-    padding: 20px 24px 0;
-  }
+  @media (max-width: 720px) {
+    .filters-form {
+      flex-direction: column;
+      align-items: stretch;
+    }
 
-  .table-wrap {
-    overflow-x: auto;
-  }
+    .filter-pills {
+      flex-wrap: wrap;
+    }
 
-  .admin-table {
-    border-collapse: collapse;
-    width: 100%;
-  }
-
-  .admin-table th {
-    background: #f8f9ff;
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 12px 20px;
-    text-align: left;
-    text-transform: uppercase;
-  }
-
-  .admin-table td {
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    padding: 14px 20px;
-    vertical-align: top;
-  }
-
-  .admin-table tbody tr:hover td {
-    background: #f8f9ff;
-  }
-
-  .admin-table tbody tr:last-child td {
-    border-bottom: none;
-  }
-
-  .action-link {
-    color: var(--color-navy);
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  .row-meta {
-    font-size: 0.82rem;
-    margin-top: 0.25rem;
-  }
-
-  .text-muted {
-    color: var(--color-text-muted);
-    margin: 0;
-  }
-
-  .empty-state {
-    padding: 32px 24px;
-    text-align: center;
-  }
-
-  .empty-state__icon {
-    color: var(--color-text-muted);
-    font-size: 60px;
-    line-height: 1;
-    margin-bottom: 0.75rem;
+    .create-form {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

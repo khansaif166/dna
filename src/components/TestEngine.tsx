@@ -4,7 +4,7 @@ import styles from './TestEngine.module.css';
 
 type OptionKey = 'a' | 'b' | 'c' | 'd';
 
-type Question = {
+type SafeQuestion = {
   id: string;
   prompt: string;
   optionA: string;
@@ -15,16 +15,31 @@ type Question = {
 };
 
 type Props = {
-  questions: Question[];
+  questions: SafeQuestion[];
   attemptId: string;
   durationSeconds: number;
-  testTitle?: string;
+  testTitle: string;
 };
 
-const optionKeys = ['a', 'b', 'c', 'd'] as const;
+const optionKeys: OptionKey[] = ['a', 'b', 'c', 'd'];
 
 function classNames(...names: Array<string | false | null | undefined>) {
   return names.filter(Boolean).join(' ');
+}
+
+function getOptionLabels(question: SafeQuestion) {
+  return {
+    a: question.optionA,
+    b: question.optionB,
+    c: question.optionC,
+    d: question.optionD,
+  } satisfies Record<OptionKey, string>;
+}
+
+function formatTime(secondsLeft: number) {
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = secondsLeft % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 export default function TestEngine({ questions, attemptId, durationSeconds, testTitle }: Props) {
@@ -36,12 +51,13 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
   const secondsLeftRef = useRef(durationSeconds);
   const isSubmittingRef = useRef(false);
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Record<string, OptionKey | null>>(() =>
     Object.fromEntries(questions.map((question) => [question.id, null]))
   );
   const [secondsLeft, setSecondsLeft] = useState(durationSeconds);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [autoSubmitted, setAutoSubmitted] = useState(false);
 
@@ -113,21 +129,52 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
   useEffect(() => {
     const savedDraft = window.localStorage.getItem(draftKey);
 
-    if (savedDraft) {
-      try {
-        const parsedDraft = JSON.parse(savedDraft) as Record<string, OptionKey | null>;
-        setAnswers((currentAnswers) => ({
-          ...currentAnswers,
-          ...parsedDraft,
-        }));
-      } catch {
-        window.localStorage.removeItem(draftKey);
-      }
+    if (!savedDraft) {
+      return;
+    }
+
+    try {
+      const parsedDraft = JSON.parse(savedDraft) as Record<string, OptionKey | null>;
+      setAnswers((currentAnswers) => ({
+        ...currentAnswers,
+        ...parsedDraft,
+      }));
+    } catch {
+      window.localStorage.removeItem(draftKey);
     }
   }, [draftKey]);
 
+  useEffect(() => {
+    startTimer();
+    startAutosave();
+
+    return () => {
+      clearIntervals();
+    };
+  }, [draftKey]);
+
+  function handleAnswer(option: OptionKey) {
+    const question = questions[currentIndex];
+
+    if (!question) {
+      return;
+    }
+
+    setAnswers((currentAnswers) => ({
+      ...currentAnswers,
+      [question.id]: option,
+    }));
+  }
+
+  function clearAnswer(questionId: string) {
+    setAnswers((currentAnswers) => ({
+      ...currentAnswers,
+      [questionId]: null,
+    }));
+  }
+
   async function handleSubmit() {
-    if (isSubmittingRef.current) {
+    if (isSubmittingRef.current || submitted) {
       return;
     }
 
@@ -163,185 +210,204 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
       return;
     }
 
+    setSubmitted(true);
     window.localStorage.removeItem(draftKey);
     window.location.href = `/student/attempts/${attemptId}`;
   }
 
   submitRef.current = handleSubmit;
 
-  useEffect(() => {
-    startTimer();
-    startAutosave();
-
-    return () => {
-      clearIntervals();
-    };
-  }, [draftKey]);
-
-  const currentQuestion = questions[currentIndex];
+  const q = questions[currentIndex];
   const answeredCount = Object.values(answers).filter((value) => value !== null).length;
-  const minutes = Math.floor(secondsLeft / 60);
-  const seconds = secondsLeft % 60;
-  const timerValue = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  const isTimerWarning = secondsLeft <= 300;
+  const isWarning = secondsLeft <= 300;
 
-  if (!currentQuestion) {
+  if (!q) {
     return (
-      <section className={styles.emptyState}>
+      <div className={styles.emptyState}>
         <p className={styles.emptyCard}>No questions are available for this test yet.</p>
-      </section>
+      </div>
     );
   }
 
+  const optionLabels = getOptionLabels(q);
+
   return (
-    <section className={styles.engine}>
-      {isSubmitting && (
-        <div className={styles.overlay}>
-          <div className={styles.overlayCard}>
-            <div className={styles.spinner} aria-hidden="true"></div>
-            <p className={styles.overlayTitle}>Submitting your answers...</p>
-            <p className={styles.overlayText}>Please do not close this page</p>
-          </div>
+    <div className={styles.root}>
+      {autoSubmitted && (
+        <div className={styles.autoSubmitBanner}>
+          ⏰ Time&apos;s up! Submitting your answers automatically...
         </div>
       )}
 
-      <header className={styles.topBar}>
-        <p className={styles.title}>{testTitle ?? 'Test'}</p>
-        <div className={classNames(styles.timer, isTimerWarning && styles.timerWarning)}>{timerValue}</div>
-        <div className={styles.topBarRight}>
+      <div className={classNames(styles.topbar, isWarning && styles.timerWarning)}>
+        <div className={styles.topbarLeft}>
+          <span className={styles.testTitle}>{testTitle}</span>
+        </div>
+
+        <div className={styles.timerWrapper}>
+          <svg
+            aria-hidden="true"
+            className={styles.timerIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="13" r="8" />
+            <path d="M12 9v4l2.5 2.5" />
+            <path d="M9 3h6" />
+          </svg>
+          <span className={styles.timerText}>{formatTime(secondsLeft)}</span>
+        </div>
+
+        <div className={styles.topbarRight}>
           <span className={styles.progressText}>
             {answeredCount} / {questions.length} answered
           </span>
           <button
-            className={styles.submitTopButton}
+            className={styles.submitBtnTop}
             type="button"
-            disabled={isSubmitting}
             onClick={() => void handleSubmit()}
+            disabled={isSubmitting}
           >
-            Submit
+            Submit Test
           </button>
         </div>
-      </header>
+      </div>
 
-      <div className={styles.contentArea}>
-        <main className={styles.mainPane}>
-          <div className={styles.mainPaneInner}>
-            {autoSubmitted && <div className={styles.autoSubmitNote}>Time is up! Submitting your answers...</div>}
-            {submitError && <div className={styles.errorNote}>{submitError}</div>}
+      <div className={styles.body}>
+        <div className={styles.questionArea}>
+          <div className={styles.questionInner}>
             {submitError && (
-              <button className={styles.retryButton} type="button" onClick={() => void handleSubmit()}>
-                Retry submission
-              </button>
+              <div className={styles.errorBanner}>
+                <span className={styles.errorText}>{submitError}</span>
+                <button className={styles.retryBtn} type="button" onClick={() => void handleSubmit()}>
+                  Retry
+                </button>
+              </div>
             )}
 
-            <p className={styles.questionLabel}>Question {currentQuestion.order}</p>
-            <p className={styles.questionPrompt}>{currentQuestion.prompt}</p>
-
-            <div className={styles.optionsList}>
-              {optionKeys.map((optionKey) => {
-                const optionValue =
-                  optionKey === 'a'
-                    ? currentQuestion.optionA
-                    : optionKey === 'b'
-                      ? currentQuestion.optionB
-                      : optionKey === 'c'
-                        ? currentQuestion.optionC
-                        : currentQuestion.optionD;
-                const isSelected = answers[currentQuestion.id] === optionKey;
-
-                return (
-                  <button
-                    key={optionKey}
-                    type="button"
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      setAnswers((currentAnswers) => ({
-                        ...currentAnswers,
-                        [currentQuestion.id]: optionKey,
-                      }));
-                    }}
-                    className={classNames(styles.optionButton, isSelected && styles.optionSelected)}
-                  >
-                    <span className={styles.optionBubble}>{optionKey.toUpperCase()}</span>
-                    <span className={styles.optionText}>{optionValue}</span>
-                  </button>
-                );
-              })}
+            <div className={styles.questionMeta}>
+              <span className={styles.questionNumber}>Question {currentIndex + 1}</span>
             </div>
 
-            <div className={styles.navigationRow}>
+            <div className={styles.questionCard}>
+              <p className={styles.questionText}>{q.prompt}</p>
+            </div>
+
+            <div className={styles.optionsGrid}>
+              {optionKeys.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  className={classNames(styles.optionBtn, answers[q.id] === opt && styles.selected)}
+                  onClick={() => handleAnswer(opt)}
+                  disabled={isSubmitting}
+                >
+                  <div className={styles.optionLetter}>{opt.toUpperCase()}</div>
+                  <span className={styles.optionText}>{optionLabels[opt]}</span>
+                  {answers[q.id] === opt && <div className={styles.selectedCheckmark}>✓</div>}
+                </button>
+              ))}
+            </div>
+
+            <div className={styles.navRow}>
               <button
-                className={classNames(styles.navButton, styles.navButtonSecondary)}
+                className={styles.navBtn}
                 type="button"
+                onClick={() => setCurrent((index) => Math.max(index - 1, 0))}
                 disabled={isSubmitting || currentIndex === 0}
-                onClick={() => setCurrentIndex((index) => Math.max(index - 1, 0))}
               >
                 ← Previous
               </button>
+
+              {answers[q.id] && (
+                <button className={styles.clearBtn} type="button" onClick={() => clearAnswer(q.id)}>
+                  Clear selection
+                </button>
+              )}
+
               <button
-                className={styles.navButton}
+                className={styles.navBtn}
                 type="button"
+                onClick={() => setCurrent((index) => Math.min(index + 1, questions.length - 1))}
                 disabled={isSubmitting || currentIndex === questions.length - 1}
-                onClick={() => setCurrentIndex((index) => Math.min(index + 1, questions.length - 1))}
               >
                 Next →
               </button>
             </div>
           </div>
-        </main>
+        </div>
 
-        <aside className={styles.sidePane}>
-          <h2 className={styles.paletteTitle}>Question Palette</h2>
-
-          <div className={styles.legendRow}>
-            <div className={styles.legendItem}>
-              <span className={classNames(styles.legendDot, styles.legendDotAnswered)}></span>
-              <span>Answered</span>
+        <div className={styles.paletteShell}>
+          <div className={styles.palette}>
+            <div className={styles.paletteHeader}>
+              <div className={styles.paletteTitle}>Question Palette</div>
+              <div className={styles.paletteLegend}>
+                <div className={styles.legendItem}>
+                  <div className={classNames(styles.legendDot, styles.answered)} />
+                  Answered
+                </div>
+                <div className={styles.legendItem}>
+                  <div className={classNames(styles.legendDot, styles.current)} />
+                  Current
+                </div>
+                <div className={styles.legendItem}>
+                  <div className={classNames(styles.legendDot, styles.skipped)} />
+                  Skipped
+                </div>
+              </div>
             </div>
-            <div className={styles.legendItem}>
-              <span className={classNames(styles.legendDot, styles.legendDotSkipped)}></span>
-              <span>Not visited</span>
-            </div>
-          </div>
 
-          <div className={styles.paletteGrid}>
-            {questions.map((question, index) => {
-              const isCurrent = index === currentIndex;
-              const isAnswered = answers[question.id] !== null;
-
-              return (
+            <div className={styles.paletteGrid}>
+              {questions.map((question, index) => (
                 <button
                   key={question.id}
-                  className={classNames(
-                    styles.paletteButton,
-                    isAnswered && styles.paletteButtonAnswered,
-                    isCurrent && styles.paletteButtonCurrent
-                  )}
                   type="button"
+                  className={classNames(
+                    styles.paletteBtn,
+                    index === currentIndex
+                      ? styles.pCurrent
+                      : answers[question.id]
+                        ? styles.pAnswered
+                        : styles.pSkipped
+                  )}
+                  onClick={() => setCurrent(index)}
                   disabled={isSubmitting}
-                  onClick={() => setCurrentIndex(index)}
                 >
-                  {question.order}
+                  {index + 1}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          <div className={styles.paletteSubmit}>
-            <p className={styles.paletteSubmitText}>
-              {answeredCount} of {questions.length} answered
-            </p>
-            <button
-              className={styles.submitPaletteButton}
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => void handleSubmit()}
-            >
-              Submit Test
-            </button>
+            <div className={styles.paletteFooter}>
+              <p className={styles.paletteCount}>
+                <strong>{answeredCount}</strong> of {questions.length} answered
+              </p>
+              <button
+                className={styles.submitBtnPalette}
+                type="button"
+                onClick={() => void handleSubmit()}
+                disabled={isSubmitting}
+              >
+                Submit Test →
+              </button>
+            </div>
           </div>
-        </aside>
+        </div>
       </div>
-    </section>
+
+      {isSubmitting && (
+        <div className={styles.overlay}>
+          <div className={styles.overlayCard}>
+            <div className={styles.spinner} />
+            <p className={styles.overlayTitle}>Submitting your test...</p>
+            <p className={styles.overlaySubtext}>Please do not close this page</p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

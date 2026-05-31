@@ -20,13 +20,13 @@ const successMessages: Record<string, string> = {
 const subjects = ['Physics', 'Chemistry', 'Biology'];
 ---
 
-<PlatformLayout title="Login | Dream NEET Academy" showNav={false}>
+<PlatformLayout title="Login | Dream Neet Academy" showNav={false}>
   <section class="auth-shell">
     <aside class="auth-panel auth-panel--brand">
       <div class="auth-panel__content">
         <div class="auth-brand">
-          <span class="auth-brand__mark">DNA</span>
-          <span class="auth-brand__text">Dream NEET Academy</span>
+          <img src="/images/logo.jpeg" alt="Dream Neet Academy logo" class="auth-brand__logo" />
+          <span class="auth-brand__text">Dream Neet Academy</span>
         </div>
 
         <div class="auth-panel__copy">
@@ -129,18 +129,12 @@ const subjects = ['Physics', 'Chemistry', 'Biology'];
     gap: 0.9rem;
   }
 
-  .auth-brand__mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  .auth-brand__logo {
     width: 48px;
     height: 48px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.18);
-    color: var(--color-surface);
-    font-size: 0.9rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
+    object-fit: cover;
   }
 
   .auth-brand__text {

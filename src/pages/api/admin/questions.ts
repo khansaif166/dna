@@ -18,6 +18,39 @@ const questionSchema = z.object({
   correct_option: z.enum(['a', 'b', 'c', 'd']),
   explanation: z.string().optional().or(z.literal('')),
   order: z.coerce.number().int(),
+}).superRefine((data, ctx) => {
+  const normalizedOptions = [
+    { key: 'option_a', value: data.option_a.trim().toLowerCase() },
+    { key: 'option_b', value: data.option_b.trim().toLowerCase() },
+    { key: 'option_c', value: data.option_c.trim().toLowerCase() },
+    { key: 'option_d', value: data.option_d.trim().toLowerCase() },
+  ];
+
+  const seen = new Map<string, string>();
+
+  for (const option of normalizedOptions) {
+    if (!option.value) {
+      continue;
+    }
+
+    const duplicateOf = seen.get(option.value);
+
+    if (duplicateOf) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [option.key],
+        message: 'Each option must be unique.',
+      });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [duplicateOf],
+        message: 'Each option must be unique.',
+      });
+      return;
+    }
+
+    seen.set(option.value, option.key);
+  }
 });
 
 export const POST: APIRoute = async (context) => {
@@ -45,7 +78,8 @@ export const POST: APIRoute = async (context) => {
   });
 
   if (!parsed.success) {
-    return new Response('Invalid question input', { status: 400 });
+    const duplicateError = parsed.error.issues.find((issue) => issue.message === 'Each option must be unique.');
+    return new Response(duplicateError?.message ?? 'Invalid question input', { status: 400 });
   }
 
   try {

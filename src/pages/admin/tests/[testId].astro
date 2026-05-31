@@ -43,303 +43,436 @@ if (!testRows || testRows.length === 0) {
 }
 
 const [test] = testRows;
-
 const testQuestions = await db.select().from(questions).where(eq(questions.testId, test.id)).orderBy(asc(questions.order));
+const nextOrder = (testQuestions.at(-1)?.order ?? 0) + 1;
 ---
 
-<AdminLayout title={`${test.title} | Admin | Dream Neet Academy`} userName={admin.fullName}>
-  <section class="page-header">
-    <h1 class="heading-lg">{test.title}</h1>
-  </section>
+<AdminLayout
+  title={`${test.title} | Admin | Dream Neet Academy`}
+  pageTitle="Questions"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <form slot="actions" action={`/api/admin/tests/${test.id}/publish`} method="POST">
+    <input type="hidden" name="test_id" value={test.id} />
+    <button type="submit" class:list={['publish-btn', { 'publish-btn--published': test.status === 'published' }]}>
+      {test.status === 'published' ? 'Published · Unpublish' : 'Publish Test'}
+    </button>
+  </form>
 
-  <section class="page-grid">
-    <div class="card meta-card">
-      <div class="meta-card__head">
-        <div>
-          <p class="meta-label">Metadata</p>
-          <h2 class="heading-md">Test Details</h2>
-        </div>
-        <form action={`/api/admin/tests/${test.id}/publish`} method="POST">
-          <input type="hidden" name="test_id" value={test.id} />
-          <button
-            type="submit"
-            class:list={[
-              test.status === 'draft' ? 'btn-yellow publish-button' : 'publish-button publish-button--published',
-            ]}
-          >
-            {test.status === 'draft' ? 'Publish Test →' : '✓ Published · Unpublish'}
-          </button>
-        </form>
-      </div>
-
-      <div class="meta-grid">
-        <div><span>Type</span><strong>{test.testType}</strong></div>
-        <div><span>Status</span><strong>{test.status}</strong></div>
-        <div><span>Attempt Mode</span><strong>{test.attemptMode}</strong></div>
-        <div><span>Duration</span><strong>{test.durationMinutes} minutes</strong></div>
-        <div><span>Subject</span><strong>{test.subjectName ?? '-'}</strong></div>
-        <div><span>Topic</span><strong>{test.topicName ?? '-'}</strong></div>
-        <div><span>Created</span><strong>{test.createdAt?.toLocaleString() ?? '-'}</strong></div>
-        <div><span>Published</span><strong>{test.publishedAt?.toLocaleString() ?? '-'}</strong></div>
-      </div>
+  <section class="test-meta">
+    <div>
+      <p class="eyebrow">Question Editor</p>
+      <h2>{test.title}</h2>
+      <p class="test-meta__sub">{test.subjectName ?? 'General'} · {test.topicName ?? 'No topic assigned'}</p>
     </div>
 
-    <div class="card questions-card">
-      <div class="section-head">
-        <span class="section-pill">Library</span>
-        <h2 class="heading-md">Questions</h2>
-      </div>
+    <div class="meta-chips">
+      <span class="meta-chip">{testQuestions.length} questions</span>
+      <span class="meta-chip">{test.durationMinutes} min</span>
+      <span class="meta-chip meta-chip--status">{test.status}</span>
+      <span class="meta-chip">{test.testType.replace('_', ' ')}</span>
+      <span class="meta-chip">{test.attemptMode.replace('_', ' ')}</span>
+    </div>
+  </section>
 
+  <section class="editor-grid">
+    <div class="questions-pane">
       {testQuestions.length ? (
         <div class="question-list">
           {testQuestions.map((question) => (
-            <article class="question-entry">
-              <div class="question-entry__head">
-                <span class="question-order">Q{question.order}</span>
-                <span class="badge-yellow">Correct: {question.correctOption.toUpperCase()}</span>
+            <article class="question-card">
+              <div class="question-card__head">
+                <div class="question-card__summary">
+                  <span class="question-card__badge">Q{question.order}</span>
+                  <strong>{question.prompt}</strong>
+                </div>
+
+                <div class="question-card__actions">
+                  <button type="button" class="ghost-btn" disabled>Edit</button>
+                  <button type="button" class="ghost-btn ghost-btn--danger" disabled>Delete</button>
+                </div>
               </div>
-              <p class="question-entry__prompt">{question.prompt}</p>
-              <ul class="question-options">
-                <li>A. {question.optionA}</li>
-                <li>B. {question.optionB}</li>
-                <li>C. {question.optionC}</li>
-                <li>D. {question.optionD}</li>
-              </ul>
-              <p class="question-entry__explanation">
-                <strong>Explanation:</strong> {question.explanation ?? '-'}
-              </p>
+
+              <div class="option-grid">
+                <span class:list={['option-chip', { 'option-chip--correct': question.correctOption === 'a' }]}>
+                  A. {question.optionA}
+                </span>
+                <span class:list={['option-chip', { 'option-chip--correct': question.correctOption === 'b' }]}>
+                  B. {question.optionB}
+                </span>
+                <span class:list={['option-chip', { 'option-chip--correct': question.correctOption === 'c' }]}>
+                  C. {question.optionC}
+                </span>
+                <span class:list={['option-chip', { 'option-chip--correct': question.correctOption === 'd' }]}>
+                  D. {question.optionD}
+                </span>
+              </div>
+
+              {question.explanation && <p class="question-card__explanation">{question.explanation}</p>}
             </article>
           ))}
         </div>
       ) : (
-        <div class="empty-state empty-state--compact">
-          <div class="empty-state__icon">📝</div>
-          <h3 class="heading-md">No questions yet</h3>
-          <p class="text-muted">Use the form below to add the first question to this test.</p>
-        </div>
+        <div class="empty-state">No questions added yet. Use the form to create the first question in this test.</div>
       )}
     </div>
 
-    <div class="card form-card">
-      <div class="section-head">
-        <span class="section-pill">Create</span>
-        <h2 class="heading-md">Add Question</h2>
-      </div>
-
-      <form action="/api/admin/questions" method="POST" class="stack-form">
-        <input type="hidden" name="test_id" value={test.id} />
-        <label class="field">
-          <span>Prompt</span>
-          <textarea class="input-field textarea-field" name="prompt" required></textarea>
-        </label>
-        <label class="field">
-          <span>Option A</span>
-          <input class="input-field" type="text" name="option_a" required />
-        </label>
-        <label class="field">
-          <span>Option B</span>
-          <input class="input-field" type="text" name="option_b" required />
-        </label>
-        <label class="field">
-          <span>Option C</span>
-          <input class="input-field" type="text" name="option_c" required />
-        </label>
-        <label class="field">
-          <span>Option D</span>
-          <input class="input-field" type="text" name="option_d" required />
-        </label>
-
-        <fieldset class="radio-group">
-          <legend>Correct Option</legend>
-          <div class="radio-grid">
-            {(['a', 'b', 'c', 'd'] as const).map((option) => (
-              <label class="radio-card">
-                <input type="radio" name="correct_option" value={option} required />
-                <span>{option.toUpperCase()}</span>
-              </label>
-            ))}
+    <aside class="form-pane">
+      <div class="form-card">
+        <div class="form-card__head">
+          <span class="form-card__accent"></span>
+          <div>
+            <p class="eyebrow">Create New</p>
+            <h2>Add Question</h2>
           </div>
-        </fieldset>
+        </div>
 
-        <label class="field">
-          <span>Explanation</span>
-          <textarea class="input-field textarea-field" name="explanation"></textarea>
-        </label>
-        <label class="field">
-          <span>Order</span>
-          <input class="input-field" type="number" name="order" required />
-        </label>
-        <button type="submit" class="btn-primary">Add Question</button>
-      </form>
-    </div>
+        <form action="/api/admin/questions" method="POST" class="question-form" data-question-form>
+          <input type="hidden" name="test_id" value={test.id} />
+
+          <label class="field">
+            <span>Prompt</span>
+            <textarea class="input-field textarea-field" name="prompt" required></textarea>
+          </label>
+
+          <div class="options-fields">
+            <label class="field">
+              <span>Option A</span>
+              <input class="input-field" type="text" name="option_a" required />
+            </label>
+            <label class="field">
+              <span>Option B</span>
+              <input class="input-field" type="text" name="option_b" required />
+            </label>
+            <label class="field">
+              <span>Option C</span>
+              <input class="input-field" type="text" name="option_c" required />
+            </label>
+            <label class="field">
+              <span>Option D</span>
+              <input class="input-field" type="text" name="option_d" required />
+            </label>
+          </div>
+
+          <fieldset class="correct-selector">
+            <legend>Correct Answer</legend>
+            <div class="correct-selector__grid">
+              {(['a', 'b', 'c', 'd'] as const).map((option) => (
+                <label class="correct-option">
+                  <input type="radio" name="correct_option" value={option} required checked={option === 'a'} />
+                  <span>{option.toUpperCase()}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <label class="field">
+            <span>Explanation</span>
+            <textarea class="input-field explanation-field" name="explanation"></textarea>
+          </label>
+
+          <label class="field">
+            <span>Question Order</span>
+            <input class="input-field" type="number" name="order" required value={nextOrder} />
+          </label>
+
+          <button type="submit" class="submit-btn">Add Question →</button>
+        </form>
+      </div>
+    </aside>
   </section>
 </AdminLayout>
 
+<script is:inline>
+  const questionForm = document.querySelector('[data-question-form]');
+
+  if (questionForm instanceof HTMLFormElement) {
+    const optionFields = ['option_a', 'option_b', 'option_c', 'option_d']
+      .map((name) => questionForm.elements.namedItem(name))
+      .filter((field) => field instanceof HTMLInputElement);
+
+    const validateUniqueOptions = () => {
+      optionFields.forEach((field) => field.setCustomValidity(''));
+
+      const seen = new Map();
+
+      optionFields.forEach((field) => {
+        const value = field.value.trim().toLowerCase();
+
+        if (!value) {
+          return;
+        }
+
+        const duplicateField = seen.get(value);
+
+        if (duplicateField) {
+          const message = 'Each option must be unique.';
+          field.setCustomValidity(message);
+          duplicateField.setCustomValidity(message);
+        } else {
+          seen.set(value, field);
+        }
+      });
+    };
+
+    optionFields.forEach((field) => {
+      field.addEventListener('input', validateUniqueOptions);
+      field.addEventListener('blur', validateUniqueOptions);
+    });
+
+    questionForm.addEventListener('submit', (event) => {
+      validateUniqueOptions();
+
+      if (!questionForm.reportValidity()) {
+        event.preventDefault();
+      }
+    });
+  }
+</script>
+
 <style>
-  .page-header {
-    margin-bottom: 24px;
+  .publish-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 10px;
+    padding: 9px 14px;
+    background: #f5c518;
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
   }
 
-  .heading-lg,
-  .heading-md {
-    color: var(--color-navy);
+  .publish-btn--published {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .test-meta {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .eyebrow {
+    margin: 0 0 4px;
+    color: #9aa5b4;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .test-meta h2,
+  .form-card h2 {
     margin: 0;
-  }
-
-  .heading-lg {
-    font-size: clamp(1.9rem, 3vw, 2.4rem);
-    font-weight: 800;
-  }
-
-  .heading-md {
     font-size: 1.15rem;
     font-weight: 700;
+    color: #0a0f1e;
   }
 
-  .page-grid {
-    display: grid;
-    gap: 1.25rem;
+  .test-meta__sub {
+    margin: 6px 0 0;
+    color: #64748b;
+    font-size: 0.85rem;
   }
 
-  .meta-card__head,
-  .section-head {
-    align-items: center;
+  .meta-chips {
     display: flex;
-    gap: 0.75rem;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
-  .section-head {
-    justify-content: flex-start;
-    margin-bottom: 1rem;
-  }
-
-  .meta-label {
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    margin: 0 0 0.25rem;
-    text-transform: uppercase;
-  }
-
-  .section-pill {
-    background: var(--color-yellow-bg);
+  .meta-chip {
+    background: #fff;
+    border: 1px solid #e2e8f0;
     border-radius: 999px;
-    color: #92400e;
-    font-size: 0.75rem;
-    font-weight: 700;
-    padding: 4px 10px;
-  }
-
-  .publish-button {
-    padding: 10px 18px;
-  }
-
-  .publish-button--published {
-    align-items: center;
-    background: #d1fae5;
-    border: 1px solid #a7f3d0;
-    border-radius: 10px;
-    color: #065f46;
-    cursor: pointer;
-    display: inline-flex;
-    font-size: 0.9rem;
+    padding: 6px 10px;
+    color: #64748b;
+    font-size: 0.76rem;
     font-weight: 600;
-    padding: 10px 18px;
+    text-transform: capitalize;
   }
 
-  .meta-grid {
+  .meta-chip--status {
+    background: #fffbeb;
+    color: #92400e;
+    border-color: #fde68a;
+  }
+
+  .editor-grid {
     display: grid;
-    gap: 1rem;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin-top: 1.25rem;
-  }
-
-  .meta-grid span {
-    color: var(--color-text-muted);
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.35rem;
-    text-transform: uppercase;
-  }
-
-  .meta-grid strong {
-    color: var(--color-navy);
-    font-size: 0.95rem;
+    grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr);
+    gap: 18px;
+    align-items: start;
   }
 
   .question-list {
     display: grid;
-    gap: 1rem;
+    gap: 8px;
   }
 
-  .question-entry {
-    border: 1px solid var(--color-border);
+  .question-card,
+  .form-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
     border-radius: 14px;
-    padding: 16px;
   }
 
-  .question-entry__head {
-    align-items: center;
+  .question-card {
+    padding: 16px 20px;
+  }
+
+  .question-card__head {
     display: flex;
     justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
   }
 
-  .question-order {
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    color: var(--color-navy);
-    font-size: 0.8rem;
-    font-weight: 700;
+  .question-card__summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .question-card__summary strong {
+    color: #0a0f1e;
+    font-size: 0.92rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .question-card__badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 4px 10px;
+    border-radius: 8px;
+    background: #0a0f1e;
+    color: #fff;
+    font-size: 0.76rem;
+    font-weight: 700;
+    flex-shrink: 0;
   }
 
-  .question-entry__prompt,
-  .question-entry__explanation {
-    color: var(--color-text-secondary);
+  .question-card__actions {
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transform: translateX(8px);
+    transition: all 0.15s ease;
   }
 
-  .question-entry__prompt {
-    margin: 0.85rem 0;
+  .question-card:hover .question-card__actions {
+    opacity: 1;
+    transform: translateX(0);
   }
 
-  .question-options {
+  .ghost-btn {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #fff;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .ghost-btn--danger {
+    color: #f87171;
+  }
+
+  .option-grid {
     display: grid;
-    gap: 0.45rem;
-    margin: 0 0 0.85rem;
-    padding-left: 1.1rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
   }
 
-  .question-entry__explanation {
-    margin: 0;
+  .option-chip {
+    background: #f3f4f6;
+    color: #64748b;
+    border-radius: 999px;
+    padding: 7px 10px;
+    font-size: 0.77rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .option-chip--correct {
+    background: #f5c518;
+    color: #0a0f1e;
+    font-weight: 700;
+  }
+
+  .question-card__explanation {
+    margin: 12px 0 0;
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .form-pane {
+    position: sticky;
+    top: 80px;
   }
 
   .form-card {
-    max-width: 600px;
+    padding: 18px 20px 20px;
   }
 
-  .stack-form,
+  .form-card__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .form-card__accent {
+    width: 4px;
+    min-height: 36px;
+    border-radius: 999px;
+    background: #f5c518;
+    flex-shrink: 0;
+  }
+
+  .question-form,
   .field {
     display: grid;
+    gap: 6px;
   }
 
-  .stack-form {
-    gap: 1rem;
-  }
-
-  .field {
-    gap: 0.45rem;
+  .question-form {
+    gap: 14px;
   }
 
   .field span,
-  .radio-group legend {
-    color: var(--color-text-secondary);
-    font-size: 0.88rem;
+  .correct-selector legend {
+    color: #4a5568;
+    font-size: 0.82rem;
     font-weight: 600;
+  }
+
+  .input-field {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.9rem;
   }
 
   .textarea-field {
@@ -347,80 +480,100 @@ const testQuestions = await db.select().from(questions).where(eq(questions.testI
     resize: vertical;
   }
 
-  .radio-group {
-    border: none;
-    margin: 0;
-    padding: 0;
+  .explanation-field {
+    min-height: 64px;
+    resize: vertical;
   }
 
-  .radio-grid {
+  .options-fields {
     display: grid;
-    gap: 0.75rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 0.5rem;
+    gap: 12px;
   }
 
-  .radio-card {
-    position: relative;
-  }
-
-  .radio-card input {
-    inset: 0;
-    opacity: 0;
-    position: absolute;
-  }
-
-  .radio-card span {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    color: var(--color-text);
-    display: block;
-    padding: 10px 16px;
-    transition:
-      border-color 0.15s ease,
-      background 0.15s ease;
-  }
-
-  .radio-card input:checked + span {
-    background: rgba(10, 15, 30, 0.04);
-    border-color: var(--color-navy);
-  }
-
-  .text-muted {
-    color: var(--color-text-muted);
+  .correct-selector {
+    border: none;
+    padding: 0;
     margin: 0;
+  }
+
+  .correct-selector__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .correct-option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .correct-option span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #f3f4f6;
+    color: #64748b;
+    padding: 12px 0;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .correct-option input:checked + span {
+    background: #0a0f1e;
+    color: #f5c518;
+  }
+
+  .submit-btn {
+    width: 100%;
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
+    background: #f5c518;
+    color: #0a0f1e;
+    font-size: 0.88rem;
+    font-weight: 800;
+    cursor: pointer;
   }
 
   .empty-state {
-    text-align: center;
-  }
-
-  .empty-state--compact {
-    padding: 16px 0 4px;
-  }
-
-  .empty-state__icon {
-    color: var(--color-text-muted);
-    font-size: 60px;
-    line-height: 1;
-    margin-bottom: 0.75rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 24px 20px;
+    color: #9aa5b4;
+    font-size: 0.875rem;
   }
 
   @media (max-width: 1080px) {
-    .meta-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .editor-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .form-pane {
+      position: static;
     }
   }
 
   @media (max-width: 720px) {
-    .meta-card__head {
-      align-items: flex-start;
+    .test-meta {
       flex-direction: column;
     }
 
-    .meta-grid,
-    .radio-grid {
+    .meta-chips {
+      justify-content: flex-start;
+    }
+
+    .option-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .options-fields {
       grid-template-columns: 1fr;
     }
   }

@@ -1,0 +1,308 @@
+---
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  fullName: string;
+  activeNav?: 'dashboard' | 'subjects' | 'analysis';
+}
+
+const { title, fullName, activeNav = 'dashboard' } = Astro.props;
+
+const fullNameParts = fullName.trim().split(/\s+/).filter(Boolean);
+const firstName = fullNameParts[0] ?? 'Student';
+const lastName = fullNameParts[fullNameParts.length - 1] ?? '';
+const initials = `${firstName[0] ?? 'S'}${lastName[0] ?? firstName[1] ?? ''}`.toUpperCase();
+---
+
+<Base title={title}>
+  <div class="student-shell">
+    <aside class="sidebar">
+      <div class="sidebar__inner">
+        <div class="sidebar__top">
+          <a href="/student" class="brand">
+            <img src="/images/logo.jpeg" alt="Dream Neet Academy logo" class="brand__logo" />
+            <span class="brand__text">Dream Neet Academy</span>
+          </a>
+
+          <div class="student-card">
+            <div class="student-card__avatar">{initials}</div>
+            <div class="student-card__meta">
+              <div class="student-card__name">{fullName}</div>
+              <span class="student-card__role">Student</span>
+            </div>
+          </div>
+
+          <div class="sidebar__divider"></div>
+        </div>
+
+        <nav class="sidebar__nav" aria-label="Student dashboard">
+          <a href="/student" class:list={['sidebar__link', { 'sidebar__link--active': activeNav === 'dashboard' }]}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-5V14h-5v7H4.5A1.5 1.5 0 0 1 3 19.5z"></path>
+            </svg>
+            Dashboard
+          </a>
+          <a href="/student#subjects" class:list={['sidebar__link', { 'sidebar__link--active': activeNav === 'subjects' }]}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v16H7.5A2.5 2.5 0 0 0 5 20.5z"></path>
+              <path d="M5 4.5v16"></path>
+              <path d="M8.5 7H16"></path>
+              <path d="M8.5 11H16"></path>
+            </svg>
+            Subjects
+          </a>
+          <a href="/student/analysis" class:list={['sidebar__link', { 'sidebar__link--active': activeNav === 'analysis' }]}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 19h16"></path>
+              <path d="M7 16V9"></path>
+              <path d="M12 16V5"></path>
+              <path d="M17 16v-4"></path>
+            </svg>
+            Analysis
+          </a>
+        </nav>
+
+        <div class="sidebar__bottom">
+          <form action="/api/auth/logout" method="POST" class="logout-form">
+            <button type="submit" class="logout-btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <path d="m16 17 5-5-5-5"></path>
+                <path d="M21 12H9"></path>
+              </svg>
+              Logout
+            </button>
+          </form>
+        </div>
+      </div>
+    </aside>
+
+    <main class="student-main">
+      <slot />
+    </main>
+  </div>
+</Base>
+
+<style>
+  :global(body) {
+    margin: 0;
+    min-height: 100vh;
+    padding-top: 0;
+    background: #f1f3f9;
+    color: #0a0f1e;
+  }
+
+  .student-shell {
+    min-height: 100vh;
+    background: #f1f3f9;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 240px;
+    background: #0a0f1e;
+    padding: 24px 0;
+    z-index: 10;
+  }
+
+  .sidebar__inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .sidebar__top {
+    padding: 0 20px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .brand__logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .brand__text {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .student-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .student-card__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #f5c518, #e6b800);
+    color: #0a0f1e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .student-card__name {
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .student-card__role {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(245, 197, 24, 0.15);
+    color: #f5c518;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .sidebar__divider {
+    height: 1px;
+    margin: 20px 0;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .sidebar__nav {
+    padding: 0 12px;
+  }
+
+  .sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+
+  .sidebar__link svg,
+  .logout-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  .sidebar__link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+  }
+
+  .sidebar__link--active {
+    background: rgba(245, 197, 24, 0.12);
+    color: #f5c518;
+    border-left: 3px solid #f5c518;
+    padding-left: 9px;
+  }
+
+  .sidebar__bottom {
+    margin-top: auto;
+    padding: 20px;
+  }
+
+  .logout-form {
+    margin: 0;
+  }
+
+  .logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+
+  .logout-btn:hover {
+    color: #ef4444;
+  }
+
+  .student-main {
+    margin-left: 240px;
+    padding: 32px;
+    min-height: 100vh;
+    background: #f1f3f9;
+  }
+
+  @media (max-width: 880px) {
+    .sidebar {
+      position: static;
+      width: auto;
+      padding: 20px 0 12px;
+    }
+
+    .sidebar__inner {
+      height: auto;
+    }
+
+    .sidebar__nav {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .sidebar__link {
+      justify-content: center;
+      margin-bottom: 0;
+    }
+
+    .sidebar__link--active {
+      padding-left: 12px;
+      border-left: none;
+      box-shadow: inset 0 -2px 0 #f5c518;
+    }
+
+    .sidebar__bottom {
+      padding-top: 18px;
+    }
+
+    .student-main {
+      margin-left: 0;
+      padding: 24px 16px 32px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .student-card {
+      align-items: flex-start;
+    }
+
+    .sidebar__nav {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

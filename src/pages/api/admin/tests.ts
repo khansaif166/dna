@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { db, tests } from '../../../db';
+import { db, tests, topics } from '../../../db';
 import { redirectToAdminReferrer } from '../../../lib/admin';
 import { hasValidOrigin } from '../../../lib/csrf';
 import { requireAdminApi } from '../../../lib/requireAdminApi';
@@ -47,9 +48,32 @@ export const POST: APIRoute = async (context) => {
   }
 
   try {
+    let resolvedSubjectId = parsed.data.subject_id ?? null;
+
+    if (parsed.data.topic_id) {
+      const topic = await db
+        .select({
+          id: topics.id,
+          subjectId: topics.subjectId,
+        })
+        .from(topics)
+        .where(eq(topics.id, parsed.data.topic_id))
+        .then((rows) => rows[0]);
+
+      if (!topic) {
+        return new Response('Invalid topic input', { status: 400 });
+      }
+
+      if (resolvedSubjectId && resolvedSubjectId !== topic.subjectId) {
+        return new Response('Selected topic does not belong to the chosen subject', { status: 400 });
+      }
+
+      resolvedSubjectId = topic.subjectId;
+    }
+
     await db.insert(tests).values({
       title: parsed.data.title,
-      subjectId: parsed.data.subject_id ?? null,
+      subjectId: resolvedSubjectId,
       topicId: parsed.data.topic_id ?? null,
       durationMinutes: parsed.data.duration_minutes,
       testType: parsed.data.test_type,

@@ -8,19 +8,25 @@ const { role = 'student', userName = 'Student' } = Astro.props;
 
 const pathname = Astro.url.pathname;
 const studentLinks = [
-  { label: 'Dashboard', href: '/student/dashboard' },
+  { label: 'Dashboard', href: '/student' },
   { label: 'Subjects', href: '/student/subjects' },
   { label: 'Analysis', href: '/student/analysis' },
 ];
 
-const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+const isActive = (href: string) => {
+  if (href === '/student') {
+    return pathname === '/student' || pathname === '/student/dashboard';
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+};
 ---
 
 <nav class="platform-nav">
   <div class="platform-nav__inner">
-    <a href={role === 'admin' ? '/admin' : '/student/dashboard'} class="platform-nav__brand">
-      <span class="platform-nav__mark">DNA</span>
-      <span class="platform-nav__title">Dream NEET</span>
+    <a href={role === 'admin' ? '/admin' : '/student'} class="platform-nav__brand">
+      <img src="/images/logo.jpeg" alt="Dream Neet Academy logo" class="platform-nav__logo" />
+      <span class="platform-nav__title">Dream Neet Academy</span>
     </a>
 
     {
@@ -40,7 +46,9 @@ const isActive = (href: string) => pathname === href || pathname.startsWith(`${h
 
     <div class="platform-nav__actions">
       <span class="platform-nav__chip">{userName}</span>
-      <button type="button" class="btn-outline platform-nav__logout">Logout</button>
+      <form action="/api/auth/logout" method="POST" class="platform-nav__logout-form">
+        <button type="submit" class="btn-outline platform-nav__logout">Logout</button>
+      </form>
     </div>
   </div>
 </nav>
@@ -76,18 +84,12 @@ const isActive = (href: string) => pathname === href || pathname.startsWith(`${h
     flex-shrink: 0;
   }
 
-  .platform-nav__mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  .platform-nav__logo {
     width: 40px;
     height: 40px;
     border-radius: 999px;
-    background: var(--color-navy);
-    color: var(--color-yellow);
-    font-size: 0.85rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
+    object-fit: cover;
+    border: 1px solid rgba(10, 15, 30, 0.08);
   }
 
   .platform-nav__title {
@@ -152,6 +154,10 @@ const isActive = (href: string) => pathname === href || pathname.startsWith(`${h
   .platform-nav__logout {
     padding: 8px 16px;
     font-size: 0.875rem;
+  }
+
+  .platform-nav__logout-form {
+    margin: 0;
   }
 
   @media (max-width: 900px) {

@@ -18,7 +18,12 @@ const allSubjects = await db.select().from(subjects).orderBy(asc(subjects.order)
 const allTopics = await db.select().from(topics).orderBy(asc(topics.subjectId), asc(topics.order));
 ---
 
-<AdminLayout title="Admin Topics | Dream Neet Academy" userName={admin.fullName}>
+<AdminLayout
+  title="Admin Topics | Dream Neet Academy"
+  pageTitle="Subjects & Topics"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
   <section class="page-header">
     <h1 class="heading-lg">Topics & Resources</h1>
   </section>

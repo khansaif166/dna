@@ -3,21 +3,41 @@ import '../styles/platform.css';
 
 interface Props {
   title: string;
+  pageTitle?: string;
   userName?: string;
+  userEmail?: string;
 }
 
-const { title, userName = 'Admin' } = Astro.props;
+const { title, pageTitle = title, userName = 'Admin', userEmail } = Astro.props;
 
 const pathname = Astro.url.pathname;
 const navItems = [
-  { label: 'Dashboard', href: '/admin' },
-  { label: 'Subjects', href: '/admin/subjects' },
-  { label: 'Topics', href: '/admin/topics' },
-  { label: 'Tests', href: '/admin/tests' },
+  { label: 'Overview', href: '/admin' },
   { label: 'Students', href: '/admin/students' },
+  { label: 'Subjects & Topics', href: '/admin/subjects' },
+  { label: 'Tests', href: '/admin/tests' },
+  { label: 'Questions', href: '/admin/questions' },
 ];
 
-const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+const isActive = (label: string, href: string) => {
+  if (label === 'Overview') {
+    return pathname === '/admin';
+  }
+
+  if (label === 'Subjects & Topics') {
+    return pathname.startsWith('/admin/subjects') || pathname.startsWith('/admin/topics');
+  }
+
+  if (label === 'Tests') {
+    return pathname === '/admin/tests';
+  }
+
+  if (label === 'Questions') {
+    return pathname.startsWith('/admin/questions') || /^\/admin\/tests\/[^/]+$/.test(pathname);
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+};
 ---
 
 <!doctype html>
@@ -26,6 +46,9 @@ const isActive = (href: string) => pathname === href || pathname.startsWith(`${h
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="generator" content={Astro.generator} />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -34,165 +57,243 @@ const isActive = (href: string) => pathname === href || pathname.startsWith(`${h
     />
     <title>{title}</title>
   </head>
-  <body class="admin-shell">
-    <aside class="admin-sidebar">
-      <a href="/admin" class="admin-sidebar__brand">
-        <span class="admin-sidebar__mark">DNA</span>
-        <span class="admin-sidebar__title">Dream NEET</span>
-      </a>
-
-      <p class="admin-sidebar__label">Admin Panel</p>
-
-      <nav class="admin-sidebar__nav" aria-label="Admin sections">
-        {navItems.map((item) => (
-          <a
-            href={item.href}
-            class:list={['admin-sidebar__link', { 'admin-sidebar__link--active': isActive(item.href) }]}
-          >
-            <span class="admin-sidebar__icon" aria-hidden="true">
-              {item.label === 'Dashboard'
-                ? '◫'
-                : item.label === 'Subjects'
-                  ? '◌'
-                  : item.label === 'Topics'
-                    ? '◎'
-                    : item.label === 'Tests'
-                      ? '▣'
-                      : '◍'}
-            </span>
-            <span>{item.label}</span>
+  <body class="admin-app">
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <div class="admin-sidebar__top">
+          <a href="/admin" class="admin-brand">
+            <img src="/images/logo.jpeg" alt="Dream Neet Academy logo" class="admin-brand__logo" />
+            <div>
+              <div class="admin-brand__title">Dream Neet Academy</div>
+              <div class="admin-brand__sub">Admin Panel</div>
+            </div>
           </a>
-        ))}
-      </nav>
+        </div>
 
-      <div class="admin-sidebar__footer">
-        <span class="admin-sidebar__chip">{userName}</span>
-        <form action="/api/auth/logout" method="POST">
-          <button type="submit" class="admin-sidebar__logout">Logout</button>
-        </form>
+        <div class="admin-sidebar__nav-wrap">
+          <div class="admin-sidebar__label">Management</div>
+
+          <nav class="admin-sidebar__nav" aria-label="Admin management">
+            {navItems.map((item) => (
+              <a
+                href={item.href}
+                class:list={['admin-sidebar__link', { 'admin-sidebar__link--active': isActive(item.label, item.href) }]}
+              >
+                <span class="admin-sidebar__icon" aria-hidden="true">
+                  {
+                    item.label === 'Overview' ? (
+                      <svg viewBox="0 0 24 24">
+                        <path d="M4 4h7v7H4z"></path>
+                        <path d="M13 4h7v4h-7z"></path>
+                        <path d="M13 10h7v10h-7z"></path>
+                        <path d="M4 13h7v7H4z"></path>
+                      </svg>
+                    ) : item.label === 'Students' ? (
+                      <svg viewBox="0 0 24 24">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9.5" cy="7" r="3"></circle>
+                        <path d="M20 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 4.13a4 4 0 0 1 0 7.75"></path>
+                      </svg>
+                    ) : item.label === 'Subjects & Topics' ? (
+                      <svg viewBox="0 0 24 24">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"></path>
+                      </svg>
+                    ) : item.label === 'Tests' ? (
+                      <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <path d="M14 2v6h6"></path>
+                        <path d="M8 13h8"></path>
+                        <path d="M8 17h5"></path>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <path d="M9.5 9.5h.01"></path>
+                        <path d="M14.5 9.5h.01"></path>
+                        <path d="M8.5 14.5c1 .8 2.1 1.2 3.5 1.2s2.5-.4 3.5-1.2"></path>
+                      </svg>
+                    )
+                  }
+                </span>
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </nav>
+        </div>
+
+        <div class="admin-sidebar__bottom">
+          <div class="admin-sidebar__email" title={userEmail ?? userName}>{userEmail ?? userName}</div>
+          <form action="/api/auth/logout" method="POST">
+            <button type="submit" class="admin-sidebar__logout">Logout</button>
+          </form>
+        </div>
+      </aside>
+
+      <div class="admin-main">
+        <header class="admin-topbar">
+          <h1 class="admin-topbar__title">{pageTitle}</h1>
+          <div class="admin-topbar__actions">
+            <slot name="actions" />
+          </div>
+        </header>
+
+        <div class="admin-content">
+          <slot />
+        </div>
       </div>
-    </aside>
-
-    <main class="admin-main">
-      <slot />
-    </main>
+    </div>
   </body>
 </html>
 
 <style>
-  .admin-shell {
-    background: var(--color-bg);
+  :global(html),
+  :global(body) {
+    margin: 0;
+    min-height: 100%;
+    background: #f1f3f9;
+  }
+
+  .admin-app {
     font-family: 'Inter', sans-serif;
+    color: #0a0f1e;
+  }
+
+  .admin-shell {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    background: #f1f3f9;
   }
 
   .admin-sidebar {
-    background: var(--color-navy);
-    bottom: 0;
+    width: 220px;
+    flex-shrink: 0;
+    background: #0a0f1e;
     display: flex;
     flex-direction: column;
-    left: 0;
-    padding: 24px 16px;
-    position: fixed;
-    top: 0;
-    width: 220px;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
   }
 
-  .admin-sidebar__brand {
-    align-items: center;
-    color: var(--color-surface);
+  .admin-sidebar__top {
+    padding: 20px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .admin-brand {
     display: inline-flex;
-    gap: 0.85rem;
-    margin-bottom: 32px;
-  }
-
-  .admin-sidebar__mark {
     align-items: center;
-    background: rgba(245, 197, 24, 0.12);
-    border-radius: 999px;
-    color: var(--color-yellow);
-    display: inline-flex;
-    font-size: 0.82rem;
-    font-weight: 800;
-    height: 38px;
-    justify-content: center;
-    letter-spacing: 0.04em;
-    width: 38px;
+    gap: 12px;
   }
 
-  .admin-sidebar__title {
-    font-size: 1rem;
+  .admin-brand__logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .admin-brand__title {
+    color: #fff;
+    font-size: 0.9rem;
     font-weight: 700;
+  }
+
+  .admin-brand__sub {
+    margin-top: 3px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+
+  .admin-sidebar__nav-wrap {
+    flex: 1;
+    padding: 12px 0;
+    overflow-y: auto;
   }
 
   .admin-sidebar__label {
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 0.65rem;
+    padding: 8px 16px;
+    color: rgba(255, 255, 255, 0.25);
+    font-size: 0.6rem;
     font-weight: 700;
     letter-spacing: 0.12em;
-    margin: 0 0 12px;
     text-transform: uppercase;
   }
 
   .admin-sidebar__nav {
     display: grid;
-    gap: 4px;
   }
 
   .admin-sidebar__link {
-    align-items: center;
-    border-left: 3px solid transparent;
-    border-radius: 10px;
-    color: rgba(255, 255, 255, 0.65);
-    cursor: pointer;
     display: flex;
-    font-size: 0.9rem;
-    font-weight: 500;
+    align-items: center;
     gap: 10px;
-    margin-bottom: 0;
-    padding: 10px 14px;
-    transition:
-      background 0.15s ease,
-      color 0.15s ease,
-      border-color 0.15s ease;
+    padding: 9px 14px;
+    margin: 2px 8px;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.84rem;
+    font-weight: 500;
+    transition: all 0.15s;
   }
 
   .admin-sidebar__link:hover {
-    background: rgba(255, 255, 255, 0.07);
-    color: var(--color-surface);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .admin-sidebar__link--active {
-    background: rgba(245, 197, 24, 0.15);
-    border-left-color: var(--color-yellow);
-    color: var(--color-yellow);
+    background: rgba(245, 197, 24, 0.12);
+    color: #f5c518;
   }
 
   .admin-sidebar__icon {
-    font-size: 0.8rem;
-    width: 14px;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
-  .admin-sidebar__footer {
-    display: grid;
-    gap: 0.75rem;
-    margin-top: auto;
+  .admin-sidebar__icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
-  .admin-sidebar__chip {
-    color: rgba(255, 255, 255, 0.92);
-    font-size: 0.8rem;
-    font-weight: 500;
+  .admin-sidebar__bottom {
+    padding: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .admin-sidebar__email {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 10px;
   }
 
   .admin-sidebar__logout {
-    background: transparent;
     border: none;
-    color: rgba(239, 68, 68, 0.8);
-    cursor: pointer;
-    font-size: 0.85rem;
+    background: transparent;
     padding: 0;
-    text-align: left;
-    transition: color 0.15s ease;
+    color: rgba(239, 68, 68, 0.7);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.15s;
   }
 
   .admin-sidebar__logout:hover {
@@ -200,21 +301,80 @@ const isActive = (href: string) => pathname === href || pathname.startsWith(`${h
   }
 
   .admin-main {
-    margin-left: 220px;
-    min-height: 100vh;
-    padding: 32px;
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    background: #f1f3f9;
   }
 
-  @media (max-width: 880px) {
-    .admin-sidebar {
+  .admin-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 28px;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .admin-topbar__title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .admin-topbar__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .admin-content {
+    padding: 24px 28px;
+  }
+
+  @media (max-width: 900px) {
+    .admin-shell {
+      flex-direction: column;
       height: auto;
-      position: static;
+      min-height: 100vh;
+    }
+
+    .admin-sidebar {
       width: 100%;
+      border-right: none;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .admin-sidebar__nav {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      padding: 0 8px;
     }
 
     .admin-main {
-      margin-left: 0;
-      padding: 24px 16px 32px;
+      overflow: visible;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .admin-topbar {
+      height: auto;
+      padding: 14px 16px;
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .admin-content {
+      padding: 20px 16px 28px;
+    }
+
+    .admin-sidebar__nav {
+      grid-template-columns: 1fr;
     }
   }
 </style>

@@ -15,13 +15,15 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
 
 const students = await db
   .select({
     id: profiles.id,
     fullName: profiles.fullName,
     totalAttempts: sql<number>`count(${testAttempts.id})::int`,
-    averageScore: sql<string>`coalesce(round(avg(${testAttempts.score})::numeric, 2)::text, '0')`,
+    averagePercent: sql<string>`coalesce(round(avg(case when ${testAttempts.totalQuestions} > 0 and ${testAttempts.score} is not null then (${testAttempts.score}::numeric / ${testAttempts.totalQuestions}::numeric) * 100 end))::text, '0')`,
+    lastActive: sql<Date | null>`max(${testAttempts.submittedAt})`,
   })
   .from(profiles)
   .leftJoin(testAttempts, eq(testAttempts.studentId, profiles.id))
@@ -40,7 +42,6 @@ while (true) {
   });
 
   const users = usersData?.users ?? [];
-
   allUsers.push(...users);
 
   if (users.length < 1000) {
@@ -51,128 +52,264 @@ while (true) {
 }
 
 const emailById = new Map(allUsers.map((user) => [user.id, user.email ?? '-']));
+
+const filteredStudents = students.filter((student) => {
+  if (!query) {
+    return true;
+  }
+
+  const email = emailById.get(student.id) ?? '';
+  return (
+    student.fullName.toLowerCase().includes(query.toLowerCase()) ||
+    email.toLowerCase().includes(query.toLowerCase())
+  );
+});
+
+const gradients = [
+  'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+  'linear-gradient(135deg, #8B5CF6, #6366F1)',
+  'linear-gradient(135deg, #10B981, #059669)',
+  'linear-gradient(135deg, #F59E0B, #D97706)',
+];
+
+const initialsFor = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? 'S';
+  const last = parts[1]?.[0] ?? parts[0]?.[1] ?? '';
+  return `${first}${last}`.toUpperCase();
+};
+
+const relativeDays = (value: Date | string | null) => {
+  if (!value) {
+    return 'Never';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Never';
+  }
+
+  const diffDays = Math.max(0, Math.floor((Date.now() - date.getTime()) / (24 * 60 * 60 * 1000)));
+
+  if (diffDays === 0) {
+    return 'Today';
+  }
+
+  if (diffDays === 1) {
+    return '1 day ago';
+  }
+
+  return `${diffDays} days ago`;
+};
 ---
 
-<AdminLayout title="Admin Students | Dream Neet Academy" userName={admin.fullName}>
-  <section class="page-header">
-    <h1 class="heading-lg">Students</h1>
+<AdminLayout
+  title="Admin Students | Dream Neet Academy"
+  pageTitle="Students"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <section class="filters-card">
+    <form action="/admin/students" method="GET" class="filters-form">
+      <label class="search-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input type="search" name="q" value={query} placeholder="Search students by name or email" />
+      </label>
+    </form>
   </section>
 
-  <section class="card table-card">
-    {students.length ? (
-      <div class="table-wrap">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Email</th>
-              <th scope="col">Total Attempts</th>
-              <th scope="col">Average Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((student) => (
-              <tr>
-                <td><a href={`/admin/students/${student.id}`} class="action-link">{student.fullName}</a></td>
-                <td>{emailById.get(student.id) ?? '-'}</td>
-                <td>{student.totalAttempts}</td>
-                <td>{student.averageScore}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    ) : (
-      <div class="empty-state">
-        <div class="empty-state__icon">👤</div>
-        <h2 class="heading-md">No students yet</h2>
-        <p class="text-muted">Student records will appear here once learners sign up.</p>
-      </div>
-    )}
-  </section>
+  {filteredStudents.length ? (
+    <section class="students-grid">
+      {filteredStudents.map((student, index) => (
+        <article class="student-card">
+          <div class="student-card__top">
+            <div class="student-card__avatar" style={`background:${gradients[index % gradients.length]};`}>
+              {initialsFor(student.fullName)}
+            </div>
+            <div class="student-card__identity">
+              <h2>{student.fullName}</h2>
+              <p>{emailById.get(student.id) ?? '-'}</p>
+            </div>
+          </div>
+
+          <div class="student-card__stats">
+            <div>
+              <strong>{student.totalAttempts}</strong>
+              <span>Attempts</span>
+            </div>
+            <div>
+              <strong>{student.averagePercent}%</strong>
+              <span>Avg Score</span>
+            </div>
+            <div>
+              <strong>{relativeDays(student.lastActive)}</strong>
+              <span>Last Active</span>
+            </div>
+          </div>
+
+          <a href={`/admin/students/${student.id}`} class="student-card__link">View Profile →</a>
+        </article>
+      ))}
+    </section>
+  ) : (
+    <div class="empty-state">No students matched this search yet.</div>
+  )}
 </AdminLayout>
 
 <style>
-  .page-header {
-    margin-bottom: 24px;
+  .filters-card,
+  .student-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
   }
 
-  .heading-lg,
-  .heading-md {
-    color: var(--color-navy);
-    margin: 0;
+  .filters-card {
+    padding: 12px 16px;
+    margin-bottom: 16px;
   }
 
-  .heading-lg {
-    font-size: clamp(1.9rem, 3vw, 2.4rem);
-    font-weight: 800;
+  .filters-form {
+    display: flex;
+    align-items: center;
+    gap: 16px;
   }
 
-  .heading-md {
-    font-size: 1.15rem;
-    font-weight: 700;
+  .search-field {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
-  .table-card {
-    overflow: hidden;
-    padding: 0;
+  .search-field svg {
+    width: 18px;
+    height: 18px;
+    stroke: #9aa5b4;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
   }
 
-  .table-wrap {
-    overflow-x: auto;
-  }
-
-  .admin-table {
-    border-collapse: collapse;
+  .search-field input {
     width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.9rem;
+    color: #0a0f1e;
   }
 
-  .admin-table th {
-    background: #f8f9ff;
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
+  .students-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .student-card {
+    padding: 20px;
+    transition: box-shadow 0.15s ease;
+  }
+
+  .student-card:hover {
+    box-shadow: 0 4px 16px rgba(10, 15, 30, 0.08);
+  }
+
+  .student-card__top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .student-card__avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.84rem;
     font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 12px 20px;
-    text-align: left;
-    text-transform: uppercase;
+    flex-shrink: 0;
   }
 
-  .admin-table td {
-    border-bottom: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    padding: 14px 20px;
-    vertical-align: middle;
+  .student-card__identity {
+    min-width: 0;
   }
 
-  .admin-table tbody tr:hover td {
-    background: #f8f9ff;
+  .student-card__identity h2 {
+    margin: 0;
+    color: #0a0f1e;
+    font-size: 0.95rem;
+    font-weight: 700;
   }
 
-  .admin-table tbody tr:last-child td {
-    border-bottom: none;
+  .student-card__identity p {
+    margin: 4px 0 0;
+    color: #9aa5b4;
+    font-size: 0.82rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .action-link {
-    color: var(--color-navy);
-    font-size: 0.875rem;
+  .student-card__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #f1f3f9;
+  }
+
+  .student-card__stats strong {
+    display: block;
+    color: #0a0f1e;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .student-card__stats span {
+    display: block;
+    margin-top: 4px;
+    color: #9aa5b4;
+    font-size: 0.74rem;
     font-weight: 500;
   }
 
-  .text-muted {
-    color: var(--color-text-muted);
-    margin: 0;
+  .student-card__link {
+    display: inline-block;
+    margin-top: 16px;
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 600;
   }
 
   .empty-state {
-    padding: 32px 24px;
-    text-align: center;
+    padding: 28px 20px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    color: #9aa5b4;
+    font-size: 0.875rem;
   }
 
-  .empty-state__icon {
-    color: var(--color-text-muted);
-    font-size: 60px;
-    line-height: 1;
-    margin-bottom: 0.75rem;
+  @media (max-width: 1080px) {
+    .students-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .students-grid {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
