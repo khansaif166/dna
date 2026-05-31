@@ -11,6 +11,6 @@ interface ImportMeta {
 declare namespace App {
   interface Locals {
     user: import('@supabase/supabase-js').User | null;
-    profile: { id: string; fullName: string; role: 'student' | 'admin' } | null;
+    profile: { id: string; fullName: string; role: 'student' | 'admin'; isActive: boolean } | null;
   }
 }

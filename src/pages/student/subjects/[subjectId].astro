@@ -92,206 +92,578 @@ const topicCards = subjectTopics.map((topic, index) => ({
   testCount: testCounts.get(topic.id) ?? 0,
   practiced: practicedTopicIds.has(topic.id),
 }));
+
+const subjectType = subject.name.toLowerCase().includes('physics')
+  ? 'physics'
+  : subject.name.toLowerCase().includes('chemistry')
+    ? 'chemistry'
+    : 'biology';
+
+const subjectTheme = {
+  physics: {
+    icon: '⚛',
+    gradient: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+    color: '#3B82F6',
+    colorDark: '#1D4ED8',
+    bgLight: '#EFF6FF',
+    bgMid: '#DBEAFE',
+    textColor: '#1D4ED8',
+    border: '#BFDBFE',
+    shadowRgb: '59, 130, 246',
+    tip: 'Focus on understanding concepts before memorizing formulas. Practice numerical problems daily and prioritize chapters like Mechanics, Optics, and Modern Physics for NEET.',
+  },
+  chemistry: {
+    icon: '⚗',
+    gradient: 'linear-gradient(135deg, #10B981, #059669)',
+    color: '#10B981',
+    colorDark: '#059669',
+    bgLight: '#F0FDF4',
+    bgMid: '#DCFCE7',
+    textColor: '#166534',
+    border: '#BBF7D0',
+    shadowRgb: '16, 185, 129',
+    tip: 'Divide your time equally between Physical, Organic, and Inorganic Chemistry. NCERT is your bible for Inorganic — read it multiple times.',
+  },
+  biology: {
+    icon: '🧬',
+    gradient: 'linear-gradient(135deg, #F59E0B, #D97706)',
+    color: '#F59E0B',
+    colorDark: '#D97706',
+    bgLight: '#FFFBEB',
+    bgMid: '#FEF3C7',
+    textColor: '#92400E',
+    border: '#FDE68A',
+    shadowRgb: '245, 158, 11',
+    tip: 'Biology carries the highest weightage in NEET. Focus on NCERT diagrams and definitions. Botany and Zoology both need equal attention.',
+  },
+}[subjectType];
+
+const practicedTopicsCount = topicCards.filter((topic) => topic.practiced).length;
+const progressPercent = topicCards.length ? Math.round((practicedTopicsCount / topicCards.length) * 100) : 0;
+const ringRadius = 26;
+const ringCircumference = 2 * Math.PI * ringRadius;
+const ringOffset = ringCircumference * (1 - progressPercent / 100);
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
 ---
 
 <PlatformLayout title={`${subject.name} | Dream Neet Academy`}>
-  <section class="subject-hero">
-    <div class="subject-hero__inner">
-      <p class="breadcrumb">
-        <a href="/student">Dashboard</a>
-        <span>/</span>
-        <span class="breadcrumb__active">{subject.name}</span>
-      </p>
-      <h1 class="heading-xl">{subject.name}</h1>
-      <p class="subject-hero__subtitle">{subjectTopics.length} topics · {totalTestsAvailable} tests available</p>
-    </div>
-  </section>
+  <section class="subject-page">
+    <header class="subject-header">
+      <div class="subject-header__info">
+        <div class="subject-breadcrumbs">
+          <a href="/student" class="subject-breadcrumbs__back">← Back</a>
+          <span>/</span>
+          <span>Subjects</span>
+          <span>/</span>
+          <span class="subject-breadcrumbs__current">{subject.name}</span>
+        </div>
 
-  <section class="topics-section">
-    {topicCards.length ? (
-      <div class="topics-grid">
-        {topicCards.map((topic) => (
-          <a href={`/student/topics/${topic.id}`} class="card topic-card">
-            <div class="topic-card__content">
-              <span class="topic-card__number">{topic.displayOrder}</span>
-              <h2 class="topic-card__title">{topic.name}</h2>
-              <div class="topic-card__pills">
-                <span class="topic-pill topic-pill--video">{topic.videoCount} videos</span>
-                <span class="topic-pill topic-pill--test">{topic.testCount} tests</span>
-              </div>
-            </div>
-            <div class="topic-card__action">
-              <span class:list={[topic.practiced ? 'badge-success' : 'badge-pending']}>
-                {topic.practiced ? 'Practiced' : 'Not started'}
+        <div class="subject-identity">
+          <div
+            class="subject-identity__icon"
+            style={`background:${subjectTheme.gradient}; box-shadow:0 4px 12px rgba(${subjectTheme.shadowRgb}, 0.3);`}
+          >
+            {subjectTheme.icon}
+          </div>
+
+          <div class="subject-identity__text">
+            <h1>{subject.name}</h1>
+            <div class="subject-identity__meta">
+              <span>{pluralize(topicCards.length, 'topic')}</span>
+              <span>·</span>
+              <span>{pluralize(totalTestsAvailable, 'test')}</span>
+              <span>·</span>
+              <span style={`color:${subjectTheme.colorDark}; font-weight:600;`}>
+                {practicedTopicsCount} practiced
               </span>
-              <span class="topic-card__arrow" aria-hidden="true">→</span>
             </div>
-          </a>
-        ))}
+          </div>
+        </div>
       </div>
+
+      <div class="subject-progress">
+        <svg viewBox="0 0 64 64" class="subject-progress__ring" aria-hidden="true">
+          <circle cx="32" cy="32" r={ringRadius} class="subject-progress__ring-base"></circle>
+          <circle
+            cx="32"
+            cy="32"
+            r={ringRadius}
+            class="subject-progress__ring-fill"
+            style={`stroke:${subjectTheme.color}; stroke-dasharray:${ringCircumference}; stroke-dashoffset:${ringOffset};`}
+          ></circle>
+          <text x="32" y="35" text-anchor="middle" class="subject-progress__ring-text">{progressPercent}%</text>
+        </svg>
+
+        <div class="subject-progress__content">
+          <div class="subject-progress__label">Progress</div>
+          <div class="subject-progress__value">{practicedTopicsCount} of {topicCards.length} topics</div>
+          <div class="subject-progress__sub">started</div>
+        </div>
+      </div>
+    </header>
+
+    {topicCards.length ? (
+      <>
+        <section class="topics-section">
+          <div class="topics-section__head">
+            <h2>Topics</h2>
+            <span>Ordered by curriculum</span>
+          </div>
+
+          <div class="topics-grid">
+            {topicCards.map((topic) => (
+              <a
+                href={`/student/topics/${topic.id}`}
+                class="topic-card"
+                style={`--subject-color:${subjectTheme.color}; --subject-color-dark:${subjectTheme.colorDark}; --subject-bg-light:${subjectTheme.bgLight}; --subject-text:${subjectTheme.textColor}; --subject-shadow-rgb:${subjectTheme.shadowRgb};`}
+              >
+                <div class="topic-card__top">
+                  <div class="topic-card__main">
+                    <span class="topic-card__number">TOPIC {topic.displayOrder}</span>
+                    <h3 class="topic-card__title">{topic.name}</h3>
+
+                    <div class="topic-card__pills">
+                      <span
+                        class="topic-card__pill"
+                        style={topic.videoCount > 0 ? `background:${subjectTheme.bgLight}; color:${subjectTheme.textColor};` : undefined}
+                      >
+                        ▶ {pluralize(topic.videoCount, 'video')}
+                      </span>
+                      <span
+                        class="topic-card__pill"
+                        style={topic.testCount > 0 ? 'background:#F0FDF4; color:#166534;' : undefined}
+                      >
+                        📝 {pluralize(topic.testCount, 'test')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class:list={['topic-card__status', { 'topic-card__status--done': topic.practiced }]}>
+                    {topic.practiced ? '✓' : '→'}
+                  </div>
+                </div>
+
+                <div class="topic-card__bottom">
+                  <span class:list={['topic-card__practice', { 'topic-card__practice--done': topic.practiced }]}>
+                    {topic.practiced ? '✓ Practiced' : 'Not started yet'}
+                  </span>
+
+                  {topic.practiced ? (
+                    <span class="topic-card__cta-link" style={`color:${subjectTheme.colorDark};`}>Continue →</span>
+                  ) : (
+                    <span class="topic-card__cta-pill" style={`background:${subjectTheme.color};`}>Start →</span>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+
+        <section
+          class="subject-tip"
+          style={`background:linear-gradient(135deg, ${subjectTheme.bgLight}, ${subjectTheme.bgMid}); border-color:${subjectTheme.border};`}
+        >
+          <div class="subject-tip__icon">💡</div>
+          <div>
+            <h3>Study Tip for {subject.name}</h3>
+            <p>{subjectTheme.tip}</p>
+          </div>
+        </section>
+      </>
     ) : (
-      <div class="card empty-card">
-        <h2 class="heading-md">No topics available yet</h2>
-        <p class="text-muted">This subject will appear here once topics are added.</p>
-      </div>
+      <section class="subject-empty">
+        <div
+          class="subject-empty__icon"
+          style={`background:${subjectTheme.gradient}; box-shadow:0 8px 20px rgba(${subjectTheme.shadowRgb}, 0.28);`}
+        >
+          {subjectTheme.icon}
+        </div>
+        <h2>No topics yet</h2>
+        <p>Topics for {subject.name} haven't been added yet.</p>
+        <p>Check back soon or contact your instructor.</p>
+      </section>
     )}
   </section>
 </PlatformLayout>
 
 <style>
-  .subject-hero {
-    background: var(--color-navy);
-    padding: 40px 16px;
-  }
-
-  .subject-hero__inner,
-  .topics-section {
+  .subject-page {
+    max-width: 1100px;
     margin: 0 auto;
-    max-width: 64rem;
+    padding: 28px 24px 48px;
   }
 
-  .breadcrumb {
+  .subject-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 20px;
     align-items: center;
-    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 28px;
+  }
+
+  .subject-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    font-size: 0.78rem;
+    color: #9aa5b4;
+  }
+
+  .subject-breadcrumbs__back {
+    color: #9aa5b4;
+    font-weight: 600;
+    transition: color 0.15s ease;
+  }
+
+  .subject-breadcrumbs__back:hover {
+    color: #0a0f1e;
+  }
+
+  .subject-breadcrumbs__current {
+    color: #0a0f1e;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .subject-identity {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .subject-identity__icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .subject-identity__text h1 {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 900;
+    color: #0a0f1e;
+  }
+
+  .subject-identity__meta {
+    margin-top: 4px;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
-    font-size: 0.875rem;
-    margin: 0;
+    gap: 12px;
+    font-size: 0.82rem;
+    color: #9aa5b4;
+    font-weight: 500;
   }
 
-  .breadcrumb__active {
-    color: var(--color-surface);
+  .subject-progress {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 1px 4px rgba(10, 15, 30, 0.05);
   }
 
-  .heading-xl,
-  .heading-md {
-    margin: 0;
+  .subject-progress__ring {
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+    transform: rotate(-90deg);
   }
 
-  .heading-xl {
-    color: var(--color-surface);
-    font-size: clamp(2rem, 3vw, 2.75rem);
+  .subject-progress__ring-base,
+  .subject-progress__ring-fill {
+    fill: none;
+    stroke-width: 6;
+  }
+
+  .subject-progress__ring-base {
+    stroke: #f1f3f9;
+  }
+
+  .subject-progress__ring-fill {
+    stroke-linecap: round;
+  }
+
+  .subject-progress__ring-text {
+    fill: #0a0f1e;
+    font-size: 0.9rem;
     font-weight: 800;
-    margin-top: 8px;
+    transform: rotate(90deg);
+    transform-origin: center;
   }
 
-  .heading-md {
-    color: var(--color-navy);
-    font-size: 1.25rem;
+  .subject-progress__label {
+    font-size: 0.68rem;
     font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #9aa5b4;
   }
 
-  .subject-hero__subtitle {
-    color: rgba(255, 255, 255, 0.6);
-    margin: 0.5rem 0 0;
+  .subject-progress__value {
+    margin-top: 2px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #0a0f1e;
   }
 
-  .topics-section {
-    padding: 2rem 1rem 3.5rem;
+  .subject-progress__sub {
+    font-size: 0.75rem;
+    color: #9aa5b4;
+  }
+
+  .topics-section__head {
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topics-section__head h2 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #0a0f1e;
+  }
+
+  .topics-section__head span {
+    font-size: 0.75rem;
+    color: #9aa5b4;
   }
 
   .topics-grid {
     display: grid;
-    gap: 1rem;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
   }
 
   .topic-card {
-    align-items: center;
-    border-left: 4px solid var(--color-yellow);
+    background: #fff;
+    border-radius: 18px;
+    border: 1.5px solid #e2e8f0;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: block;
     color: inherit;
-    display: flex;
-    gap: 1rem;
-    justify-content: space-between;
-    transition:
-      border-color 0.2s ease,
-      box-shadow 0.2s ease,
-      transform 0.2s ease;
   }
 
   .topic-card:hover {
-    border-color: var(--color-navy);
-    box-shadow: 0 4px 12px rgba(10, 15, 30, 0.1);
-    transform: translateY(-1px);
+    border-color: var(--subject-color);
+    box-shadow: 0 8px 28px rgba(var(--subject-shadow-rgb), 0.12);
+    transform: translateY(-3px);
   }
 
-  .topic-card__content {
-    display: grid;
-    gap: 0.4rem;
+  .topic-card__top {
+    padding: 20px 20px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .topic-card__main {
+    min-width: 0;
   }
 
   .topic-card__number {
-    color: var(--color-text-muted);
-    font-size: 0.75rem;
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    background: #f8f9ff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #9aa5b4;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
   }
 
   .topic-card__title {
-    color: var(--color-text);
+    margin: 0 0 10px;
     font-size: 1rem;
-    font-weight: 600;
-    margin: 0;
+    font-weight: 700;
+    color: #0a0f1e;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .topic-card__pills {
     display: flex;
+    gap: 6px;
     flex-wrap: wrap;
-    gap: 0.5rem;
   }
 
-  .topic-pill {
+  .topic-card__pill {
+    background: #f9fafb;
+    color: #9ca3af;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 10px;
     border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    padding: 2px 10px;
   }
 
-  .topic-pill--video {
-    background: #eff6ff;
-    color: #1d4ed8;
-  }
-
-  .topic-pill--test {
-    background: #f0fdf4;
-    color: #166534;
-  }
-
-  .topic-card__action {
-    align-items: center;
-    display: flex;
+  .topic-card__status {
+    width: 32px;
+    height: 32px;
+    background: #f3f4f6;
+    border: 2px solid #e5e7eb;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 0.8rem;
+    color: #9ca3af;
+    font-weight: 800;
     flex-shrink: 0;
-    gap: 0.85rem;
   }
 
-  .topic-card__arrow,
-  .text-muted {
-    color: var(--color-text-muted);
+  .topic-card__status--done {
+    background: #d1fae5;
+    border-color: #a7f3d0;
+    color: #065f46;
   }
 
-  .empty-card {
+  .topic-card__bottom {
+    border-top: 1px solid #f1f3f9;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topic-card__practice {
+    font-size: 0.75rem;
+    color: #9aa5b4;
+  }
+
+  .topic-card__practice--done {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #10b981;
+  }
+
+  .topic-card__cta-link {
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .topic-card__cta-pill {
+    background: var(--subject-color);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .subject-empty {
     text-align: center;
+    margin-top: 60px;
   }
 
-  .empty-card p {
-    margin: 0.5rem 0 0;
+  .subject-empty__icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 24px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto;
+    color: #fff;
+    font-size: 2rem;
+    font-weight: 800;
   }
 
-  @media (min-width: 720px) {
-    .topics-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+  .subject-empty h2 {
+    margin: 20px 0 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .subject-empty p {
+    margin: 6px 0 0;
+    font-size: 0.875rem;
+    color: #9aa5b4;
+  }
+
+  .subject-tip {
+    margin-top: 24px;
+    border-radius: 16px;
+    padding: 20px 24px;
+    border: 1px solid;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .subject-tip__icon {
+    font-size: 1.2rem;
+    margin-top: 2px;
+  }
+
+  .subject-tip h3 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: #0a0f1e;
+  }
+
+  .subject-tip p {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: #4a5568;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    .subject-header {
+      grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 640px) {
-    .topic-card {
-      align-items: flex-start;
-      flex-direction: column;
+    .subject-page {
+      padding: 24px 16px 40px;
     }
 
-    .topic-card__action {
-      justify-content: space-between;
-      width: 100%;
+    .topics-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .topics-section__head,
+    .subject-tip,
+    .topic-card__bottom {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .topic-card__cta-link,
+    .topic-card__cta-pill {
+      align-self: flex-start;
     }
   }
 </style>

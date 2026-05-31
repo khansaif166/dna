@@ -1,22 +1,26 @@
 import type { MiddlewareHandler } from 'astro';
 
+import { loadProfileStatus } from './profileStatus';
 import { getAnonSupabase, getUserSupabase } from './supabase';
 
 async function loadProfile(accessToken: string, userId: string) {
   const supabase = getUserSupabase(accessToken);
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, full_name, role')
-    .eq('id', userId)
-    .maybeSingle();
+  const { data: profile } = await loadProfileStatus(supabase, userId);
 
-  return profile
-    ? {
-        id: profile.id,
-        fullName: profile.full_name,
-        role: profile.role,
-      }
-    : null;
+  if (!profile) {
+    return null;
+  }
+
+  if (profile.role === 'student' && !profile.is_active) {
+    return null;
+  }
+
+  return {
+    id: profile.id,
+    fullName: profile.full_name,
+    role: profile.role,
+    isActive: profile.is_active,
+  };
 }
 
 export const authMiddleware: MiddlewareHandler = async (context, next) => {
@@ -42,6 +46,12 @@ export const authMiddleware: MiddlewareHandler = async (context, next) => {
       if (!userError && user) {
         context.locals.user = user;
         context.locals.profile = await loadProfile(accessToken, user.id);
+
+        if (!context.locals.profile) {
+          context.locals.user = null;
+          context.cookies.delete('sb-access-token', { path: '/' });
+          context.cookies.delete('sb-refresh-token', { path: '/' });
+        }
       } else {
         const refreshToken = context.cookies.get('sb-refresh-token')?.value;
 
@@ -72,6 +82,12 @@ export const authMiddleware: MiddlewareHandler = async (context, next) => {
 
             context.locals.user = refreshedUser;
             context.locals.profile = await loadProfile(refreshedSession.access_token, refreshedUser.id);
+
+            if (!context.locals.profile) {
+              context.locals.user = null;
+              context.cookies.delete('sb-access-token', { path: '/' });
+              context.cookies.delete('sb-refresh-token', { path: '/' });
+            }
           }
         }
       }

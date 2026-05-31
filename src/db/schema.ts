@@ -21,6 +21,7 @@ export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey(),
   fullName: text('full_name').notNull(),
   role: roleEnum('role').default('student').notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow(),
 });
 

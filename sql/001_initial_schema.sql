@@ -16,6 +16,7 @@ CREATE TABLE "profiles" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"full_name" text NOT NULL,
 	"role" "role" DEFAULT 'student' NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint

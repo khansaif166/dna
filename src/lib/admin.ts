@@ -1,5 +1,6 @@
 import type { APIContext } from 'astro';
 
+import { loadProfileStatus } from './profileStatus';
 import { getAdminSupabase, getUserSupabase } from './supabase';
 
 type AdminAuthResult =
@@ -36,11 +37,7 @@ export async function requireAdminRouteAuth(context: APIContext): Promise<AdminA
   }
 
   const adminSupabase = getAdminSupabase();
-  const { data: profile, error: profileError } = await adminSupabase
-    .from('profiles')
-    .select('id, full_name, role')
-    .eq('id', user.id)
-    .maybeSingle();
+  const { data: profile, error: profileError } = await loadProfileStatus(adminSupabase, user.id);
 
   if (profileError || !profile || profile.role !== 'admin') {
     return jsonError('Forbidden', 403);

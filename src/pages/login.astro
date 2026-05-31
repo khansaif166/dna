@@ -12,6 +12,7 @@ const success = Astro.url.searchParams.get('success');
 const errorMessages: Record<string, string> = {
   invalid_input: 'Please enter a valid email and password.',
   invalid_credentials: 'Invalid email or password.',
+  account_disabled: 'This account has been disabled. Please contact an admin.',
   verification_failed: 'Email verification failed. Please try the link again.',
 };
 const successMessages: Record<string, string> = {

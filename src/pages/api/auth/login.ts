@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { z } from 'zod';
 
 import { hasValidOrigin } from '../../../lib/csrf';
+import { loadProfileStatus } from '../../../lib/profileStatus';
 import { getAdminSupabase, getAnonSupabase } from '../../../lib/supabase';
 
 export const prerender = false;
@@ -46,6 +47,17 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return redirect(request, '/login?error=invalid_credentials');
   }
 
+  const adminSupabase = getAdminSupabase();
+  const { data: profile } = await loadProfileStatus(adminSupabase, user.id);
+
+  if (!profile) {
+    return redirect(request, '/login?error=invalid_credentials');
+  }
+
+  if (profile.role === 'student' && !profile.is_active) {
+    return redirect(request, '/login?error=account_disabled');
+  }
+
   cookies.set('sb-access-token', session.access_token, {
     httpOnly: true,
     secure: true,
@@ -61,13 +73,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     path: '/',
     maxAge: 60 * 60 * 24 * 30,
   });
-
-  const adminSupabase = getAdminSupabase();
-  const { data: profile } = await adminSupabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
 
   return redirect(request, profile?.role === 'admin' ? '/admin' : '/student');
 };
