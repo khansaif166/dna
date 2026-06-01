@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
 
-import { db, topicResources } from '../../../db';
+import { db, subTopics, topicResources } from '../../../db';
 import { redirectToAdminReferrer } from '../../../lib/admin';
 import { hasValidOrigin } from '../../../lib/csrf';
 import { requireAdminApi } from '../../../lib/requireAdminApi';
@@ -10,7 +10,7 @@ export const prerender = false;
 
 const resourceSchema = z.object({
   topic_id: z.string().uuid(),
-  title: z.string().min(1),
+  title: z.string().trim().min(1),
   youtube_url: z.string().url(),
   notes: z.string().optional().or(z.literal('')),
   order: z.coerce.number().int(),
@@ -41,12 +41,20 @@ export const POST: APIRoute = async (context) => {
   }
 
   try {
-    await db.insert(topicResources).values({
-      topicId: parsed.data.topic_id,
-      title: parsed.data.title,
-      youtubeUrl: parsed.data.youtube_url,
-      notes: parsed.data.notes || null,
-      order: parsed.data.order,
+    await db.transaction(async (tx) => {
+      await tx.insert(subTopics).values({
+        topicId: parsed.data.topic_id,
+        name: parsed.data.title,
+        order: parsed.data.order,
+      });
+
+      await tx.insert(topicResources).values({
+        topicId: parsed.data.topic_id,
+        title: parsed.data.title,
+        youtubeUrl: parsed.data.youtube_url,
+        notes: parsed.data.notes || null,
+        order: parsed.data.order,
+      });
     });
   } catch (error) {
     return new Response(error instanceof Error ? error.message : 'Failed to create resource', { status: 400 });

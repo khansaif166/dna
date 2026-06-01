@@ -33,7 +33,7 @@ export const POST: APIRoute = async (context) => {
   });
 
   if (!parsed.success) {
-    return new Response('Invalid topic input', { status: 400 });
+    return new Response('Invalid chapter input', { status: 400 });
   }
 
   try {
@@ -43,7 +43,7 @@ export const POST: APIRoute = async (context) => {
       order: parsed.data.order,
     });
   } catch (error) {
-    return new Response(error instanceof Error ? error.message : 'Failed to create topic', { status: 400 });
+    return new Response(error instanceof Error ? error.message : 'Failed to create chapter', { status: 400 });
   }
 
   return redirectToAdminReferrer(context.request, '/admin/topics');

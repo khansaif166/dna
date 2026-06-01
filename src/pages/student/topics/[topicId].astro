@@ -4,7 +4,7 @@ export const prerender = false;
 import { and, asc, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import PlatformLayout from '../../../layouts/PlatformLayout.astro';
-import { db, questions, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
+import { db, questions, subTopics, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
 const authResult = await requireAuth(Astro, 'student');
@@ -37,7 +37,12 @@ if (!topicRows || topicRows.length === 0) {
 
 const [topic] = topicRows;
 
-const [resources, testRows] = await Promise.all([
+const [topicSubTopics, resources, testRows] = await Promise.all([
+  db
+    .select()
+    .from(subTopics)
+    .where(eq(subTopics.topicId, topic.id))
+    .orderBy(asc(subTopics.order)),
   db
     .select()
     .from(topicResources)
@@ -87,6 +92,37 @@ for (const attempt of attemptRows) {
 }
 
 const attemptedTestIds = new Set(attemptRows.map((attempt) => attempt.testId));
+
+function normalizeLabel(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const matchedResourceIds = new Set<string>();
+const subTopicSections = topicSubTopics.map((subTopic) => {
+  const normalizedName = normalizeLabel(subTopic.name);
+  const matchedResources = resources.filter((resource) => {
+    if (matchedResourceIds.has(resource.id)) {
+      return false;
+    }
+
+    const sameOrder = resource.order === subTopic.order;
+    const sameTitle = normalizeLabel(resource.title) === normalizedName;
+
+    if (sameOrder || sameTitle) {
+      matchedResourceIds.add(resource.id);
+      return true;
+    }
+
+    return false;
+  });
+
+  return {
+    ...subTopic,
+    resources: matchedResources,
+  };
+});
+
+const unmatchedResources = resources.filter((resource) => !matchedResourceIds.has(resource.id));
 
 const subjectType = topic.subjectName.toLowerCase().includes('physics')
   ? 'physics'
@@ -214,6 +250,7 @@ function scoreTone(percent: number) {
         </div>
 
         <div class="topic-stats">
+          <span>◎ {pluralize(topicSubTopics.length, 'sub-topic')}</span>
           <span>▶ {pluralize(resources.length, 'video')}</span>
           <span>📝 {pluralize(testRows.length, 'test')}</span>
         </div>
@@ -231,54 +268,164 @@ function scoreTone(percent: number) {
     <div class="topic-layout">
       <div class="topic-layout__main">
         <div class="section-head">
-          <h2>Video Resources</h2>
+          <h2>Sub-topics</h2>
           <span class="section-count" style={`background:${theme.bgLight}; color:${theme.textColor};`}>
-            {resources.length} videos
+            {topicSubTopics.length} items
           </span>
         </div>
 
-        {resources.length ? (
-          <div>
-            {resources.map((resource, index) => (
-              <article class="video-card">
-                <div
-                  class="video-card__accent"
-                  style={`background:linear-gradient(90deg, ${theme.gradientFrom}, ${theme.gradientTo});`}
-                ></div>
+        {topicSubTopics.length ? (
+          <div class="subtopic-accordion-list">
+            {subTopicSections.map((subTopic, index) => (
+              <details class="subtopic-accordion" open={index === 0}>
+                <summary class="subtopic-accordion__summary">
+                  <span class="subtopic-accordion__order">{String(subTopic.order).padStart(2, '0')}</span>
+                  <span class="subtopic-accordion__name">{subTopic.name}</span>
+                  <span
+                    class="subtopic-accordion__count"
+                    style={`background:${theme.bgLight}; color:${theme.textColor}; border-color:${theme.border};`}
+                  >
+                    ▶ {pluralize(subTopic.resources.length, 'video')}
+                  </span>
+                  <span class="subtopic-accordion__chevron" aria-hidden="true">▾</span>
+                </summary>
 
-                <div class="video-card__media">
-                  <iframe
-                    class="video-card__frame"
-                    src={toEmbedUrl(resource.youtubeUrl)}
-                    title={resource.title}
-                    loading="lazy"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowfullscreen
-                  />
-                  <div class="video-card__overlay">VIDEO {index + 1}</div>
-                </div>
+                <div class="subtopic-accordion__body">
+                  {subTopic.resources.length ? (
+                    <div>
+                      {subTopic.resources.map((resource, resourceIndex) => (
+                        <article class="video-card video-card--nested">
+                          <div
+                            class="video-card__accent"
+                            style={`background:linear-gradient(90deg, ${theme.gradientFrom}, ${theme.gradientTo});`}
+                          ></div>
 
-                <div class="video-card__body">
-                  <div class="video-card__title-row">
-                    <h3 class="video-card__title">{resource.title}</h3>
-                  </div>
+                          <div class="video-card__media">
+                            <iframe
+                              class="video-card__frame"
+                              src={toEmbedUrl(resource.youtubeUrl)}
+                              title={resource.title}
+                              loading="lazy"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowfullscreen
+                            />
+                            <div class="video-card__overlay">VIDEO {resourceIndex + 1}</div>
+                          </div>
 
-                  {resource.notes && (
-                    <div class="video-card__notes">
-                      <div class="video-card__notes-label">📌 Note</div>
-                      <div class="video-card__notes-text">{resource.notes}</div>
+                          <div class="video-card__body">
+                            <div class="video-card__title-row">
+                              <h3 class="video-card__title">{resource.title}</h3>
+                            </div>
+
+                            {resource.notes && (
+                              <div class="video-card__notes">
+                                <div class="video-card__notes-label">📌 Note</div>
+                                <div class="video-card__notes-text">{resource.notes}</div>
+                              </div>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div class="subtopic-empty">
+                      <h3>No videos yet</h3>
+                      <p>Videos for this sub-topic will appear here soon.</p>
                     </div>
                   )}
+
+                  <div class="subtopic-tests">
+                    <div class="subtopic-tests__head">
+                      <h3>Practice Tests</h3>
+                      <span
+                        class="subtopic-tests__count"
+                        style={`background:${theme.bgLight}; color:${theme.textColor}; border-color:${theme.border};`}
+                      >
+                        📝 {pluralize(enrichedTests.length, 'test')}
+                      </span>
+                    </div>
+
+                    {enrichedTests.length ? (
+                      <div class="subtopic-tests__list">
+                        {enrichedTests.map((test) => (
+                          <a
+                            href={`/student/tests/${test.id}`}
+                            class:list={[
+                              'subtopic-test-link',
+                              { 'subtopic-test-link--attempted': test.attempted },
+                            ]}
+                            style={`--subject-color:${theme.color}; --subject-text:${theme.textColor}; --subject-border:${theme.border};`}
+                          >
+                            <span class="subtopic-test-link__title">{test.title}</span>
+                            <span class="subtopic-test-link__meta">
+                              {test.attempted ? 'Retake test' : 'Start test'}
+                            </span>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div class="subtopic-tests__empty">
+                        <p>No tests yet for this chapter.</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </article>
+              </details>
             ))}
           </div>
         ) : (
-          <div class="empty-card">
-            <div class="empty-card__icon">▶</div>
-            <h3>No videos yet</h3>
-            <p>Videos for this topic will appear here soon</p>
+          <div class="empty-card empty-card--subtopics">
+            <div class="empty-card__emoji">◎</div>
+            <h3>No sub-topics yet</h3>
+            <p>Sub-topics for this topic will appear here soon</p>
           </div>
+        )}
+
+        {unmatchedResources.length > 0 && (
+          <>
+            <div class="section-head">
+              <h2>Additional Videos</h2>
+              <span class="section-count" style={`background:${theme.bgLight}; color:${theme.textColor};`}>
+                {unmatchedResources.length} videos
+              </span>
+            </div>
+
+            <div>
+              {unmatchedResources.map((resource, index) => (
+                <article class="video-card">
+                  <div
+                    class="video-card__accent"
+                    style={`background:linear-gradient(90deg, ${theme.gradientFrom}, ${theme.gradientTo});`}
+                  ></div>
+
+                  <div class="video-card__media">
+                    <iframe
+                      class="video-card__frame"
+                      src={toEmbedUrl(resource.youtubeUrl)}
+                      title={resource.title}
+                      loading="lazy"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowfullscreen
+                    />
+                    <div class="video-card__overlay">VIDEO {index + 1}</div>
+                  </div>
+
+                  <div class="video-card__body">
+                    <div class="video-card__title-row">
+                      <h3 class="video-card__title">{resource.title}</h3>
+                    </div>
+
+                    {resource.notes && (
+                      <div class="video-card__notes">
+                        <div class="video-card__notes-label">📌 Note</div>
+                        <div class="video-card__notes-text">{resource.notes}</div>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -530,6 +677,188 @@ function scoreTone(percent: number) {
   .section-count--tests {
     background: #f0fdf4;
     color: #166534;
+  }
+
+  .subtopic-accordion-list {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .subtopic-accordion {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .subtopic-accordion[open] {
+    box-shadow: 0 10px 24px rgba(10, 15, 30, 0.06);
+  }
+
+  .subtopic-accordion__summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .subtopic-accordion__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .subtopic-accordion__order {
+    width: 28px;
+    flex-shrink: 0;
+    color: #9aa5b4;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: right;
+  }
+
+  .subtopic-accordion__name {
+    flex: 1;
+    color: #0a0f1e;
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  .subtopic-accordion__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .subtopic-accordion__chevron {
+    color: #9aa5b4;
+    font-size: 0.9rem;
+    transition: transform 0.15s ease;
+  }
+
+  .subtopic-accordion[open] .subtopic-accordion__chevron {
+    transform: rotate(180deg);
+  }
+
+  .subtopic-accordion__body {
+    padding: 0 16px 16px;
+    border-top: 1px solid #f1f3f9;
+    background: #fbfdff;
+  }
+
+  .subtopic-empty {
+    padding: 18px 6px 6px;
+  }
+
+  .subtopic-empty h3,
+  .subtopic-empty p {
+    margin: 0;
+  }
+
+  .subtopic-empty h3 {
+    color: #0a0f1e;
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  .subtopic-empty p {
+    margin-top: 6px;
+    color: #9aa5b4;
+    font-size: 0.82rem;
+  }
+
+  .video-card--nested {
+    margin-top: 16px;
+    margin-bottom: 0;
+  }
+
+  .subtopic-tests {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .subtopic-tests__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .subtopic-tests__head h3 {
+    margin: 0;
+    color: #0a0f1e;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .subtopic-tests__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .subtopic-tests__list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .subtopic-test-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--subject-border);
+    background: #fff;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+
+  .subtopic-test-link:hover {
+    transform: translateY(-1px);
+    border-color: var(--subject-color);
+    box-shadow: 0 8px 18px rgba(10, 15, 30, 0.06);
+  }
+
+  .subtopic-test-link--attempted {
+    background: #f8fafc;
+  }
+
+  .subtopic-test-link__title {
+    color: #0a0f1e;
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+
+  .subtopic-test-link__meta {
+    color: var(--subject-text);
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .subtopic-tests__empty p {
+    margin: 0;
+    color: #9aa5b4;
+    font-size: 0.8rem;
   }
 
   .video-card {

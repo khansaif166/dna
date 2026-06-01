@@ -14,7 +14,7 @@ const pathname = Astro.url.pathname;
 const navItems = [
   { label: 'Overview', href: '/admin' },
   { label: 'Students', href: '/admin/students' },
-  { label: 'Subjects & Topics', href: '/admin/subjects' },
+  { label: 'Subjects & Chapters', href: '/admin/subjects' },
   { label: 'Tests', href: '/admin/tests' },
   { label: 'Questions', href: '/admin/questions' },
 ];
@@ -24,7 +24,7 @@ const isActive = (label: string, href: string) => {
     return pathname === '/admin';
   }
 
-  if (label === 'Subjects & Topics') {
+  if (label === 'Subjects & Chapters') {
     return pathname.startsWith('/admin/subjects') || pathname.startsWith('/admin/topics');
   }
 
@@ -95,7 +95,7 @@ const isActive = (label: string, href: string) => {
                         <path d="M20 21v-2a4 4 0 0 0-3-3.87"></path>
                         <path d="M16 4.13a4 4 0 0 1 0 7.75"></path>
                       </svg>
-                    ) : item.label === 'Subjects & Topics' ? (
+                    ) : item.label === 'Subjects & Chapters' ? (
                       <svg viewBox="0 0 24 24">
                         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
                         <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"></path>

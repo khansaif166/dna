@@ -4,7 +4,7 @@ export const prerender = false;
 import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import PlatformLayout from '../../../layouts/PlatformLayout.astro';
-import { db, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
+import { db, subTopics, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
 const authResult = await requireAuth(Astro, 'student');
@@ -36,7 +36,7 @@ const subjectTopics = await db
 
 const topicIds = subjectTopics.map((topic) => topic.id);
 
-const [testCountRows, resourceCountRows, practicedTopicRows] = topicIds.length
+const [testCountRows, resourceCountRows, subTopicCountRows, practicedTopicRows] = topicIds.length
   ? await Promise.all([
       db
         .select({
@@ -55,6 +55,14 @@ const [testCountRows, resourceCountRows, practicedTopicRows] = topicIds.length
         .where(inArray(topicResources.topicId, topicIds))
         .groupBy(topicResources.topicId),
       db
+        .select({
+          topicId: subTopics.topicId,
+          subTopicCount: sql<number>`count(*)::int`,
+        })
+        .from(subTopics)
+        .where(inArray(subTopics.topicId, topicIds))
+        .groupBy(subTopics.topicId),
+      db
         .selectDistinct({
           topicId: tests.topicId,
         })
@@ -68,7 +76,7 @@ const [testCountRows, resourceCountRows, practicedTopicRows] = topicIds.length
           )
         ),
     ])
-  : [[], [], []];
+  : [[], [], [], []];
 
 const testCounts = new Map(
   testCountRows
@@ -77,6 +85,7 @@ const testCounts = new Map(
 );
 
 const resourceCounts = new Map(resourceCountRows.map((row) => [row.topicId, row.resourceCount]));
+const subTopicCounts = new Map(subTopicCountRows.map((row) => [row.topicId, row.subTopicCount]));
 const practicedTopicIds = new Set(
   practicedTopicRows
     .map((row) => row.topicId)
@@ -88,6 +97,7 @@ const totalTestsAvailable = Array.from(testCounts.values()).reduce((sum, count) 
 const topicCards = subjectTopics.map((topic, index) => ({
   ...topic,
   displayOrder: String(index + 1).padStart(2, '0'),
+  subTopicCount: subTopicCounts.get(topic.id) ?? 0,
   videoCount: resourceCounts.get(topic.id) ?? 0,
   testCount: testCounts.get(topic.id) ?? 0,
   practiced: practicedTopicIds.has(topic.id),
@@ -261,6 +271,12 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
                     <h3 class="topic-card__title">{topic.name}</h3>
 
                     <div class="topic-card__pills">
+                      <span
+                        class="topic-card__pill"
+                        style={topic.subTopicCount > 0 ? 'background:#F8FAFC; color:#475569;' : undefined}
+                      >
+                        ◎ {pluralize(topic.subTopicCount, 'sub-topic')}
+                      </span>
                       <span
                         class="topic-card__pill"
                         style={topic.videoCount > 0 ? `background:${subjectTheme.bgLight}; color:${subjectTheme.textColor};` : undefined}

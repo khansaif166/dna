@@ -69,6 +69,21 @@ export const topicResources = pgTable(
   })
 );
 
+export const subTopics = pgTable(
+  'sub_topics',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    topicId: uuid('topic_id')
+      .references(() => topics.id)
+      .notNull(),
+    name: text('name').notNull(),
+    order: smallint('order').notNull(),
+  },
+  (table) => ({
+    topicOrderUnique: unique('sub_topics_topic_id_order_unique').on(table.topicId, table.order),
+  })
+);
+
 export const tests = pgTable('tests', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),

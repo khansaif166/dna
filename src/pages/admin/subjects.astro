@@ -3,9 +3,9 @@ export const prerender = false;
 
 import { asc } from 'drizzle-orm';
 
-import AdminLayout from '../../layouts/AdminLayout.astro';
-import { db, subjects, topicResources, topics } from '../../db';
+import { db, subTopics, subjects, topics } from '../../db';
 import { requireAuth } from '../../lib/auth';
+import AdminLayout from '../../layouts/AdminLayout.astro';
 
 const authResult = await requireAuth(Astro, 'admin');
 
@@ -14,16 +14,16 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
-const [allSubjects, allTopics, allResources] = await Promise.all([
+const [allSubjects, allTopics, allSubTopics] = await Promise.all([
   db.select().from(subjects).orderBy(asc(subjects.order)),
   db.select().from(topics).orderBy(asc(topics.subjectId), asc(topics.order)),
-  db.select().from(topicResources).orderBy(asc(topicResources.topicId), asc(topicResources.order)),
+  db.select().from(subTopics).orderBy(asc(subTopics.topicId), asc(subTopics.order)),
 ]);
 
 const successParam = Astro.url.searchParams.get('success');
 const errorParam = Astro.url.searchParams.get('error');
 const selectedSubjectId = Astro.url.searchParams.get('subject');
-const selectedTopicId = Astro.url.searchParams.get('topic');
+const preselectedChapterId = Astro.url.searchParams.get('chapterId');
 
 const subjectThemes = [
   {
@@ -74,23 +74,25 @@ const subjectTopicMap = new Map(
   ])
 );
 
-const resourceCountMap = new Map<string, number>();
+const subTopicCountMap = new Map<string, number>();
 
-for (const resource of allResources) {
-  resourceCountMap.set(resource.topicId, (resourceCountMap.get(resource.topicId) ?? 0) + 1);
+for (const subTopic of allSubTopics) {
+  subTopicCountMap.set(subTopic.topicId, (subTopicCountMap.get(subTopic.topicId) ?? 0) + 1);
 }
 
 const subjectRows = allSubjects.map((subject) => {
   const subjectTopics = subjectTopicMap.get(subject.id) ?? [];
+  const chapters = subjectTopics.map((topic) => ({
+    ...topic,
+    subTopicCount: subTopicCountMap.get(topic.id) ?? 0,
+  }));
 
   return {
     ...subject,
     theme: getSubjectTheme(subject.order),
-    topicCount: subjectTopics.length,
-    topics: subjectTopics.map((topic) => ({
-      ...topic,
-      resourceCount: resourceCountMap.get(topic.id) ?? 0,
-    })),
+    chapterCount: chapters.length,
+    emptyTopicCount: chapters.filter((chapter) => chapter.subTopicCount === 0).length,
+    chapters,
   };
 });
 
@@ -100,12 +102,12 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
 
 <AdminLayout
   title="Admin Subjects | Dream Neet Academy"
-  pageTitle="Subjects & Topics"
+  pageTitle="Subjects & Chapters"
   userName={admin.fullName}
   userEmail={Astro.locals.user?.email ?? admin.fullName}
 >
   <section class="page-intro">
-    <p class="breadcrumb">Admin / <span class="breadcrumb__active">Subjects & Topics</span></p>
+    <p class="breadcrumb">Admin / <span class="breadcrumb__active">Subjects & Chapters</span></p>
   </section>
 
   <section class="workspace">
@@ -161,14 +163,14 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
           </form>
         </article>
 
-        <article class="editor-card">
-          <div class="editor-card__header editor-card__header--topic">
-            <span class="editor-card__accent editor-card__accent--topic"></span>
+        <article class="editor-card" id="add-chapter-form">
+          <div class="editor-card__header editor-card__header--chapter">
+            <span class="editor-card__accent editor-card__accent--chapter"></span>
             <div class="editor-card__title-row">
-              <span class="editor-card__icon editor-card__icon--topic" aria-hidden="true">T</span>
+              <span class="editor-card__icon editor-card__icon--chapter" aria-hidden="true">C</span>
               <div>
-                <h2>Add Topic</h2>
-                <p>Add a topic under a subject</p>
+                <h2>Add Chapter</h2>
+                <p>Add a chapter under a subject</p>
               </div>
             </div>
           </div>
@@ -187,8 +189,8 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
             </label>
 
             <label class="form-field">
-              <span>Topic Name</span>
-              <input class="form-input" type="text" name="name" placeholder="e.g. Laws of Motion" required />
+              <span>Chapter Name</span>
+              <input class="form-input" type="text" name="name" placeholder="e.g. Mechanics" required />
             </label>
 
             <label class="form-field">
@@ -196,32 +198,32 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
               <input class="form-input form-input--compact" type="number" name="order" min="1" required />
             </label>
 
-            <button type="submit" class="submit-button submit-button--gold">+ Add Topic</button>
+            <button type="submit" class="submit-button submit-button--gold">+ Add Chapter</button>
           </form>
         </article>
 
-        <article class="editor-card" id="video-resource-form">
+        <article class="editor-card" id="add-topic-form">
           <div class="editor-card__header editor-card__header--resource">
             <span class="editor-card__accent editor-card__accent--resource"></span>
             <div class="editor-card__title-row">
               <span class="editor-card__icon editor-card__icon--resource" aria-hidden="true">▶</span>
               <div>
-                <h2>Add Video Resource</h2>
-                <p>Link a YouTube video to a topic</p>
+                <h2>Add Topic & Video</h2>
+                <p>Add a topic inside a chapter with its video</p>
               </div>
             </div>
           </div>
 
           <form action="/api/admin/resources" method="POST" class="editor-card__body">
             <label class="form-field">
-              <span>Topic</span>
+              <span>Parent Chapter</span>
               <select class="form-input form-select" name="topic_id" required>
-                <option value="" disabled selected={!selectedTopicId}>Select topic</option>
+                <option value="" disabled selected={!preselectedChapterId}>Select chapter</option>
                 {subjectRows.map((subject) => (
                   <optgroup label={subject.name}>
-                    {subject.topics.map((topic) => (
-                      <option value={topic.id} selected={selectedTopicId === topic.id}>
-                        {topic.name}
+                    {subject.chapters.map((chapter) => (
+                      <option value={chapter.id} selected={preselectedChapterId === chapter.id}>
+                        {chapter.name}
                       </option>
                     ))}
                   </optgroup>
@@ -230,8 +232,8 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
             </label>
 
             <label class="form-field">
-              <span>Video Title</span>
-              <input class="form-input" type="text" name="title" placeholder="e.g. Newton's Laws - Complete" required />
+              <span>Topic Name</span>
+              <input class="form-input" type="text" name="title" placeholder="e.g. Laws of Motion" required />
             </label>
 
             <label class="form-field">
@@ -243,11 +245,10 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
                 placeholder="https://youtube.com/watch?v=..."
                 required
               />
-              <small>Paste the full YouTube URL or short link</small>
             </label>
 
             <label class="form-field">
-              <span>Notes (optional)</span>
+              <span>Notes</span>
               <textarea
                 class="form-input form-textarea"
                 name="notes"
@@ -260,7 +261,7 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
               <input class="form-input form-input--compact" type="number" name="order" min="1" required />
             </label>
 
-            <button type="submit" class="submit-button submit-button--green">+ Add Video</button>
+            <button type="submit" class="submit-button submit-button--green">+ Add Topic & Video</button>
           </form>
         </article>
       </div>
@@ -281,7 +282,7 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
                   <span class="subject-row__dot" style={`--subject-dot:${subject.theme.dot};`}></span>
                   <div>
                     <div class="subject-row__name">{subject.name}</div>
-                    <div class="subject-row__meta">{subject.topicCount} topics</div>
+                    <div class="subject-row__meta">{subject.chapterCount} chapters</div>
                   </div>
                 </div>
 
@@ -298,51 +299,142 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
         )}
       </article>
 
-      <section class="topics-groups">
-        {subjectRows.map((subject) => (
-          <article class="topic-group-card">
-            <div class="topic-group-card__header" style={`--subject-color:${subject.theme.dot};`}>
-              <span class="topic-group-card__accent"></span>
-              <div class="topic-group-card__title">
-                <span class="subject-row__dot" style={`--subject-dot:${subject.theme.dot};`}></span>
-                <span>{subject.name}</span>
-              </div>
-              <span class="count-badge">{subject.topicCount} topics</span>
-            </div>
+      <section class="chapters-section">
+        <div class="section-toolbar">
+          <h2>Chapters</h2>
+          <button type="button" class="accordion-toggle" data-accordion-toggle>Expand all</button>
+        </div>
 
-            {subject.topics.length ? (
-              <div>
-                {subject.topics.map((topic) => (
-                  <div class="topic-row">
-                    <span class="topic-row__order">{String(topic.order).padStart(2, '0')}</span>
-                    <span class="topic-row__name">{topic.name}</span>
-                    <span
-                      class:list={[
-                        'video-pill',
-                        { 'video-pill--empty': topic.resourceCount === 0 },
-                      ]}
-                    >
-                      {topic.resourceCount === 0 ? '▶ No videos' : `▶ ${topic.resourceCount} videos`}
-                    </span>
-                    <a
-                      href={`/admin/subjects?subject=${subject.id}&topic=${topic.id}#video-resource-form`}
-                      class="ghost-button"
-                    >
-                      Add Video
-                    </a>
+        <div class="accordion-list">
+          {subjectRows.map((subject) => (
+            <article class="accordion-card">
+              <button
+                type="button"
+                class="accordion-header"
+                style={`--subject-color:${subject.theme.dot};`}
+                aria-expanded="false"
+              >
+                <span class="accordion-header__accent" aria-hidden="true"></span>
+                <span class="subject-row__dot" style={`--subject-dot:${subject.theme.dot};`}></span>
+                <span class="accordion-header__title">{subject.name}</span>
+                <span class="count-badge">{subject.chapterCount} chapters</span>
+                <span class="accordion-header__side">
+                  {subject.emptyTopicCount > 0 && (
+                    <span class="warning-badge">{subject.emptyTopicCount} need topics</span>
+                  )}
+                  <span class="chevron" aria-hidden="true">▾</span>
+                </span>
+              </button>
+
+              <div class="accordion-body">
+                {subject.chapters.length ? (
+                  subject.chapters.map((chapter) => (
+                    <div class="chapter-row">
+                      <span class="chapter-row__order">{String(chapter.order).padStart(2, '0')}</span>
+                      <span class="chapter-row__name">{chapter.name}</span>
+                      <span
+                        class:list={[
+                          'topic-pill',
+                          { 'topic-pill--empty': chapter.subTopicCount === 0 },
+                        ]}
+                      >
+                        {chapter.subTopicCount === 0 ? '⚠ No topics' : `▶ ${chapter.subTopicCount} topics`}
+                      </span>
+                      <a
+                        href={`/admin/subjects?subject=${subject.id}&chapterId=${chapter.id}#add-topic-form`}
+                        class="chapter-action"
+                        style={`--subject-color:${subject.theme.dot};`}
+                      >
+                        Add Topic
+                      </a>
+                    </div>
+                  ))
+                ) : (
+                  <div class="empty-panel empty-panel--tight">
+                    <p>No chapters yet — add one using the form</p>
                   </div>
-                ))}
+                )}
               </div>
-            ) : (
-              <div class="empty-panel empty-panel--tight">
-                <p>No topics yet — add one using the form on the left</p>
-              </div>
-            )}
-          </article>
-        ))}
+            </article>
+          ))}
+        </div>
       </section>
     </div>
   </section>
+
+  <script>
+    const accordionCards = Array.from(document.querySelectorAll('.accordion-card'));
+    const accordionBodies = Array.from(document.querySelectorAll('.accordion-body'));
+    const chevrons = Array.from(document.querySelectorAll('.chevron'));
+    const toggleButton = document.querySelector('[data-accordion-toggle]');
+
+    const setCardOpen = (card, open) => {
+      const header = card.querySelector('.accordion-header');
+      const body = card.querySelector('.accordion-body');
+      const chevron = card.querySelector('.chevron');
+
+      if (!header || !body || !chevron) {
+        return;
+      }
+
+      body.style.display = open ? 'block' : 'none';
+      chevron.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+      header.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    const updateToggleLabel = () => {
+      if (!toggleButton) {
+        return;
+      }
+
+      const allOpen = accordionCards.length > 0 && accordionCards.every((card) => {
+        const header = card.querySelector('.accordion-header');
+        return header?.getAttribute('aria-expanded') === 'true';
+      });
+
+      toggleButton.textContent = allOpen ? 'Collapse all' : 'Expand all';
+    };
+
+    document.querySelectorAll('.accordion-header').forEach((header) => {
+      header.addEventListener('click', () => {
+        const card = header.closest('.accordion-card');
+        const body = card?.querySelector('.accordion-body');
+        const isOpen = body instanceof HTMLElement && body.style.display === 'block';
+
+        accordionCards.forEach((item) => setCardOpen(item, false));
+
+        if (card && !isOpen) {
+          setCardOpen(card, true);
+        }
+
+        updateToggleLabel();
+      });
+    });
+
+    toggleButton?.addEventListener('click', () => {
+      const allOpen = accordionCards.length > 0 && accordionCards.every((card) => {
+        const header = card.querySelector('.accordion-header');
+        return header?.getAttribute('aria-expanded') === 'true';
+      });
+
+      accordionCards.forEach((card) => setCardOpen(card, !allOpen));
+      updateToggleLabel();
+    });
+
+    accordionBodies.forEach((body) => {
+      body.style.display = 'none';
+    });
+
+    chevrons.forEach((chevron) => {
+      chevron.style.transform = 'rotate(0deg)';
+    });
+
+    if (accordionCards[0]) {
+      setCardOpen(accordionCards[0], true);
+    }
+
+    updateToggleLabel();
+  </script>
 </AdminLayout>
 
 <style>
@@ -403,7 +495,7 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
 
   .editor-card,
   .data-card,
-  .topic-group-card {
+  .accordion-card {
     background: #fff;
     border: 1px solid #e2e8f0;
     border-radius: 16px;
@@ -425,7 +517,7 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     background: linear-gradient(135deg, #f8f9ff 0%, #eef0ff 100%);
   }
 
-  .editor-card__header--topic {
+  .editor-card__header--chapter {
     background: linear-gradient(135deg, #fffbeb, #fef3c7);
   }
 
@@ -443,7 +535,7 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     background: linear-gradient(180deg, #0a0f1e, #2d3a6b);
   }
 
-  .editor-card__accent--topic {
+  .editor-card__accent--chapter {
     background: linear-gradient(180deg, #f5c518, #e6b800);
   }
 
@@ -458,7 +550,8 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
   }
 
   .editor-card__title-row h2,
-  .data-card__header h2 {
+  .data-card__header h2,
+  .section-toolbar h2 {
     margin: 0;
     color: #0a0f1e;
     font-size: 0.95rem;
@@ -488,7 +581,7 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     color: #fff;
   }
 
-  .editor-card__icon--topic {
+  .editor-card__icon--chapter {
     background: #f5c518;
     color: #0a0f1e;
   }
@@ -641,42 +734,43 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     margin-bottom: 20px;
   }
 
-  .data-card__header,
-  .topic-group-card__header {
+  .data-card__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
     padding: 16px 20px;
-  }
-
-  .data-card__header {
     border-bottom: 1px solid #e2e8f0;
   }
 
-  .count-badge {
+  .count-badge,
+  .warning-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: #f3f4f6;
-    color: #6b7280;
     border-radius: 999px;
-    padding: 3px 10px;
-    font-size: 0.72rem;
-    font-weight: 600;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
     white-space: nowrap;
   }
 
-  .subject-row,
-  .topic-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 20px;
+  .count-badge {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .warning-badge {
+    background: #fef2f2;
+    color: #991b1b;
   }
 
   .subject-row {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: 14px;
+    padding: 14px 20px;
     border-bottom: 1px solid #f8f9ff;
   }
 
@@ -685,12 +779,12 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
   }
 
   .subject-row:hover,
-  .topic-row:hover {
+  .chapter-row:hover,
+  .accordion-header:hover {
     background: #fafbff;
   }
 
-  .subject-row__info,
-  .topic-group-card__title {
+  .subject-row__info {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -726,83 +820,151 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     font-weight: 700;
   }
 
-  .topics-groups {
+  .chapters-section {
     display: grid;
-    gap: 16px;
+    gap: 12px;
   }
 
-  .topic-group-card__header {
+  .section-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 0;
+  }
+
+  .accordion-toggle {
+    border: none;
+    background: transparent;
+    color: #9aa5b4;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .accordion-toggle:hover {
+    color: #0a0f1e;
+  }
+
+  .accordion-list {
+    display: grid;
+    gap: 12px;
+  }
+
+  .accordion-card {
+    border-radius: 14px;
+    margin-bottom: 0;
+  }
+
+  .accordion-header {
+    width: 100%;
+    border: none;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    text-align: left;
     position: relative;
+    transition: background 0.15s ease;
   }
 
-  .topic-group-card__accent {
-    position: absolute;
-    inset: 0 auto 0 0;
+  .accordion-header__accent {
     width: 4px;
+    height: 36px;
+    border-radius: 2px;
     background: var(--subject-color);
+    flex-shrink: 0;
   }
 
-  .topic-group-card__title {
+  .accordion-header__title {
     color: #0a0f1e;
     font-size: 0.95rem;
     font-weight: 700;
   }
 
-  .topic-row {
-    gap: 12px;
-    padding: 12px 20px 12px 28px;
-    border-top: 1px solid #f8f9ff;
+  .accordion-header__side {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
-  .topic-row__order {
-    width: 24px;
+  .chevron {
+    color: #9aa5b4;
+    font-size: 16px;
+    line-height: 1;
+    transition: transform 0.15s ease;
+  }
+
+  .accordion-body {
+    display: none;
+    border-top: 1px solid #f1f3f9;
+  }
+
+  .chapter-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 18px 10px 30px;
+    border-bottom: 1px solid #f8f9ff;
+  }
+
+  .chapter-row:last-child {
+    border-bottom: none;
+  }
+
+  .chapter-row__order {
+    width: 20px;
     flex-shrink: 0;
     text-align: right;
-    color: #9aa5b4;
-    font-size: 0.7rem;
-    font-weight: 700;
+    color: #cbd5e0;
+    font-size: 0.68rem;
+    font-weight: 800;
   }
 
-  .topic-row__name {
+  .chapter-row__name {
     min-width: 0;
     flex: 1;
     color: #0a0f1e;
     font-size: 0.875rem;
-    font-weight: 500;
+    font-weight: 600;
   }
 
-  .video-pill {
+  .topic-pill {
     background: #f0fdf4;
-    color: #065f46;
+    color: #166534;
     border-radius: 999px;
     padding: 2px 8px;
-    font-size: 0.72rem;
-    font-weight: 600;
+    font-size: 0.68rem;
+    font-weight: 700;
     white-space: nowrap;
   }
 
-  .video-pill--empty {
+  .topic-pill--empty {
     background: #fef2f2;
     color: #991b1b;
   }
 
-  .ghost-button {
+  .chapter-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 4px 10px;
-    color: #4a5568;
-    font-size: 0.75rem;
+    padding: 3px 10px;
+    color: #6b7280;
+    font-size: 0.72rem;
     font-weight: 600;
     white-space: nowrap;
     transition: all 0.15s ease;
   }
 
-  .ghost-button:hover {
-    border-color: #0a0f1e;
-    color: #0a0f1e;
+  .chapter-action:hover {
+    border-color: var(--subject-color);
+    color: var(--subject-color);
   }
 
   .empty-panel {
@@ -844,24 +1006,23 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     }
 
     .subject-row,
-    .topic-row,
     .data-card__header,
-    .topic-group-card__header {
+    .accordion-header {
       padding-left: 16px;
       padding-right: 16px;
     }
 
-    .topic-row {
+    .chapter-row {
       flex-wrap: wrap;
-      padding-left: 20px;
+      padding: 12px 16px 12px 22px;
     }
 
-    .topic-row__name {
-      flex-basis: calc(100% - 40px);
+    .chapter-row__name {
+      flex-basis: calc(100% - 34px);
     }
 
-    .ghost-button {
-      margin-left: 36px;
+    .chapter-action {
+      margin-left: 30px;
     }
   }
 </style>

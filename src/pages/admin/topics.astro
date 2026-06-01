@@ -19,25 +19,25 @@ const allTopics = await db.select().from(topics).orderBy(asc(topics.subjectId), 
 ---
 
 <AdminLayout
-  title="Admin Topics | Dream Neet Academy"
-  pageTitle="Subjects & Topics"
+  title="Admin Chapters | Dream Neet Academy"
+  pageTitle="Subjects & Chapters"
   userName={admin.fullName}
   userEmail={Astro.locals.user?.email ?? admin.fullName}
 >
   <section class="page-header">
-    <h1 class="heading-lg">Topics & Resources</h1>
+    <h1 class="heading-lg">Chapters</h1>
   </section>
 
   <section class="page-grid">
     <div class="card form-card">
       <div class="section-head">
         <span class="section-pill">Create</span>
-        <h2 class="heading-md">Add Topic</h2>
+        <h2 class="heading-md">Add Chapter</h2>
       </div>
 
       <form action="/api/admin/topics" method="POST" class="stack-form">
         <label class="field">
-          <span>Subject</span>
+          <span>Parent Subject</span>
           <select class="input-field input-select" name="subject_id" required>
             {allSubjects.map((subject) => (
               <option value={subject.id}>{subject.name}</option>
@@ -45,14 +45,14 @@ const allTopics = await db.select().from(topics).orderBy(asc(topics.subjectId), 
           </select>
         </label>
         <label class="field">
-          <span>Name</span>
+          <span>Chapter Name</span>
           <input class="input-field" type="text" name="name" required />
         </label>
         <label class="field">
           <span>Order</span>
           <input class="input-field" type="number" name="order" required />
         </label>
-        <button type="submit" class="btn-primary">Create Topic</button>
+        <button type="submit" class="btn-primary">Create Chapter</button>
       </form>
     </div>
 
@@ -64,7 +64,7 @@ const allTopics = await db.select().from(topics).orderBy(asc(topics.subjectId), 
           <section class="card subject-card">
             <div class="subject-card__head">
               <h2 class="heading-md">{subject.name}</h2>
-              <span class="subject-card__count">{subjectTopics.length} topics</span>
+              <span class="subject-card__count">{subjectTopics.length} chapters</span>
             </div>
 
             {subjectTopics.length ? (
@@ -102,8 +102,8 @@ const allTopics = await db.select().from(topics).orderBy(asc(topics.subjectId), 
             ) : (
               <div class="empty-state empty-state--compact">
                 <div class="empty-state__icon">◎</div>
-                <h3 class="heading-md">No topics added yet</h3>
-                <p class="text-muted">Create a topic above, then attach video resources here.</p>
+                <h3 class="heading-md">No chapters added yet</h3>
+                <p class="text-muted">Create a chapter above, then attach topic videos from the subjects page.</p>
               </div>
             )}
           </section>
