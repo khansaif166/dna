@@ -3,7 +3,7 @@ export const prerender = false;
 
 import { asc } from 'drizzle-orm';
 
-import { db, subTopics, subjects, topics } from '../../db';
+import { db, subTopics, subjects, topicResources, topics } from '../../db';
 import { requireAuth } from '../../lib/auth';
 import AdminLayout from '../../layouts/AdminLayout.astro';
 
@@ -14,16 +14,24 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
-const [allSubjects, allTopics, allSubTopics] = await Promise.all([
+const [allSubjects, allTopics, allSubTopics, allResources] = await Promise.all([
   db.select().from(subjects).orderBy(asc(subjects.order)),
   db.select().from(topics).orderBy(asc(topics.subjectId), asc(topics.order)),
   db.select().from(subTopics).orderBy(asc(subTopics.topicId), asc(subTopics.order)),
+  db.select().from(topicResources).orderBy(asc(topicResources.topicId), asc(topicResources.order)),
 ]);
 
 const successParam = Astro.url.searchParams.get('success');
 const errorParam = Astro.url.searchParams.get('error');
 const selectedSubjectId = Astro.url.searchParams.get('subject');
 const preselectedChapterId = Astro.url.searchParams.get('chapterId');
+const selectedExistingSubTopicId = Astro.url.searchParams.get('subTopicId');
+const preselectedChapter = allTopics.find((topic) => topic.id === preselectedChapterId) ?? null;
+const preselectedExistingSubTopic = allSubTopics.find((subTopic) => subTopic.id === selectedExistingSubTopicId) ?? null;
+const preselectedExistingChapter = allTopics.find((topic) => topic.id === preselectedExistingSubTopic?.topicId) ?? null;
+const initialNewTopicSubjectId = selectedSubjectId ?? preselectedChapter?.subjectId ?? '';
+const initialExistingSubjectId = selectedSubjectId ?? preselectedExistingChapter?.subjectId ?? preselectedChapter?.subjectId ?? '';
+const initialExistingChapterId = preselectedExistingChapter?.id ?? preselectedChapterId ?? '';
 
 const subjectThemes = [
   {
@@ -75,9 +83,18 @@ const subjectTopicMap = new Map(
 );
 
 const subTopicCountMap = new Map<string, number>();
+const chapterSubTopicMap = new Map<string, typeof allSubTopics>();
+const resourceByTopicOrderMap = new Map<string, (typeof allResources)[number]>();
 
 for (const subTopic of allSubTopics) {
   subTopicCountMap.set(subTopic.topicId, (subTopicCountMap.get(subTopic.topicId) ?? 0) + 1);
+  const entries = chapterSubTopicMap.get(subTopic.topicId) ?? [];
+  entries.push(subTopic);
+  chapterSubTopicMap.set(subTopic.topicId, entries);
+}
+
+for (const resource of allResources) {
+  resourceByTopicOrderMap.set(`${resource.topicId}:${resource.order}`, resource);
 }
 
 const subjectRows = allSubjects.map((subject) => {
@@ -85,6 +102,14 @@ const subjectRows = allSubjects.map((subject) => {
   const chapters = subjectTopics.map((topic) => ({
     ...topic,
     subTopicCount: subTopicCountMap.get(topic.id) ?? 0,
+    subTopics: (chapterSubTopicMap.get(topic.id) ?? []).map((subTopic) => {
+      const video = resourceByTopicOrderMap.get(`${subTopic.topicId}:${subTopic.order}`) ?? null;
+
+      return {
+        ...subTopic,
+        video,
+      };
+    }),
   }));
 
   return {
@@ -214,55 +239,228 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
             </div>
           </div>
 
-          <form action="/api/admin/resources" method="POST" class="editor-card__body">
-            <label class="form-field">
-              <span>Parent Chapter</span>
-              <select class="form-input form-select" name="topic_id" required>
-                <option value="" disabled selected={!preselectedChapterId}>Select chapter</option>
-                {subjectRows.map((subject) => (
-                  <optgroup label={subject.name}>
-                    {subject.chapters.map((chapter) => (
-                      <option value={chapter.id} selected={preselectedChapterId === chapter.id}>
-                        {chapter.name}
+          <div class="editor-card__tabs" role="tablist" aria-label="Topic and video actions">
+            <button
+              type="button"
+              class="editor-tab editor-tab--active"
+              data-tab-trigger="new-topic"
+              role="tab"
+              aria-selected="true"
+            >
+              New Topic + Video
+            </button>
+            <button
+              type="button"
+              class="editor-tab"
+              data-tab-trigger="existing-topic"
+              role="tab"
+              aria-selected="false"
+            >
+              Existing Topic Video
+            </button>
+          </div>
+
+          <div class="editor-tab-panel editor-tab-panel--active" data-tab-panel="new-topic" role="tabpanel">
+            <form action="/api/admin/resources" method="POST" class="editor-card__body">
+              <input type="hidden" name="mode" value="new" />
+              <input type="hidden" name="intent" value="save" />
+
+              <label class="form-field">
+                <span>Parent Subject</span>
+                <select class="form-input form-select" data-new-topic-subject-select>
+                  <option value="" disabled selected={!initialNewTopicSubjectId}>Select subject</option>
+                  {subjectRows.map((subject) => (
+                    <option value={subject.id} selected={initialNewTopicSubjectId === subject.id}>
+                      {subject.theme.optionDot} {subject.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label class="form-field">
+                <span>Parent Chapter</span>
+                <select class="form-input form-select" name="topic_id" data-new-topic-chapter-select required>
+                  <option value="" disabled selected={!preselectedChapterId}>Select chapter</option>
+                  {subjectRows.map((subject) => (
+                    <optgroup label={subject.name}>
+                      {subject.chapters.map((chapter) => (
+                        <option
+                          value={chapter.id}
+                          selected={preselectedChapterId === chapter.id}
+                          data-subject-id={subject.id}
+                        >
+                          {chapter.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+
+              <label class="form-field">
+                <span>Topic Name</span>
+                <input class="form-input" type="text" name="title" placeholder="e.g. Laws of Motion" required />
+              </label>
+
+              <label class="form-field">
+                <span>YouTube URL</span>
+                <input
+                  class="form-input"
+                  type="url"
+                  name="youtube_url"
+                  placeholder="https://youtube.com/watch?v=..."
+                  required
+                />
+              </label>
+
+              <label class="form-field">
+                <span>Notes</span>
+                <textarea
+                  class="form-input form-textarea"
+                  name="notes"
+                  placeholder="Optional: add context or timestamps"
+                ></textarea>
+              </label>
+
+              <label class="form-field">
+                <span>Display Order</span>
+                <input class="form-input form-input--compact" type="number" name="order" min="1" required />
+              </label>
+
+              <button type="submit" class="submit-button submit-button--green">+ Add Topic & Video</button>
+            </form>
+          </div>
+
+          <div class="editor-tab-panel" data-tab-panel="existing-topic" role="tabpanel" hidden>
+            <div class="editor-card__body">
+              <p class="tab-helper">Select an existing topic to add, replace, or remove its video.</p>
+
+              <form action="/api/admin/resources" method="POST" class="stack-form">
+                <input type="hidden" name="mode" value="existing" />
+                <input type="hidden" name="intent" value="save" />
+
+                <label class="form-field">
+                  <span>Parent Subject</span>
+                  <select class="form-input form-select" data-existing-subject-select>
+                    <option value="" disabled selected={!initialExistingSubjectId}>Select subject</option>
+                    {subjectRows.map((subject) => (
+                      <option value={subject.id} selected={initialExistingSubjectId === subject.id}>
+                        {subject.theme.optionDot} {subject.name}
                       </option>
                     ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
+                  </select>
+                </label>
 
-            <label class="form-field">
-              <span>Topic Name</span>
-              <input class="form-input" type="text" name="title" placeholder="e.g. Laws of Motion" required />
-            </label>
+                <label class="form-field">
+                  <span>Parent Chapter</span>
+                  <select class="form-input form-select" data-existing-chapter-select>
+                    <option value="" disabled selected={!initialExistingChapterId}>Select chapter</option>
+                    {subjectRows.map((subject) => (
+                      <optgroup label={subject.name}>
+                        {subject.chapters.map((chapter) => (
+                          <option
+                            value={chapter.id}
+                            selected={initialExistingChapterId === chapter.id}
+                            data-subject-id={subject.id}
+                          >
+                            {chapter.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
 
-            <label class="form-field">
-              <span>YouTube URL</span>
-              <input
-                class="form-input"
-                type="url"
-                name="youtube_url"
-                placeholder="https://youtube.com/watch?v=..."
-                required
-              />
-            </label>
+                <label class="form-field">
+                  <span>Existing Topic</span>
+                  <select class="form-input form-select" name="sub_topic_id" data-existing-topic-select required>
+                    <option value="" disabled selected={!selectedExistingSubTopicId}>Select topic</option>
+                    {subjectRows.map((subject) =>
+                      subject.chapters.map((chapter) => (
+                        <optgroup label={`${subject.name} · ${chapter.name}`}>
+                          {chapter.subTopics.map((subTopic) => (
+                            <option
+                              value={subTopic.id}
+                              selected={selectedExistingSubTopicId === subTopic.id}
+                              data-chapter-id={chapter.id}
+                              data-topic-id={chapter.id}
+                              data-topic-name={subTopic.name}
+                              data-topic-order={String(subTopic.order)}
+                              data-video-url={subTopic.video?.youtubeUrl ?? ''}
+                              data-video-notes={subTopic.video?.notes ?? ''}
+                              data-has-video={subTopic.video ? 'true' : 'false'}
+                            >
+                              {subTopic.name} {subTopic.video ? '• video added' : '• no video'}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))
+                    )}
+                  </select>
+                </label>
 
-            <label class="form-field">
-              <span>Notes</span>
-              <textarea
-                class="form-input form-textarea"
-                name="notes"
-                placeholder="Optional: add context or timestamps"
-              ></textarea>
-            </label>
+                <input type="hidden" name="topic_id" value={preselectedChapterId ?? ''} data-existing-topic-id />
+                <input type="hidden" name="title" value="existing-topic" />
 
-            <label class="form-field">
-              <span>Display Order</span>
-              <input class="form-input form-input--compact" type="number" name="order" min="1" required />
-            </label>
+                <label class="form-field">
+                  <span>Topic Name</span>
+                  <input
+                    class="form-input"
+                    type="text"
+                    value=""
+                    data-existing-topic-name
+                    placeholder="Select a topic above"
+                    readonly
+                  />
+                </label>
 
-            <button type="submit" class="submit-button submit-button--green">+ Add Topic & Video</button>
-          </form>
+                <label class="form-field">
+                  <span>YouTube URL</span>
+                  <input
+                    class="form-input"
+                    type="url"
+                    name="youtube_url"
+                    data-existing-topic-url
+                    placeholder="https://youtube.com/watch?v=..."
+                    required
+                  />
+                </label>
+
+                <label class="form-field">
+                  <span>Notes</span>
+                  <textarea
+                    class="form-input form-textarea"
+                    name="notes"
+                    data-existing-topic-notes
+                    placeholder="Optional: add context or timestamps"
+                  ></textarea>
+                </label>
+
+                <div class="status-row">
+                  <span class="status-pill" data-existing-topic-status>No video selected</span>
+                </div>
+
+                <div class="tab-actions">
+                  <button type="submit" class="submit-button submit-button--green submit-button--split">
+                    Save Video
+                  </button>
+                </div>
+              </form>
+
+              <form action="/api/admin/resources" method="POST" class="stack-form stack-form--danger">
+                <input type="hidden" name="mode" value="existing" />
+                <input type="hidden" name="intent" value="remove" />
+                <input type="hidden" name="topic_id" value={preselectedChapterId ?? ''} data-existing-remove-topic-id />
+                <input type="hidden" name="sub_topic_id" value={selectedExistingSubTopicId ?? ''} data-existing-remove-subtopic-id />
+                <input type="hidden" name="title" value="existing-topic" />
+                <input type="hidden" name="youtube_url" value="" />
+                <input type="hidden" name="notes" value="" />
+                <button type="submit" class="ghost-danger-button" data-existing-remove-button disabled>
+                  Remove Video
+                </button>
+              </form>
+            </div>
+          </div>
         </article>
       </div>
     </aside>
@@ -367,6 +565,21 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     const accordionBodies = Array.from(document.querySelectorAll('.accordion-body'));
     const chevrons = Array.from(document.querySelectorAll('.chevron'));
     const toggleButton = document.querySelector('[data-accordion-toggle]');
+    const tabTriggers = Array.from(document.querySelectorAll('[data-tab-trigger]'));
+    const tabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
+    const newTopicSubjectSelect = document.querySelector('[data-new-topic-subject-select]');
+    const newTopicChapterSelect = document.querySelector('[data-new-topic-chapter-select]');
+    const existingSubjectSelect = document.querySelector('[data-existing-subject-select]');
+    const existingChapterSelect = document.querySelector('[data-existing-chapter-select]');
+    const existingTopicSelect = document.querySelector('[data-existing-topic-select]');
+    const existingTopicIdInput = document.querySelector('[data-existing-topic-id]');
+    const existingRemoveTopicIdInput = document.querySelector('[data-existing-remove-topic-id]');
+    const existingRemoveSubTopicIdInput = document.querySelector('[data-existing-remove-subtopic-id]');
+    const existingTopicNameInput = document.querySelector('[data-existing-topic-name]');
+    const existingTopicUrlInput = document.querySelector('[data-existing-topic-url]');
+    const existingTopicNotesInput = document.querySelector('[data-existing-topic-notes]');
+    const existingTopicStatus = document.querySelector('[data-existing-topic-status]');
+    const existingRemoveButton = document.querySelector('[data-existing-remove-button]');
 
     const setCardOpen = (card, open) => {
       const header = card.querySelector('.accordion-header');
@@ -395,6 +608,146 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
       toggleButton.textContent = allOpen ? 'Collapse all' : 'Expand all';
     };
 
+    const setActiveTab = (tabName) => {
+      tabTriggers.forEach((trigger) => {
+        const active = trigger.getAttribute('data-tab-trigger') === tabName;
+        trigger.classList.toggle('editor-tab--active', active);
+        trigger.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+
+      tabPanels.forEach((panel) => {
+        const active = panel.getAttribute('data-tab-panel') === tabName;
+        panel.classList.toggle('editor-tab-panel--active', active);
+        panel.hidden = !active;
+      });
+    };
+
+    const syncChapterOptions = (subjectSelect, chapterSelect) => {
+      if (!(subjectSelect instanceof HTMLSelectElement) || !(chapterSelect instanceof HTMLSelectElement)) {
+        return;
+      }
+
+      const selectedSubjectId = subjectSelect.value;
+
+      Array.from(chapterSelect.options).forEach((option, index) => {
+        if (index === 0) {
+          option.hidden = false;
+          option.disabled = false;
+          return;
+        }
+
+        const belongsToSubject = !selectedSubjectId || option.dataset.subjectId === selectedSubjectId;
+        option.hidden = !belongsToSubject;
+        option.disabled = !belongsToSubject;
+
+        if (!belongsToSubject && option.selected) {
+          chapterSelect.value = '';
+        }
+      });
+
+      Array.from(chapterSelect.children).forEach((child) => {
+        if (!(child instanceof HTMLOptGroupElement)) {
+          return;
+        }
+
+        const visibleCount = Array.from(child.children).filter((option) => {
+          return option instanceof HTMLOptionElement && !option.hidden;
+        }).length;
+
+        child.hidden = visibleCount === 0;
+        child.disabled = visibleCount === 0;
+      });
+    };
+
+    const syncExistingTopicOptions = () => {
+      if (!(existingChapterSelect instanceof HTMLSelectElement) || !(existingTopicSelect instanceof HTMLSelectElement)) {
+        return;
+      }
+
+      const selectedChapterId = existingChapterSelect.value;
+
+      Array.from(existingTopicSelect.children).forEach((child, index) => {
+        if (!(child instanceof HTMLOptGroupElement)) {
+          if (child instanceof HTMLOptionElement && index === 0) {
+            child.hidden = false;
+            child.disabled = false;
+          }
+          return;
+        }
+
+        let visibleCount = 0;
+
+        Array.from(child.children).forEach((option) => {
+          if (!(option instanceof HTMLOptionElement)) {
+            return;
+          }
+
+          const belongsToChapter = !selectedChapterId || option.dataset.chapterId === selectedChapterId;
+          option.hidden = !belongsToChapter;
+          option.disabled = !belongsToChapter;
+
+          if (belongsToChapter) {
+            visibleCount += 1;
+          } else if (option.selected) {
+            existingTopicSelect.value = '';
+          }
+        });
+
+        child.hidden = visibleCount === 0;
+        child.disabled = visibleCount === 0;
+      });
+
+      syncExistingTopicFields();
+    };
+
+    const syncExistingTopicFields = () => {
+      if (
+        !(existingTopicSelect instanceof HTMLSelectElement) ||
+        !(existingTopicIdInput instanceof HTMLInputElement) ||
+        !(existingRemoveTopicIdInput instanceof HTMLInputElement) ||
+        !(existingRemoveSubTopicIdInput instanceof HTMLInputElement) ||
+        !(existingTopicNameInput instanceof HTMLInputElement) ||
+        !(existingTopicUrlInput instanceof HTMLInputElement) ||
+        !(existingTopicNotesInput instanceof HTMLTextAreaElement) ||
+        !(existingTopicStatus instanceof HTMLElement) ||
+        !(existingRemoveButton instanceof HTMLButtonElement)
+      ) {
+        return;
+      }
+
+      const option = existingTopicSelect.selectedOptions[0];
+
+      if (!option) {
+        existingTopicIdInput.value = '';
+        existingRemoveTopicIdInput.value = '';
+        existingRemoveSubTopicIdInput.value = '';
+        existingTopicNameInput.value = '';
+        existingTopicUrlInput.value = '';
+        existingTopicNotesInput.value = '';
+        existingTopicStatus.textContent = 'No topic selected';
+        existingTopicStatus.className = 'status-pill';
+        existingRemoveButton.disabled = true;
+        return;
+      }
+
+      const topicId = option.dataset.topicId ?? '';
+      const subTopicId = option.value;
+      const topicName = option.dataset.topicName ?? '';
+      const videoUrl = option.dataset.videoUrl ?? '';
+      const videoNotes = option.dataset.videoNotes ?? '';
+      const hasVideo = option.dataset.hasVideo === 'true';
+
+      existingTopicIdInput.value = topicId;
+      existingRemoveTopicIdInput.value = topicId;
+      existingRemoveSubTopicIdInput.value = subTopicId;
+      existingTopicNameInput.value = topicName;
+      existingTopicUrlInput.value = videoUrl;
+      existingTopicNotesInput.value = videoNotes;
+      existingTopicStatus.textContent = hasVideo ? 'Video currently added' : 'No video added yet';
+      existingTopicStatus.className = hasVideo ? 'status-pill status-pill--ready' : 'status-pill';
+      existingRemoveButton.disabled = !hasVideo;
+    };
+
     document.querySelectorAll('.accordion-header').forEach((header) => {
       header.addEventListener('click', () => {
         const card = header.closest('.accordion-card');
@@ -421,6 +774,24 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
       updateToggleLabel();
     });
 
+    tabTriggers.forEach((trigger) => {
+      trigger.addEventListener('click', () => {
+        const tabName = trigger.getAttribute('data-tab-trigger');
+
+        if (tabName) {
+          setActiveTab(tabName);
+        }
+      });
+    });
+
+    newTopicSubjectSelect?.addEventListener('change', () => syncChapterOptions(newTopicSubjectSelect, newTopicChapterSelect));
+    existingSubjectSelect?.addEventListener('change', () => {
+      syncChapterOptions(existingSubjectSelect, existingChapterSelect);
+      syncExistingTopicOptions();
+    });
+    existingChapterSelect?.addEventListener('change', syncExistingTopicOptions);
+    existingTopicSelect?.addEventListener('change', syncExistingTopicFields);
+
     accordionBodies.forEach((body) => {
       body.style.display = 'none';
     });
@@ -433,6 +804,11 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
       setCardOpen(accordionCards[0], true);
     }
 
+    syncChapterOptions(newTopicSubjectSelect, newTopicChapterSelect);
+    syncChapterOptions(existingSubjectSelect, existingChapterSelect);
+    syncExistingTopicOptions();
+    setActiveTab(existingTopicSelect instanceof HTMLSelectElement && existingTopicSelect.value ? 'existing-topic' : 'new-topic');
+    syncExistingTopicFields();
     updateToggleLabel();
   </script>
 </AdminLayout>
@@ -597,6 +973,56 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
     gap: 14px;
   }
 
+  .editor-card__tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 14px 20px 0;
+  }
+
+  .editor-tab {
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #6b7280;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .editor-tab:hover {
+    border-color: #cbd5e1;
+    color: #0a0f1e;
+  }
+
+  .editor-tab--active {
+    border-color: #10b981;
+    background: #ecfdf5;
+    color: #065f46;
+  }
+
+  .editor-tab-panel[hidden] {
+    display: none;
+  }
+
+  .tab-helper {
+    margin: 0;
+    color: #7b8794;
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .stack-form {
+    display: grid;
+    gap: 14px;
+  }
+
+  .stack-form--danger {
+    padding-top: 2px;
+  }
+
   .form-field {
     display: grid;
     gap: 6px;
@@ -728,6 +1154,60 @@ const errorMessage = formatFlashMessage(errorParam, 'Something went wrong. Pleas
 
   .submit-button--green:hover {
     background: #0f9f70;
+  }
+
+  .submit-button--split {
+    width: auto;
+  }
+
+  .tab-actions {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .status-row {
+    display: flex;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .status-pill--ready {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .ghost-danger-button {
+    width: 100%;
+    border: 1px solid #fecaca;
+    background: #fff5f5;
+    color: #b91c1c;
+    border-radius: 10px;
+    padding: 11px 14px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .ghost-danger-button:hover:enabled {
+    border-color: #fca5a5;
+    background: #fef2f2;
+  }
+
+  .ghost-danger-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
   }
 
   .data-card {

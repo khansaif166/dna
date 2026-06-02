@@ -52,6 +52,7 @@ const [topicSubTopics, resources, testRows] = await Promise.all([
     .select({
       id: tests.id,
       title: tests.title,
+      subTopicId: tests.subTopicId,
       durationMinutes: tests.durationMinutes,
       questionCount: count(questions.id),
     })
@@ -92,6 +93,7 @@ for (const attempt of attemptRows) {
 }
 
 const attemptedTestIds = new Set(attemptRows.map((attempt) => attempt.testId));
+const chapterLevelTestRows = testRows.filter((test) => !test.subTopicId);
 
 function normalizeLabel(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -119,10 +121,55 @@ const subTopicSections = topicSubTopics.map((subTopic) => {
   return {
     ...subTopic,
     resources: matchedResources,
+    tests: [],
   };
 });
 
+const subTopicTestsMap = new Map<string, typeof testRows>();
+
+for (const test of testRows) {
+  if (!test.subTopicId) {
+    continue;
+  }
+
+  const entries = subTopicTestsMap.get(test.subTopicId) ?? [];
+  entries.push(test);
+  subTopicTestsMap.set(test.subTopicId, entries);
+}
+
 const unmatchedResources = resources.filter((resource) => !matchedResourceIds.has(resource.id));
+
+const subTopicSectionsWithTests = subTopicSections.map((subTopic) => ({
+  ...subTopic,
+  tests: (subTopicTestsMap.get(subTopic.id) ?? []).map((test) => {
+    const attempts = attemptsByTestId.get(test.id) ?? [];
+    const bestAttempt = attempts.reduce<
+      | {
+          score: number;
+          totalQuestions: number;
+          percent: number;
+        }
+      | null
+    >((best, attempt) => {
+      const score = attempt.score ?? 0;
+      const totalQuestions = attempt.totalQuestions ?? test.questionCount;
+      const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+      if (!best || percent > best.percent) {
+        return { score, totalQuestions, percent };
+      }
+
+      return best;
+    }, null);
+
+    return {
+      ...test,
+      attempted: attempts.length > 0,
+      attemptCount: attempts.length,
+      bestAttempt,
+    };
+  }),
+}));
 
 const subjectType = topic.subjectName.toLowerCase().includes('physics')
   ? 'physics'
@@ -276,7 +323,7 @@ function scoreTone(percent: number) {
 
         {topicSubTopics.length ? (
           <div class="subtopic-accordion-list">
-            {subTopicSections.map((subTopic, index) => (
+            {subTopicSectionsWithTests.map((subTopic, index) => (
               <details class="subtopic-accordion" open={index === 0}>
                 <summary class="subtopic-accordion__summary">
                   <span class="subtopic-accordion__order">{String(subTopic.order).padStart(2, '0')}</span>
@@ -341,13 +388,13 @@ function scoreTone(percent: number) {
                         class="subtopic-tests__count"
                         style={`background:${theme.bgLight}; color:${theme.textColor}; border-color:${theme.border};`}
                       >
-                        📝 {pluralize(enrichedTests.length, 'test')}
+                        📝 {pluralize(subTopic.tests.length, 'test')}
                       </span>
                     </div>
 
-                    {enrichedTests.length ? (
+                    {subTopic.tests.length ? (
                       <div class="subtopic-tests__list">
-                        {enrichedTests.map((test) => (
+                        {subTopic.tests.map((test) => (
                           <a
                             href={`/student/tests/${test.id}`}
                             class:list={[
@@ -365,7 +412,7 @@ function scoreTone(percent: number) {
                       </div>
                     ) : (
                       <div class="subtopic-tests__empty">
-                        <p>No tests yet for this chapter.</p>
+                        <p>No tests yet for this sub-topic.</p>
                       </div>
                     )}
                   </div>
@@ -433,13 +480,38 @@ function scoreTone(percent: number) {
         <div class="tests-panel">
           <div class="section-head section-head--tests">
             <h2>Practice Tests</h2>
-            <span class="section-count section-count--tests">{testRows.length} tests</span>
+            <span class="section-count section-count--tests">{chapterLevelTestRows.length} tests</span>
           </div>
 
-          {enrichedTests.length ? (
+          {chapterLevelTestRows.length ? (
             <div>
-              {enrichedTests.map((test) => {
-                const tone = test.bestAttempt ? scoreTone(test.bestAttempt.percent) : null;
+              {chapterLevelTestRows.map((test) => {
+                const attempts = attemptsByTestId.get(test.id) ?? [];
+                const bestAttempt = attempts.reduce<
+                  | {
+                      score: number;
+                      totalQuestions: number;
+                      percent: number;
+                    }
+                  | null
+                >((best, attempt) => {
+                  const score = attempt.score ?? 0;
+                  const totalQuestions = attempt.totalQuestions ?? test.questionCount;
+                  const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+                  if (!best || percent > best.percent) {
+                    return { score, totalQuestions, percent };
+                  }
+
+                  return best;
+                }, null);
+                const enrichedTest = {
+                  ...test,
+                  attempted: attempts.length > 0,
+                  attemptCount: attempts.length,
+                  bestAttempt,
+                };
+                const enrichedTone = enrichedTest.bestAttempt ? scoreTone(enrichedTest.bestAttempt.percent) : null;
 
                 return (
                   <article
@@ -455,14 +527,14 @@ function scoreTone(percent: number) {
                         <span>{test.questionCount} questions</span>
                       </div>
 
-                      {test.bestAttempt && tone && (
-                        <div class="test-card__score" style={`color:${tone.text};`}>
-                          <span class="test-card__score-dot" style={`background:${tone.dot};`}></span>
+                      {enrichedTest.bestAttempt && enrichedTone && (
+                        <div class="test-card__score" style={`color:${enrichedTone.text};`}>
+                          <span class="test-card__score-dot" style={`background:${enrichedTone.dot};`}></span>
                           <span>
-                            Your best: {test.bestAttempt.score}/{test.bestAttempt.totalQuestions} ({test.bestAttempt.percent}%)
+                            Your best: {enrichedTest.bestAttempt.score}/{enrichedTest.bestAttempt.totalQuestions} ({enrichedTest.bestAttempt.percent}%)
                           </span>
                           <span class="test-card__score-attempts">
-                            ({pluralize(test.attemptCount, 'attempt')})
+                            ({pluralize(enrichedTest.attemptCount, 'attempt')})
                           </span>
                         </div>
                       )}
@@ -471,7 +543,7 @@ function scoreTone(percent: number) {
                     <div class="test-card__divider"></div>
 
                     <div class="test-card__bottom">
-                      {test.attempted ? (
+                      {enrichedTest.attempted ? (
                         <div class="test-card__status">
                           <span class="test-card__status-dot">✓</span>
                           <span>Practiced</span>
@@ -487,10 +559,10 @@ function scoreTone(percent: number) {
 
                       <a
                         href={`/student/tests/${test.id}`}
-                        class:list={['test-card__button', { 'test-card__button--retake': test.attempted }]}
-                        style={!test.attempted ? `background:${theme.color};` : undefined}
+                        class:list={['test-card__button', { 'test-card__button--retake': enrichedTest.attempted }]}
+                        style={!enrichedTest.attempted ? `background:${theme.color};` : undefined}
                       >
-                        {test.attempted ? 'Retake' : 'Start Test →'}
+                        {enrichedTest.attempted ? 'Retake' : 'Start Test →'}
                       </a>
                     </div>
                   </article>
@@ -500,8 +572,8 @@ function scoreTone(percent: number) {
           ) : (
             <div class="empty-card empty-card--tests">
               <div class="empty-card__emoji">📝</div>
-              <h3>No tests yet</h3>
-              <p>Tests for this topic will be added soon</p>
+              <h3>No chapter tests yet</h3>
+              <p>Chapter-wide tests for this topic will be added soon</p>
             </div>
           )}
         </div>

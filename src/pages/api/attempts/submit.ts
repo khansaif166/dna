@@ -10,6 +10,7 @@ export const prerender = false;
 const submitAttemptSchema = z.object({
   attemptId: z.string().uuid(),
   answers: z.record(z.string().uuid(), z.enum(['a', 'b', 'c', 'd']).nullable()),
+  answerTimings: z.record(z.string().uuid(), z.number().int().min(0).nullable()),
   timeTakenSeconds: z.number().int().min(0),
 });
 
@@ -44,7 +45,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return json({ error: 'invalid_input' }, 400);
   }
 
-  const { attemptId, answers, timeTakenSeconds } = parsed.data;
+  const { attemptId, answers, answerTimings, timeTakenSeconds } = parsed.data;
 
   const attempt = await db
     .select()
@@ -84,6 +85,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     return {
       attemptId: attempt.id,
       questionId: question.id,
+      attemptedAtSeconds: answerTimings[question.id] ?? null,
       chosenOption,
       isCorrect: chosenOption === question.correctOption,
     };

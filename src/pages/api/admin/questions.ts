@@ -8,9 +8,14 @@ import { requireAdminApi } from '../../../lib/requireAdminApi';
 
 export const prerender = false;
 
+function wantsJson(request: Request) {
+  return request.headers.get('x-requested-with') === 'XMLHttpRequest';
+}
+
 const questionSchema = z.object({
   test_id: z.string().uuid(),
   prompt: z.string().min(1),
+  question_image_url: z.string().trim().url().optional().or(z.literal('')),
   option_a: z.string().min(1),
   option_b: z.string().min(1),
   option_c: z.string().min(1),
@@ -68,6 +73,7 @@ export const POST: APIRoute = async (context) => {
   const parsed = questionSchema.safeParse({
     test_id: formData.get('test_id'),
     prompt: formData.get('prompt'),
+    question_image_url: formData.get('question_image_url'),
     option_a: formData.get('option_a'),
     option_b: formData.get('option_b'),
     option_c: formData.get('option_c'),
@@ -83,9 +89,12 @@ export const POST: APIRoute = async (context) => {
   }
 
   try {
-    await db.insert(questions).values({
+    const [createdQuestion] = await db
+      .insert(questions)
+      .values({
       testId: parsed.data.test_id,
       prompt: parsed.data.prompt,
+      questionImageUrl: parsed.data.question_image_url || null,
       optionA: parsed.data.option_a,
       optionB: parsed.data.option_b,
       optionC: parsed.data.option_c,
@@ -93,7 +102,23 @@ export const POST: APIRoute = async (context) => {
       correctOption: parsed.data.correct_option,
       explanation: parsed.data.explanation || null,
       order: parsed.data.order,
-    });
+      })
+      .returning();
+
+    if (wantsJson(context.request)) {
+      return new Response(
+        JSON.stringify({
+          message: 'Question created successfully.',
+          question: createdQuestion,
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+          },
+        }
+      );
+    }
   } catch (error) {
     return new Response(error instanceof Error ? error.message : 'Failed to create question', { status: 400 });
   }

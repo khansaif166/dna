@@ -4,7 +4,7 @@ export const prerender = false;
 import { asc, count, desc, eq } from 'drizzle-orm';
 
 import AdminLayout from '../../../layouts/AdminLayout.astro';
-import { db, questions, subjects, tests, topics } from '../../../db';
+import { db, questions, subTopics, subjects, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 
 const authResult = await requireAuth(Astro, 'admin');
@@ -17,9 +17,10 @@ const admin = authResult;
 const query = Astro.url.searchParams.get('q')?.trim() ?? '';
 const statusFilter = Astro.url.searchParams.get('status')?.trim() ?? 'all';
 
-const [allSubjects, allTopics, allTests] = await Promise.all([
+const [allSubjects, allTopics, allSubTopics, allTests] = await Promise.all([
   db.select().from(subjects).orderBy(asc(subjects.order)),
   db.select().from(topics).orderBy(asc(topics.order)),
+  db.select().from(subTopics).orderBy(asc(subTopics.topicId), asc(subTopics.order)),
   db
     .select({
       id: tests.id,
@@ -30,13 +31,15 @@ const [allSubjects, allTopics, allTests] = await Promise.all([
       createdAt: tests.createdAt,
       subjectName: subjects.name,
       topicName: topics.name,
+      subTopicName: subTopics.name,
       questionCount: count(questions.id),
     })
     .from(tests)
     .leftJoin(subjects, eq(tests.subjectId, subjects.id))
     .leftJoin(topics, eq(tests.topicId, topics.id))
+    .leftJoin(subTopics, eq(tests.subTopicId, subTopics.id))
     .leftJoin(questions, eq(questions.testId, tests.id))
-    .groupBy(tests.id, subjects.name, topics.name)
+    .groupBy(tests.id, subjects.name, topics.name, subTopics.name)
     .orderBy(desc(tests.createdAt)),
 ]);
 
@@ -45,7 +48,8 @@ const filteredTests = allTests.filter((test) => {
     !query ||
     test.title.toLowerCase().includes(query.toLowerCase()) ||
     (test.subjectName ?? '').toLowerCase().includes(query.toLowerCase()) ||
-    (test.topicName ?? '').toLowerCase().includes(query.toLowerCase());
+    (test.topicName ?? '').toLowerCase().includes(query.toLowerCase()) ||
+    (test.subTopicName ?? '').toLowerCase().includes(query.toLowerCase());
   const matchesStatus = statusFilter === 'all' || test.status === statusFilter;
   return matchesQuery && matchesStatus;
 });
@@ -120,7 +124,13 @@ const filterHref = (status: string) => {
               <div class="test-row__meta">
                 <span>{test.subjectName ?? 'General'}</span>
                 <span>·</span>
-                <span>{test.topicName ?? 'No topic'}</span>
+                <span>{test.topicName ?? 'No chapter'}</span>
+                {test.subTopicName && (
+                  <>
+                    <span>·</span>
+                    <span>{test.subTopicName}</span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -168,7 +178,7 @@ const filterHref = (status: string) => {
       </label>
       <label class="field">
         <span>Subject</span>
-        <select class="input-field input-select" name="subject_id">
+        <select class="input-field input-select" name="subject_id" data-test-subject-select>
           <option value="">None</option>
           {allSubjects.map((subject) => (
             <option value={subject.id}>{subject.name}</option>
@@ -176,12 +186,37 @@ const filterHref = (status: string) => {
         </select>
       </label>
       <label class="field">
-        <span>Topic</span>
-        <select class="input-field input-select" name="topic_id">
+        <span>Chapter</span>
+        <select class="input-field input-select" name="topic_id" data-test-topic-select>
           <option value="">None</option>
           {allTopics.map((topic) => (
-            <option value={topic.id}>{topic.name}</option>
+            <option value={topic.id} data-subject-id={topic.subjectId}>
+              {topic.name}
+            </option>
           ))}
+        </select>
+      </label>
+      <label class="field field--wide">
+        <span>Sub-topic (optional)</span>
+        <select class="input-field input-select" name="sub_topic_id" data-test-subtopic-select>
+          <option value="">Entire chapter</option>
+          {allTopics.map((topic) => {
+            const topicSubTopics = allSubTopics.filter((subTopic) => subTopic.topicId === topic.id);
+
+            if (!topicSubTopics.length) {
+              return null;
+            }
+
+            return (
+              <optgroup label={topic.name}>
+                {topicSubTopics.map((subTopic) => (
+                  <option value={subTopic.id} data-topic-id={topic.id}>
+                    {subTopic.name}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
         </select>
       </label>
       <label class="field">
@@ -206,6 +241,85 @@ const filterHref = (status: string) => {
     </form>
   </section>
 </AdminLayout>
+
+<script>
+  const subjectSelect = document.querySelector('[data-test-subject-select]');
+  const topicSelect = document.querySelector('[data-test-topic-select]');
+  const subTopicSelect = document.querySelector('[data-test-subtopic-select]');
+
+  const syncTopicOptions = () => {
+    if (!(subjectSelect instanceof HTMLSelectElement) || !(topicSelect instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    const selectedSubjectId = subjectSelect.value;
+
+    Array.from(topicSelect.options).forEach((option, index) => {
+      if (index === 0) {
+        option.hidden = false;
+        option.disabled = false;
+        return;
+      }
+
+      const belongsToSubject = !selectedSubjectId || option.dataset.subjectId === selectedSubjectId;
+      option.hidden = !belongsToSubject;
+      option.disabled = !belongsToSubject;
+
+      if (!belongsToSubject && option.selected) {
+        topicSelect.value = '';
+      }
+    });
+  };
+
+  const syncSubTopicOptions = () => {
+    if (!(topicSelect instanceof HTMLSelectElement) || !(subTopicSelect instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    const selectedTopicId = topicSelect.value;
+
+    Array.from(subTopicSelect.children).forEach((child, index) => {
+      if (!(child instanceof HTMLOptGroupElement)) {
+        if (child instanceof HTMLOptionElement && index === 0) {
+          child.hidden = false;
+          child.disabled = false;
+        }
+        return;
+      }
+
+      let visibleCount = 0;
+
+      Array.from(child.children).forEach((option) => {
+        if (!(option instanceof HTMLOptionElement)) {
+          return;
+        }
+
+        const belongsToTopic = !selectedTopicId || option.dataset.topicId === selectedTopicId;
+        option.hidden = !belongsToTopic;
+        option.disabled = !belongsToTopic;
+
+        if (belongsToTopic) {
+          visibleCount += 1;
+        } else if (option.selected) {
+          subTopicSelect.value = '';
+        }
+      });
+
+      child.disabled = visibleCount === 0;
+      child.hidden = visibleCount === 0;
+    });
+  };
+
+  subjectSelect?.addEventListener('change', () => {
+    syncTopicOptions();
+    syncSubTopicOptions();
+  });
+
+  topicSelect?.addEventListener('change', syncSubTopicOptions);
+
+  syncTopicOptions();
+  syncSubTopicOptions();
+</script>
 
 <style>
   .top-action,

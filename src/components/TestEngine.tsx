@@ -7,6 +7,7 @@ type OptionKey = 'a' | 'b' | 'c' | 'd';
 type SafeQuestion = {
   id: string;
   prompt: string;
+  questionImageUrl: string | null;
   optionA: string;
   optionB: string;
   optionC: string;
@@ -19,6 +20,11 @@ type Props = {
   attemptId: string;
   durationSeconds: number;
   testTitle: string;
+};
+
+type DraftPayload = {
+  answers: Record<string, OptionKey | null>;
+  timings: Record<string, number | null>;
 };
 
 const optionKeys: OptionKey[] = ['a', 'b', 'c', 'd'];
@@ -48,11 +54,15 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
   const autosaveRef = useRef<number | null>(null);
   const submitRef = useRef<(() => Promise<void>) | null>(null);
   const answersRef = useRef<Record<string, OptionKey | null>>({});
+  const questionTimingsRef = useRef<Record<string, number | null>>({});
   const secondsLeftRef = useRef(durationSeconds);
   const isSubmittingRef = useRef(false);
 
   const [currentIndex, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Record<string, OptionKey | null>>(() =>
+    Object.fromEntries(questions.map((question) => [question.id, null]))
+  );
+  const [questionTimings, setQuestionTimings] = useState<Record<string, number | null>>(() =>
     Object.fromEntries(questions.map((question) => [question.id, null]))
   );
   const [secondsLeft, setSecondsLeft] = useState(durationSeconds);
@@ -64,6 +74,10 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
   useEffect(() => {
     answersRef.current = answers;
   }, [answers]);
+
+  useEffect(() => {
+    questionTimingsRef.current = questionTimings;
+  }, [questionTimings]);
 
   useEffect(() => {
     secondsLeftRef.current = secondsLeft;
@@ -91,7 +105,12 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
     }
 
     autosaveRef.current = window.setInterval(() => {
-      window.localStorage.setItem(draftKey, JSON.stringify(answersRef.current));
+      const draftPayload: DraftPayload = {
+        answers: answersRef.current,
+        timings: questionTimingsRef.current,
+      };
+
+      window.localStorage.setItem(draftKey, JSON.stringify(draftPayload));
     }, 30000);
   }
 
@@ -134,11 +153,23 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
     }
 
     try {
-      const parsedDraft = JSON.parse(savedDraft) as Record<string, OptionKey | null>;
-      setAnswers((currentAnswers) => ({
-        ...currentAnswers,
-        ...parsedDraft,
-      }));
+      const parsedDraft = JSON.parse(savedDraft) as DraftPayload | Record<string, OptionKey | null>;
+
+      if ('answers' in parsedDraft && parsedDraft.answers) {
+        setAnswers((currentAnswers) => ({
+          ...currentAnswers,
+          ...parsedDraft.answers,
+        }));
+        setQuestionTimings((currentTimings) => ({
+          ...currentTimings,
+          ...(parsedDraft.timings ?? {}),
+        }));
+      } else {
+        setAnswers((currentAnswers) => ({
+          ...currentAnswers,
+          ...parsedDraft,
+        }));
+      }
     } catch {
       window.localStorage.removeItem(draftKey);
     }
@@ -160,9 +191,16 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
       return;
     }
 
+    const elapsedSeconds = Math.max(durationSeconds - secondsLeftRef.current, 0);
+
     setAnswers((currentAnswers) => ({
       ...currentAnswers,
       [question.id]: option,
+    }));
+
+    setQuestionTimings((currentTimings) => ({
+      ...currentTimings,
+      [question.id]: currentTimings[question.id] ?? elapsedSeconds,
     }));
   }
 
@@ -193,6 +231,7 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
       body: JSON.stringify({
         attemptId,
         answers: answersRef.current,
+        answerTimings: questionTimingsRef.current,
         timeTakenSeconds,
       }),
     }).catch(() => null);
@@ -294,6 +333,11 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
             </div>
 
             <div className={styles.questionCard}>
+              {q.questionImageUrl && (
+                <div className={styles.questionImageWrap}>
+                  <img className={styles.questionImage} src={q.questionImageUrl} alt={`Question ${currentIndex + 1}`} />
+                </div>
+              )}
               <p className={styles.questionText}>{q.prompt}</p>
             </div>
 
@@ -308,7 +352,6 @@ export default function TestEngine({ questions, attemptId, durationSeconds, test
                 >
                   <div className={styles.optionLetter}>{opt.toUpperCase()}</div>
                   <span className={styles.optionText}>{optionLabels[opt]}</span>
-                  {answers[q.id] === opt && <div className={styles.selectedCheckmark}>✓</div>}
                 </button>
               ))}
             </div>

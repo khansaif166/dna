@@ -60,10 +60,12 @@ if (!attempt.submittedAt) {
 const reviewRows = await db
   .select({
     attemptAnswerId: attemptAnswers.id,
+    attemptedAtSeconds: attemptAnswers.attemptedAtSeconds,
     chosenOption: attemptAnswers.chosenOption,
     isCorrect: attemptAnswers.isCorrect,
     questionId: questions.id,
     prompt: questions.prompt,
+    questionImageUrl: questions.questionImageUrl,
     optionA: questions.optionA,
     optionB: questions.optionB,
     optionC: questions.optionC,
@@ -94,6 +96,21 @@ function formatSeconds(totalSeconds: number | null) {
   if (hours > 0) {
     return `${hours}h ${minutes}m ${seconds}s`;
   }
+
+  return `${minutes}m ${seconds}s`;
+}
+
+function formatAttemptMoment(totalSeconds: number | null) {
+  if (totalSeconds === null) {
+    return 'Not attempted';
+  }
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
 
   return `${minutes}m ${seconds}s`;
 }
@@ -192,20 +209,31 @@ const reviewCards = reviewRows.map((row) => {
       {reviewCards.map((row) => (
         <article class="card review-card" data-status={row.status}>
           <div class="review-card__header">
-            <span class="question-badge">Q.{row.order}</span>
-            <span
-              class:list={[
-                'status-badge',
-                row.status === 'correct'
-                  ? 'badge-success'
-                  : row.status === 'incorrect'
-                    ? 'badge-incorrect'
-                    : 'badge-pending',
-              ]}
-            >
-              {row.status === 'correct' ? 'Correct' : row.status === 'incorrect' ? 'Incorrect' : 'Skipped'}
+            <div class="review-card__header-main">
+              <span class="question-badge">Q.{row.order}</span>
+              <span
+                class:list={[
+                  'status-badge',
+                  row.status === 'correct'
+                    ? 'badge-success'
+                    : row.status === 'incorrect'
+                      ? 'badge-incorrect'
+                      : 'badge-pending',
+                ]}
+              >
+                {row.status === 'correct' ? 'Correct' : row.status === 'incorrect' ? 'Incorrect' : 'Skipped'}
+              </span>
+            </div>
+            <span class="attempt-badge">
+              {row.attemptedAtSeconds === null ? 'Not attempted' : `Attempted in ${formatAttemptMoment(row.attemptedAtSeconds)}`}
             </span>
           </div>
+
+          {row.questionImageUrl && (
+            <div class="review-card__image-wrap">
+              <img src={row.questionImageUrl} alt={`Question ${row.order}`} class="review-card__image" loading="lazy" />
+            </div>
+          )}
 
           <p class="review-card__prompt">{row.prompt}</p>
 
@@ -491,6 +519,14 @@ const reviewCards = reviewRows.map((row) => {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .review-card__header-main {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
   }
 
   .question-badge {
@@ -505,6 +541,19 @@ const reviewCards = reviewRows.map((row) => {
 
   .status-badge {
     display: inline-flex;
+  }
+
+  .attempt-badge {
+    align-items: center;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-weight: 700;
+    justify-content: center;
+    padding: 4px 12px;
   }
 
   .badge-incorrect {
@@ -524,6 +573,20 @@ const reviewCards = reviewRows.map((row) => {
     font-size: 1rem;
     line-height: 1.6;
     margin: 14px 0;
+  }
+
+  .review-card__image-wrap {
+    margin: 0 0 16px;
+  }
+
+  .review-card__image {
+    display: block;
+    width: 100%;
+    max-height: 340px;
+    object-fit: contain;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid var(--color-border);
   }
 
   .options-list {

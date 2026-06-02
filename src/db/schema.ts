@@ -89,6 +89,7 @@ export const tests = pgTable('tests', {
   title: text('title').notNull(),
   subjectId: uuid('subject_id').references(() => subjects.id),
   topicId: uuid('topic_id').references(() => topics.id),
+  subTopicId: uuid('sub_topic_id').references(() => subTopics.id),
   durationMinutes: integer('duration_minutes').notNull(),
   status: testStatusEnum('status').default('draft').notNull(),
   testType: testTypeEnum('test_type').default('topic_practice').notNull(),
@@ -106,6 +107,7 @@ export const questions = pgTable(
       .references(() => tests.id)
       .notNull(),
     prompt: text('prompt').notNull(),
+    questionImageUrl: text('question_image_url'),
     optionA: text('option_a').notNull(),
     optionB: text('option_b').notNull(),
     optionC: text('option_c').notNull(),
@@ -144,6 +146,7 @@ export const attemptAnswers = pgTable(
     questionId: uuid('question_id')
       .references(() => questions.id)
       .notNull(),
+    attemptedAtSeconds: integer('attempted_at_seconds'),
     chosenOption: optionChoiceEnum('chosen_option'),
     isCorrect: boolean('is_correct'),
   },

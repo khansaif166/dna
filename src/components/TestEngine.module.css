@@ -186,6 +186,20 @@
   box-shadow: 0 1px 4px rgba(10, 15, 30, 0.05);
 }
 
+.questionImageWrap {
+  margin-bottom: 18px;
+}
+
+.questionImage {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
 .questionText {
   font-size: 1.1rem;
   line-height: 1.75;
@@ -280,23 +294,6 @@
   font-weight: 500;
   padding-top: 6px;
   position: relative;
-  z-index: 1;
-}
-
-.selectedCheckmark {
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  width: 20px;
-  height: 20px;
-  background: #0a0f1e;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #f5c518;
-  font-size: 0.7rem;
-  font-weight: 800;
   z-index: 1;
 }
 

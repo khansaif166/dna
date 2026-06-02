@@ -75,10 +75,12 @@ const nextTopic = nextTopicRows[0] ?? null;
 const reviewRows = await db
   .select({
     attemptAnswerId: attemptAnswers.id,
+    attemptedAtSeconds: attemptAnswers.attemptedAtSeconds,
     chosenOption: attemptAnswers.chosenOption,
     isCorrect: attemptAnswers.isCorrect,
     questionId: questions.id,
     prompt: questions.prompt,
+    questionImageUrl: questions.questionImageUrl,
     optionA: questions.optionA,
     optionB: questions.optionB,
     optionC: questions.optionC,
@@ -108,6 +110,21 @@ function formatSeconds(totalSeconds: number | null) {
   if (hours > 0) {
     return `${hours}h ${minutes}m ${seconds}s`;
   }
+
+  return `${minutes}m ${seconds}s`;
+}
+
+function formatAttemptMoment(totalSeconds: number | null) {
+  if (totalSeconds === null) {
+    return 'Not attempted';
+  }
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
 
   return `${minutes}m ${seconds}s`;
 }
@@ -236,23 +253,34 @@ const skippedCount = reviewCards.filter((row) => row.status === 'skipped').lengt
           data-status={row.status}
         >
           <div class="review-card__header">
-            <span class="question-badge">Q.{row.order}</span>
-            <span
-              class:list={[
-                'result-badge',
-                row.status === 'correct'
-                  ? 'result-badge--correct'
-                  : row.status === 'incorrect'
-                    ? 'result-badge--incorrect'
-                    : 'result-badge--skipped',
-              ]}
-            >
-              {row.status === 'correct' ? '✓ Correct' : row.status === 'incorrect' ? '✗ Incorrect' : '— Skipped'}
+            <div class="review-card__header-main">
+              <span class="question-badge">Q.{row.order}</span>
+              <span
+                class:list={[
+                  'result-badge',
+                  row.status === 'correct'
+                    ? 'result-badge--correct'
+                    : row.status === 'incorrect'
+                      ? 'result-badge--incorrect'
+                      : 'result-badge--skipped',
+                ]}
+              >
+                {row.status === 'correct' ? '✓ Correct' : row.status === 'incorrect' ? '✗ Incorrect' : '— Skipped'}
+              </span>
+            </div>
+            <span class="attempt-badge">
+              {row.attemptedAtSeconds === null ? 'Not attempted' : `Attempted in ${formatAttemptMoment(row.attemptedAtSeconds)}`}
             </span>
           </div>
 
           <div class="review-card__body">
-            <p class="review-card__prompt">{row.prompt}</p>
+          {row.questionImageUrl && (
+            <div class="review-card__image-wrap">
+              <img src={row.questionImageUrl} alt={`Question ${row.order}`} class="review-card__image" loading="lazy" />
+            </div>
+          )}
+
+          <p class="review-card__prompt">{row.prompt}</p>
 
             <div class="options-list">
               {optionKeys.map((key) => {
@@ -627,6 +655,14 @@ const skippedCount = reviewCards.filter((row) => row.status === 'skipped').lengt
     justify-content: space-between;
     align-items: center;
     gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .review-card__header-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
   }
 
   .question-badge {
@@ -661,8 +697,34 @@ const skippedCount = reviewCards.filter((row) => row.status === 'skipped').lengt
     color: #6b7280;
   }
 
+  .attempt-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
   .review-card__body {
     padding: 16px 18px;
+  }
+
+  .review-card__image-wrap {
+    margin: 0 0 16px;
+  }
+
+  .review-card__image {
+    display: block;
+    width: 100%;
+    max-height: 340px;
+    object-fit: contain;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
   }
 
   .review-card__prompt {
