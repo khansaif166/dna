@@ -1,33 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
+import { requireServerEnv } from './serverEnv';
 
 function getSupabaseUrl() {
-  const url = import.meta.env.SUPABASE_URL;
-
-  if (!url) {
-    throw new Error('SUPABASE_URL is required.');
-  }
-
-  return url;
+  return requireServerEnv('SUPABASE_URL');
 }
 
 function getSupabaseAnonKey() {
-  const key = import.meta.env.SUPABASE_ANON_KEY;
-
-  if (!key) {
-    throw new Error('SUPABASE_ANON_KEY is required.');
-  }
-
-  return key;
+  return requireServerEnv('SUPABASE_ANON_KEY');
 }
 
 function getSupabaseServiceRoleKey() {
-  const key = import.meta.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!key) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required.');
-  }
-
-  return key;
+  return requireServerEnv('SUPABASE_SERVICE_ROLE_KEY');
 }
 
 export function getUserSupabase(accessToken: string) {

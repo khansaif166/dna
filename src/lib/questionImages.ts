@@ -1,6 +1,7 @@
 import { getAdminSupabase } from './supabase';
+import { getServerEnv } from './serverEnv';
 
-export const QUESTION_IMAGE_BUCKET = import.meta.env.SUPABASE_QUESTION_IMAGE_BUCKET || 'question-images';
+export const QUESTION_IMAGE_BUCKET = getServerEnv('SUPABASE_QUESTION_IMAGE_BUCKET') || 'question-images';
 export const MAX_QUESTION_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 export const allowedQuestionImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
