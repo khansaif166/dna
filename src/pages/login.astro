@@ -8,12 +8,15 @@ if (Astro.locals.profile) {
 }
 
 const error = Astro.url.searchParams.get('error');
+const detail = Astro.url.searchParams.get('detail');
 const success = Astro.url.searchParams.get('success');
 const errorMessages: Record<string, string> = {
   invalid_input: 'Please enter a valid email and password.',
   invalid_credentials: 'Invalid email or password.',
   account_disabled: 'This account has been disabled. Please contact an admin.',
   verification_failed: 'Email verification failed. Please try the link again.',
+  profile_missing: 'Your auth user exists, but no matching profile was found.',
+  server_failure: 'The login request failed on the server.',
 };
 const successMessages: Record<string, string> = {
   account_created: 'Your account is ready. Please log in to continue.',
@@ -52,9 +55,16 @@ const subjects = ['Physics', 'Chemistry', 'Biology'];
         <p class="auth-card__subtitle">Sign in to continue your preparation</p>
 
         {error && (
-          <p class="auth-message auth-message--error">
-            {errorMessages[error] ?? 'Unable to log in right now.'}
-          </p>
+          <>
+            <p class="auth-message auth-message--error">
+              {errorMessages[error] ?? 'Unable to log in right now.'}
+            </p>
+            {detail && (
+              <p class="auth-message auth-message--debug">
+                {detail}
+              </p>
+            )}
+          </>
         )}
         {success && (
           <p class="auth-message auth-message--success">
@@ -237,6 +247,16 @@ const subjects = ['Physics', 'Chemistry', 'Biology'];
     border-radius: 10px;
     padding: 10px 14px;
     font-size: 0.875rem;
+  }
+
+  .auth-message--debug {
+    border: 1px solid rgba(245, 197, 24, 0.35);
+    background: rgba(245, 197, 24, 0.12);
+    color: #7c5b00;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    word-break: break-word;
   }
 
   .auth-message--error {
