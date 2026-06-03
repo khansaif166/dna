@@ -50,18 +50,35 @@ function checkRateLimit(pathname: string, ip: string | null) {
   return null;
 }
 
-export const onRequest: MiddlewareHandler = (context, next) => {
-  syncRuntimeEnvToProcessEnv(
-    context.locals.runtime?.env as Record<string, unknown> | undefined
-  );
+export const onRequest: MiddlewareHandler = async (context, next) => {
+  try {
+    syncRuntimeEnvToProcessEnv(
+      context.locals.runtime?.env as Record<string, unknown> | undefined
+    );
 
-  const pathname = context.url.pathname;
-  const ip = context.request.headers.get('cf-connecting-ip');
-  const limitedResponse = checkRateLimit(pathname, ip);
+    const pathname = context.url.pathname;
+    const ip = context.request.headers.get('cf-connecting-ip');
+    const limitedResponse = checkRateLimit(pathname, ip);
 
-  if (limitedResponse) {
-    return limitedResponse;
+    if (limitedResponse) {
+      return limitedResponse;
+    }
+
+    return await authMiddleware(context, next);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown middleware error';
+    const stack = error instanceof Error ? error.stack ?? '' : '';
+
+    if (context.url.pathname === '/api/auth/login' || context.url.pathname === '/api/debug/env') {
+      return new Response(`Middleware failure: ${message}\n\n${stack}`, {
+        status: 500,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'no-store',
+        },
+      });
+    }
+
+    return new Response('Internal Server Error', { status: 500 });
   }
-
-  return authMiddleware(context, next);
 };
