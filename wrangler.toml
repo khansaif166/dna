@@ -2,3 +2,8 @@ name = "dream-neet"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./dist"
+
+[vars]
+SITE = "https://www.dreamneetacademy.com"
+SUPABASE_URL = "https://bidejmapjypkysndaaqh.supabase.co"
+SUPABASE_QUESTION_IMAGE_BUCKET = "question-images"
