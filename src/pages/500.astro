@@ -1,5 +1,21 @@
 ---
-export const prerender = true;
+export const prerender = false;
+
+interface Props {
+  error?: unknown;
+}
+
+const { error } = Astro.props;
+
+const errorName = error instanceof Error ? error.name : 'ServerError';
+const errorMessage =
+  error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : 'Something went wrong on our side.';
+
+const errorStack = error instanceof Error ? error.stack : null;
 ---
 
 <html lang="en">
@@ -11,12 +27,150 @@ export const prerender = true;
     <link rel="shortcut icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Server Error | Dream Neet Academy</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, system-ui, sans-serif;
+        background: #020817;
+        color: #e2e8f0;
+      }
+
+      main {
+        width: min(100%, 880px);
+        margin: 0 auto;
+        padding: 56px 24px 72px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        margin-bottom: 16px;
+        border: 1px solid rgba(248, 113, 113, 0.35);
+        border-radius: 999px;
+        background: rgba(127, 29, 29, 0.3);
+        padding: 6px 12px;
+        color: #fca5a5;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        color: #fff;
+        font-size: clamp(3rem, 8vw, 5rem);
+        line-height: 0.95;
+      }
+
+      .lead {
+        margin: 0 0 28px;
+        color: #cbd5e1;
+        font-size: 1.05rem;
+        line-height: 1.7;
+      }
+
+      .error-card {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 18px;
+        background: rgba(15, 23, 42, 0.88);
+        padding: 20px;
+        box-shadow: 0 18px 48px rgba(2, 6, 23, 0.35);
+      }
+
+      .label {
+        margin: 0 0 6px;
+        color: #94a3b8;
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .value {
+        margin: 0;
+        color: #f8fafc;
+        font-size: 0.98rem;
+        line-height: 1.7;
+        word-break: break-word;
+      }
+
+      .stack {
+        margin-top: 18px;
+        border-radius: 12px;
+        background: #020617;
+        padding: 14px 16px;
+        color: #cbd5e1;
+        font-size: 0.8rem;
+        line-height: 1.6;
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        border-radius: 10px;
+        padding: 10px 18px;
+        font-size: 0.92rem;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .button--primary {
+        background: #f5c518;
+        color: #0a0f1e;
+      }
+
+      .button--secondary {
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        background: rgba(15, 23, 42, 0.88);
+        color: #e2e8f0;
+      }
+    </style>
   </head>
   <body>
     <main>
+      <span class="eyebrow">Runtime Error</span>
       <h1>500</h1>
-      <p>Something went wrong on our side.</p>
-      <p><a href="/">Return home</a></p>
+      <p class="lead">The server threw an error while rendering this page or handling your request.</p>
+
+      <section class="error-card">
+        <p class="label">Error Type</p>
+        <p class="value">{errorName}</p>
+
+        <p class="label" style="margin-top: 18px;">Message</p>
+        <p class="value">{errorMessage}</p>
+
+        {errorStack && (
+          <>
+            <p class="label" style="margin-top: 18px;">Stack Trace</p>
+            <pre class="stack">{errorStack}</pre>
+          </>
+        )}
+      </section>
+
+      <div class="actions">
+        <a class="button button--primary" href="/">Return home</a>
+        <a class="button button--secondary" href="/login">Back to login</a>
+      </div>
     </main>
   </body>
 </html>
