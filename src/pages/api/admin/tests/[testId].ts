@@ -3,6 +3,7 @@ import { eq, inArray } from 'drizzle-orm';
 
 import { attemptAnswers, db, questions, testAttempts, tests } from '../../../../db';
 import { hasValidOrigin } from '../../../../lib/csrf';
+import { getUuidParam } from '../../../../lib/routeParams';
 import { requireAdminApi } from '../../../../lib/requireAdminApi';
 
 export const prerender = false;
@@ -27,10 +28,12 @@ export const DELETE: APIRoute = async (context) => {
     return auth;
   }
 
-  const { testId } = context.params;
+  const testId = getUuidParam(context.params.testId, {
+    response: json('Test not found.', 404),
+  });
 
-  if (!testId) {
-    return json('Test not found.', 404);
+  if (testId instanceof Response) {
+    return testId;
   }
 
   const existingTest = await db.select({ id: tests.id }).from(tests).where(eq(tests.id, testId)).limit(1);

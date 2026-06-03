@@ -7,6 +7,7 @@ import TestEngine from '../../../components/TestEngine';
 import Base from '../../../layouts/Base.astro';
 import { db, questions, testAttempts, tests } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
+import { getUuidParam } from '../../../lib/routeParams';
 
 const authResult = await requireAuth(Astro, 'student');
 
@@ -15,10 +16,10 @@ if (authResult instanceof Response) {
 }
 
 const profile = authResult;
-const { testId } = Astro.params;
+const testId = getUuidParam(Astro.params.testId);
 
-if (!testId) {
-  return new Response(null, { status: 404 });
+if (testId instanceof Response) {
+  return testId;
 }
 
 const testRows = await db.select().from(tests).where(eq(tests.id, testId));

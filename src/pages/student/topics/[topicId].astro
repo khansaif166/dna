@@ -6,6 +6,7 @@ import { and, asc, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import PlatformLayout from '../../../layouts/PlatformLayout.astro';
 import { db, questions, subTopics, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
+import { getUuidParam } from '../../../lib/routeParams';
 
 const authResult = await requireAuth(Astro, 'student');
 
@@ -14,10 +15,10 @@ if (authResult instanceof Response) {
 }
 
 const profile = authResult;
-const { topicId } = Astro.params;
+const topicId = getUuidParam(Astro.params.topicId);
 
-if (!topicId) {
-  return new Response(null, { status: 404 });
+if (topicId instanceof Response) {
+  return topicId;
 }
 
 const topicRows = await db

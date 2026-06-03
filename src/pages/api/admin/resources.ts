@@ -9,18 +9,49 @@ import { requireAdminApi } from '../../../lib/requireAdminApi';
 
 export const prerender = false;
 
-const resourceSchema = z.object({
-  mode: z.enum(['new', 'existing']).default('new'),
-  intent: z.enum(['save', 'remove']).default('save'),
+const newResourceSchema = z.object({
+  mode: z.literal('new').default('new'),
+  intent: z.literal('save').default('save'),
   topic_id: z.string().uuid(),
-  sub_topic_id: z.string().uuid().optional(),
   title: z.string().trim().min(1),
-  youtube_url: z.string().optional().or(z.literal('')).refine((value) => !value || z.string().url().safeParse(value).success, {
-    message: 'Invalid YouTube URL',
-  }),
+  youtube_url: z
+    .string()
+    .refine((value) => z.string().url().safeParse(value).success, {
+      message: 'Invalid YouTube URL',
+    }),
   notes: z.string().optional().or(z.literal('')),
-  order: z.coerce.number().int().optional(),
+  order: z.coerce.number().int().min(1),
 });
+
+const existingSaveResourceSchema = z.object({
+  mode: z.literal('existing'),
+  intent: z.literal('save').default('save'),
+  sub_topic_id: z.string().uuid(),
+  youtube_url: z
+    .string()
+    .refine((value) => z.string().url().safeParse(value).success, {
+      message: 'Invalid YouTube URL',
+    }),
+  notes: z.string().optional().or(z.literal('')),
+});
+
+const existingRemoveResourceSchema = z.object({
+  mode: z.literal('existing'),
+  intent: z.literal('remove'),
+  sub_topic_id: z.string().uuid(),
+});
+
+const resourceSchema = z.discriminatedUnion('mode', [
+  newResourceSchema,
+  z.discriminatedUnion('intent', [existingSaveResourceSchema, existingRemoveResourceSchema]),
+]);
+
+function redirectWithError(request: Request, message: string) {
+  const referrer = request.headers.get('referer');
+  const url = new URL(referrer ?? '/admin/subjects', request.url);
+  url.searchParams.set('error', message);
+  return Response.redirect(url, 302);
+}
 
 export const POST: APIRoute = async (context) => {
   if (!hasValidOrigin(context.request)) {
@@ -46,16 +77,12 @@ export const POST: APIRoute = async (context) => {
   });
 
   if (!parsed.success) {
-    return new Response('Invalid resource input', { status: 400 });
+    return redirectWithError(context.request, 'invalid_resource_input');
   }
 
   try {
     await db.transaction(async (tx) => {
       if (parsed.data.mode === 'new') {
-        if (!parsed.data.youtube_url || parsed.data.order === undefined) {
-          throw new Error('Missing topic or video details');
-        }
-
         await tx.insert(subTopics).values({
           topicId: parsed.data.topic_id,
           name: parsed.data.title,
@@ -71,10 +98,6 @@ export const POST: APIRoute = async (context) => {
         });
 
         return;
-      }
-
-      if (!parsed.data.sub_topic_id) {
-        throw new Error('Select an existing topic');
       }
 
       const subTopic = await tx.query.subTopics.findFirst({
@@ -96,10 +119,6 @@ export const POST: APIRoute = async (context) => {
         }
 
         return;
-      }
-
-      if (!parsed.data.youtube_url) {
-        throw new Error('YouTube URL is required');
       }
 
       if (existingVideo) {
@@ -125,7 +144,10 @@ export const POST: APIRoute = async (context) => {
       });
     });
   } catch (error) {
-    return new Response(error instanceof Error ? error.message : 'Failed to create resource', { status: 400 });
+    return redirectWithError(
+      context.request,
+      error instanceof Error ? error.message : 'failed_to_create_resource'
+    );
   }
 
   return redirectToAdminReferrer(context.request, '/admin/topics');

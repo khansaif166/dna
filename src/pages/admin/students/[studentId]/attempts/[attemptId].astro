@@ -6,6 +6,7 @@ import { asc, eq } from 'drizzle-orm';
 import AdminLayout from '../../../../../layouts/AdminLayout.astro';
 import { attemptAnswers, db, profiles, questions, testAttempts, tests } from '../../../../../db';
 import { requireAuth } from '../../../../../lib/auth';
+import { getUuidParam } from '../../../../../lib/routeParams';
 
 const authResult = await requireAuth(Astro, 'admin');
 
@@ -14,10 +15,15 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
-const { studentId, attemptId } = Astro.params;
+const studentId = getUuidParam(Astro.params.studentId);
+const attemptId = getUuidParam(Astro.params.attemptId);
 
-if (!studentId || !attemptId) {
-  return new Response(null, { status: 404 });
+if (studentId instanceof Response) {
+  return studentId;
+}
+
+if (attemptId instanceof Response) {
+  return attemptId;
 }
 
 const studentRows = await db.select().from(profiles).where(eq(profiles.id, studentId));

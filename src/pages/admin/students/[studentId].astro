@@ -8,6 +8,7 @@ import { attemptAnswers, db, questions, subjects, testAttempts, tests, topics } 
 import { getAuthUserEmailById } from '../../../lib/adminUsers';
 import { requireAuth } from '../../../lib/auth';
 import { hasProfileIsActiveColumn } from '../../../lib/profileColumns';
+import { getUuidParam } from '../../../lib/routeParams';
 
 function formatDate(dateValue: string | Date): string {
   const date = new Date(dateValue);
@@ -131,12 +132,12 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
-const { studentId } = Astro.params;
+const studentId = getUuidParam(Astro.params.studentId);
 const attemptFilter = Astro.url.searchParams.get('filter')?.trim() ?? 'all';
 const hasIsActiveColumn = await hasProfileIsActiveColumn();
 
-if (!studentId) {
-  return new Response(null, { status: 404 });
+if (studentId instanceof Response) {
+  return studentId;
 }
 
 const studentRows = await db.execute(sql`

@@ -6,6 +6,7 @@ import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import PlatformLayout from '../../../layouts/PlatformLayout.astro';
 import { db, subTopics, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
+import { getUuidParam } from '../../../lib/routeParams';
 
 const authResult = await requireAuth(Astro, 'student');
 
@@ -14,10 +15,10 @@ if (authResult instanceof Response) {
 }
 
 const profile = authResult;
-const { subjectId } = Astro.params;
+const subjectId = getUuidParam(Astro.params.subjectId);
 
-if (!subjectId) {
-  return new Response(null, { status: 404 });
+if (subjectId instanceof Response) {
+  return subjectId;
 }
 
 const subjectRows = await db.select().from(subjects).where(eq(subjects.id, subjectId));

@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { attemptAnswers, db, questions } from '../../../../db';
 import { hasValidOrigin } from '../../../../lib/csrf';
+import { getUuidParam } from '../../../../lib/routeParams';
 import { requireAdminApi } from '../../../../lib/requireAdminApi';
 
 export const prerender = false;
@@ -89,10 +90,12 @@ export const PATCH: APIRoute = async (context) => {
     return auth;
   }
 
-  const { questionId } = context.params;
+  const questionId = getUuidParam(context.params.questionId, {
+    response: json('Question not found.', 404),
+  });
 
-  if (!questionId) {
-    return json('Question not found.', 404);
+  if (questionId instanceof Response) {
+    return questionId;
   }
 
   const existingQuestion = await requireQuestion(questionId);
@@ -168,10 +171,12 @@ export const DELETE: APIRoute = async (context) => {
     return auth;
   }
 
-  const { questionId } = context.params;
+  const questionId = getUuidParam(context.params.questionId, {
+    response: json('Question not found.', 404),
+  });
 
-  if (!questionId) {
-    return json('Question not found.', 404);
+  if (questionId instanceof Response) {
+    return questionId;
   }
 
   const existingQuestion = await requireQuestion(questionId);

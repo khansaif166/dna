@@ -6,6 +6,7 @@ import { asc, eq } from 'drizzle-orm';
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, questions, subjects, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
+import { getUuidParam } from '../../../lib/routeParams';
 
 const authResult = await requireAuth(Astro, 'admin');
 
@@ -14,10 +15,10 @@ if (authResult instanceof Response) {
 }
 
 const admin = authResult;
-const { testId } = Astro.params;
+const testId = getUuidParam(Astro.params.testId);
 
-if (!testId) {
-  return new Response(null, { status: 404 });
+if (testId instanceof Response) {
+  return testId;
 }
 
 const testRows = await db
