@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'astro';
 
 import { authMiddleware } from './lib/auth-middleware';
+import { setRuntimeEnv } from './lib/serverEnv';
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -52,6 +53,10 @@ function checkRateLimit(pathname: string, ip: string | null) {
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
   try {
+    setRuntimeEnv(
+      context.locals.runtime?.env as Record<string, unknown> | undefined
+    );
+
     syncRuntimeEnvToProcessEnv(
       context.locals.runtime?.env as Record<string, unknown> | undefined
     );
