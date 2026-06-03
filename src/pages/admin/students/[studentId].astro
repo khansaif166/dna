@@ -5,9 +5,9 @@ import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
 
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { attemptAnswers, db, questions, subjects, testAttempts, tests, topics } from '../../../db';
+import { getAuthUserEmailById } from '../../../lib/adminUsers';
 import { requireAuth } from '../../../lib/auth';
 import { hasProfileIsActiveColumn } from '../../../lib/profileColumns';
-import { getAdminSupabase } from '../../../lib/supabase';
 
 function formatDate(dateValue: string | Date): string {
   const date = new Date(dateValue);
@@ -163,7 +163,7 @@ const [student] = studentRows as Array<{
   isActive: boolean;
 }>;
 
-const [attempts, subjectAccuracyRows, adminSupabaseUser] = await Promise.all([
+const [attempts, subjectAccuracyRows, email] = await Promise.all([
   db
     .select({
       id: testAttempts.id,
@@ -195,10 +195,10 @@ const [attempts, subjectAccuracyRows, adminSupabaseUser] = await Promise.all([
     .innerJoin(subjects, sql`${subjects.id} = coalesce(${topics.subjectId}, ${tests.subjectId})`)
     .where(and(eq(testAttempts.studentId, student.id), isNotNull(testAttempts.submittedAt)))
     .groupBy(subjects.id, subjects.name),
-  getAdminSupabase().auth.admin.getUserById(student.id),
+  getAuthUserEmailById(student.id),
 ]);
 
-const email = adminSupabaseUser.data.user?.email ?? 'No email available';
+const studentEmail = email ?? 'No email available';
 
 const attemptsWithPercent = attempts.map((attempt) => ({
   ...attempt,
@@ -273,7 +273,7 @@ const filterHref = (filter: 'all' | 'passed' | 'failed') => {
 
     <div class="profile-hero__content">
       <h2>{student.fullName}</h2>
-      <div class="profile-hero__email">✉ {email}</div>
+      <div class="profile-hero__email">✉ {studentEmail}</div>
       <div class="profile-hero__tags">
         <span class="tag tag--role">Student</span>
         <span class:list={['tag', student.isActive ? 'tag--active' : 'tag--disabled']}>

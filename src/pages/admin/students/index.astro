@@ -5,9 +5,9 @@ import { asc, eq, sql } from 'drizzle-orm';
 
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, testAttempts } from '../../../db';
+import { listAuthUserEmailsById } from '../../../lib/adminUsers';
 import { requireAuth } from '../../../lib/auth';
 import { hasProfileIsActiveColumn } from '../../../lib/profileColumns';
-import { getAdminSupabase } from '../../../lib/supabase';
 
 const authResult = await requireAuth(Astro, 'admin');
 
@@ -53,27 +53,7 @@ const students = studentsResult as Array<{
   lastActive: Date | string | null;
 }>;
 
-const adminSupabase = getAdminSupabase();
-const allUsers: Array<{ id: string; email?: string | null }> = [];
-let page = 1;
-
-while (true) {
-  const { data: usersData } = await adminSupabase.auth.admin.listUsers({
-    page,
-    perPage: 1000,
-  });
-
-  const users = usersData?.users ?? [];
-  allUsers.push(...users);
-
-  if (users.length < 1000) {
-    break;
-  }
-
-  page += 1;
-}
-
-const emailById = new Map(allUsers.map((user) => [user.id, user.email ?? '-']));
+const emailById = await listAuthUserEmailsById();
 
 const filteredStudents = students.filter((student) => {
   if (!query) {

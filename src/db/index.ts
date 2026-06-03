@@ -8,6 +8,7 @@ const connectionString = requireServerEnv('DATABASE_URL');
 
 const client = postgres(connectionString, {
   prepare: false,
+  connect_timeout: 10,
 });
 
 export const db = drizzle(client, { schema });

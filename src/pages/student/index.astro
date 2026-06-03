@@ -6,14 +6,19 @@ import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import Base from '../../layouts/Base.astro';
 import { db, subjects, testAttempts, tests, topics } from '../../db';
 import { requireAuth } from '../../lib/auth';
+import { withTimeout } from '../../lib/withTimeout';
 
-const authResult = await requireAuth(Astro, 'student');
+console.log('[student] dashboard request started');
+
+const authResult = await withTimeout(requireAuth(Astro, 'student'), 'student auth check');
 
 if (authResult instanceof Response) {
+  console.log('[student] auth returned redirect response');
   return authResult;
 }
 
 const profile = authResult;
+console.log('[student] auth resolved for profile', profile.id);
 
 const [
   allSubjects,
@@ -23,22 +28,32 @@ const [
   topicProgressRows,
   recentAttempts,
 ] = await Promise.all([
-  db.select().from(subjects).orderBy(asc(subjects.order)),
-  db
+  withTimeout(
+    db.select().from(subjects).orderBy(asc(subjects.order)),
+    'student dashboard subjects query'
+  ),
+  withTimeout(
+    db
     .select({
       subjectId: topics.subjectId,
       topicCount: sql<number>`count(*)::int`,
     })
     .from(topics)
     .groupBy(topics.subjectId),
-  db
+    'student dashboard topic count query'
+  ),
+  withTimeout(
+    db
     .select({
       subjectId: tests.subjectId,
       testCount: sql<number>`count(*)::int`,
     })
     .from(tests)
     .groupBy(tests.subjectId),
-  db
+    'student dashboard test count query'
+  ),
+  withTimeout(
+    db
     .select({
       score: testAttempts.score,
       totalQuestions: testAttempts.totalQuestions,
@@ -46,7 +61,10 @@ const [
     })
     .from(testAttempts)
     .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt))),
-  db
+    'student dashboard submitted attempts query'
+  ),
+  withTimeout(
+    db
     .select({
       subjectId: tests.subjectId,
       topicId: tests.topicId,
@@ -55,7 +73,10 @@ const [
     .from(testAttempts)
     .innerJoin(tests, eq(testAttempts.testId, tests.id))
     .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt))),
-  db
+    'student dashboard topic progress query'
+  ),
+  withTimeout(
+    db
     .select({
       id: testAttempts.id,
       score: testAttempts.score,
@@ -70,7 +91,11 @@ const [
     .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt)))
     .orderBy(desc(testAttempts.submittedAt))
     .limit(5),
+    'student dashboard recent attempts query'
+  ),
 ]);
+
+console.log('[student] dashboard queries resolved');
 
 const now = new Date();
 const dayMs = 24 * 60 * 60 * 1000;
