@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { db, tests } from '../../../../../db';
+import { db, questions, tests } from '../../../../../db';
 import { redirectToAdminReferrer } from '../../../../../lib/admin';
 import { hasValidOrigin } from '../../../../../lib/csrf';
 import { requireAdminApi } from '../../../../../lib/requireAdminApi';
@@ -37,6 +37,29 @@ export const POST: APIRoute = async (context) => {
 
   if (!test) {
     return new Response('Test not found', { status: 400 });
+  }
+
+  if (test.status === 'draft') {
+    const [questionCount, pendingAnswerCount] = await Promise.all([
+      db
+        .select({ id: questions.id })
+        .from(questions)
+        .where(eq(questions.testId, test.id))
+        .limit(1),
+      db
+        .select({ id: questions.id })
+        .from(questions)
+        .where(and(eq(questions.testId, test.id), isNull(questions.correctOption)))
+        .limit(1),
+    ]);
+
+    if (!questionCount.length) {
+      return new Response('Add at least one question before publishing this test.', { status: 400 });
+    }
+
+    if (pendingAnswerCount.length) {
+      return new Response('Cannot publish test until all questions have answer keys.', { status: 400 });
+    }
   }
 
   try {

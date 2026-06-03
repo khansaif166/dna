@@ -112,7 +112,7 @@ export const questions = pgTable(
     optionB: text('option_b').notNull(),
     optionC: text('option_c').notNull(),
     optionD: text('option_d').notNull(),
-    correctOption: optionChoiceEnum('correct_option').notNull(),
+    correctOption: optionChoiceEnum('correct_option'),
     explanation: text('explanation'),
     order: smallint('order').notNull(),
   },

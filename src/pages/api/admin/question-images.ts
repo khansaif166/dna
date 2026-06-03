@@ -1,14 +1,16 @@
 import type { APIRoute } from 'astro';
 
 import { hasValidOrigin } from '../../../lib/csrf';
+import {
+  allowedQuestionImageMimeTypes,
+  ensureQuestionImageBucketExists,
+  MAX_QUESTION_IMAGE_SIZE_BYTES,
+  QUESTION_IMAGE_BUCKET,
+  sanitizeQuestionImageFileName,
+} from '../../../lib/questionImages';
 import { requireAdminApi } from '../../../lib/requireAdminApi';
-import { getAdminSupabase } from '../../../lib/supabase';
 
 export const prerender = false;
-
-const QUESTION_IMAGE_BUCKET = import.meta.env.SUPABASE_QUESTION_IMAGE_BUCKET || 'question-images';
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
-const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 function json(message: string, status: number, extra: Record<string, unknown> = {}) {
   return new Response(JSON.stringify({ message, ...extra }), {
@@ -17,39 +19,6 @@ function json(message: string, status: number, extra: Record<string, unknown> = 
       'Content-Type': 'application/json; charset=utf-8',
     },
   });
-}
-
-function sanitizeFileName(name: string) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9.-]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-}
-
-async function ensureBucketExists() {
-  const supabase = getAdminSupabase();
-  const { data: existingBucket, error: getBucketError } = await supabase.storage.getBucket(QUESTION_IMAGE_BUCKET);
-
-  if (existingBucket) {
-    return { supabase, error: null as string | null };
-  }
-
-  // Some projects return a "not found" style error here before bucket creation.
-  const { error: createBucketError } = await supabase.storage.createBucket(QUESTION_IMAGE_BUCKET, {
-    public: true,
-    fileSizeLimit: `${MAX_FILE_SIZE_BYTES}`,
-    allowedMimeTypes: [...allowedMimeTypes],
-  });
-
-  if (createBucketError && !/already exists/i.test(createBucketError.message)) {
-    return {
-      supabase,
-      error: createBucketError.message || getBucketError?.message || 'Failed to initialize the image storage bucket.',
-    };
-  }
-
-  return { supabase, error: null as string | null };
 }
 
 export const POST: APIRoute = async (context) => {
@@ -79,17 +48,17 @@ export const POST: APIRoute = async (context) => {
     return json('The selected image is empty.', 400);
   }
 
-  if (file.size > MAX_FILE_SIZE_BYTES) {
+  if (file.size > MAX_QUESTION_IMAGE_SIZE_BYTES) {
     return json('Image must be 5 MB or smaller.', 400);
   }
 
-  if (!allowedMimeTypes.has(file.type)) {
+  if (!allowedQuestionImageMimeTypes.has(file.type)) {
     return json('Only JPG, PNG, WEBP, and GIF images are supported.', 400);
   }
 
-  const safeFileName = sanitizeFileName(file.name || 'question-image');
+  const safeFileName = sanitizeQuestionImageFileName(file.name || 'question-image');
   const objectPath = `tests/${testId}/${Date.now()}-${safeFileName}`;
-  const { supabase, error: bucketError } = await ensureBucketExists();
+  const { supabase, error: bucketError } = await ensureQuestionImageBucketExists();
 
   if (bucketError) {
     return json(bucketError, 400);

@@ -6,9 +6,10 @@ interface Props {
   pageTitle?: string;
   userName?: string;
   userEmail?: string;
+  hideTopbar?: boolean;
 }
 
-const { title, pageTitle = title, userName = 'Admin', userEmail } = Astro.props;
+const { title, pageTitle = title, userName = 'Admin', userEmail, hideTopbar = false } = Astro.props;
 
 const pathname = Astro.url.pathname;
 const navItems = [
@@ -59,25 +60,36 @@ const isActive = (label: string, href: string) => {
   </head>
   <body class="admin-app">
     <div class="admin-shell">
-      <aside class="admin-sidebar">
+      <aside class="admin-sidebar" id="admin-sidebar">
+        <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
+          <svg class="toggle-icon" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M7.5 2.25 4 6l3.5 3.75" />
+          </svg>
+        </button>
+
         <div class="admin-sidebar__top">
-          <a href="/admin" class="admin-brand">
+          <a href="/admin" class="admin-brand" aria-label="Dream Neet Admin home">
             <img src="/images/logo.jpeg" alt="Dream Neet Academy logo" class="admin-brand__logo" />
-            <div>
-              <div class="admin-brand__title">Dream Neet Academy</div>
+            <div class="sidebar-logo-text">
+              <div class="admin-brand__title">Dream Neet</div>
+              <div class="admin-brand__title">Academy</div>
               <div class="admin-brand__sub">Admin Panel</div>
             </div>
           </a>
         </div>
 
         <div class="admin-sidebar__nav-wrap">
-          <div class="admin-sidebar__label">Management</div>
+          <div class="admin-sidebar__label sidebar-section-label">Management</div>
 
           <nav class="admin-sidebar__nav" aria-label="Admin management">
             {navItems.map((item) => (
               <a
                 href={item.href}
-                class:list={['admin-sidebar__link', { 'admin-sidebar__link--active': isActive(item.label, item.href) }]}
+                title={item.label}
+                class:list={[
+                  'admin-sidebar__link nav-item',
+                  { 'admin-sidebar__link--active': isActive(item.label, item.href) },
+                ]}
               >
                 <span class="admin-sidebar__icon" aria-hidden="true">
                   {
@@ -117,33 +129,63 @@ const isActive = (label: string, href: string) => {
                     )
                   }
                 </span>
-                <span>{item.label}</span>
+                <span class="sidebar-label">{item.label}</span>
               </a>
             ))}
           </nav>
         </div>
 
         <div class="admin-sidebar__bottom">
-          <div class="admin-sidebar__email" title={userEmail ?? userName}>{userEmail ?? userName}</div>
-          <form action="/api/auth/logout" method="POST">
+          <div class="admin-sidebar__email sidebar-bottom-text" title={userEmail ?? userName}>{userEmail ?? userName}</div>
+          <form action="/api/auth/logout" method="POST" class="sidebar-bottom-text">
             <button type="submit" class="admin-sidebar__logout">Logout</button>
           </form>
         </div>
       </aside>
 
       <div class="admin-main">
-        <header class="admin-topbar">
-          <h1 class="admin-topbar__title">{pageTitle}</h1>
-          <div class="admin-topbar__actions">
-            <slot name="actions" />
-          </div>
-        </header>
+        {!hideTopbar && (
+          <header class="admin-topbar">
+            <h1 class="admin-topbar__title">{pageTitle}</h1>
+            <div class="admin-topbar__actions">
+              <slot name="actions" />
+            </div>
+          </header>
+        )}
 
         <div class="admin-content">
           <slot />
         </div>
       </div>
     </div>
+
+    <script is:inline>
+      const sidebar = document.getElementById('admin-sidebar');
+      const toggle = document.getElementById('sidebar-toggle');
+      const STORAGE_KEY = 'admin_sidebar_collapsed';
+
+      if (sidebar && localStorage.getItem(STORAGE_KEY) === 'true' && window.innerWidth > 900) {
+        sidebar.classList.add('collapsed');
+      }
+
+      if (toggle && sidebar) {
+        toggle.addEventListener('click', () => {
+          if (window.innerWidth <= 900) {
+            return;
+          }
+
+          const isCollapsed = sidebar.classList.toggle('collapsed');
+          localStorage.setItem(STORAGE_KEY, String(isCollapsed));
+        });
+
+        sidebar.querySelectorAll('.nav-item').forEach((item) => {
+          const label = item.querySelector('.sidebar-label')?.textContent?.trim();
+          if (label) {
+            item.setAttribute('title', label);
+          }
+        });
+      }
+    </script>
   </body>
 </html>
 
@@ -162,43 +204,117 @@ const isActive = (label: string, href: string) => {
 
   .admin-shell {
     display: flex;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
     background: #f1f3f9;
   }
 
   .admin-sidebar {
     width: 220px;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
     flex-shrink: 0;
+    align-self: flex-start;
+    position: sticky;
+    top: 0;
+    min-height: 100vh;
     background: #0a0f1e;
     display: flex;
     flex-direction: column;
     border-right: 1px solid rgba(255, 255, 255, 0.06);
   }
 
+  .admin-sidebar.collapsed {
+    width: 64px;
+  }
+
+  .admin-main {
+    flex: 1;
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    min-width: 0;
+    min-height: 100vh;
+    background: #f1f3f9;
+  }
+
   .admin-sidebar__top {
+    position: relative;
     padding: 20px 16px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .sidebar-toggle {
+    position: absolute;
+    right: -12px;
+    top: 72px;
+    width: 24px;
+    height: 24px;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(10, 15, 30, 0.1);
+    transition: all 0.2s;
+    color: #0a0f1e;
+  }
+
+  .sidebar-toggle:hover {
+    background: #0a0f1e;
+    border-color: #0a0f1e;
+    color: #fff;
+  }
+
+  .toggle-icon {
+    width: 12px;
+    height: 12px;
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .toggle-icon path {
+    stroke: currentColor;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .admin-sidebar:not(.collapsed) .toggle-icon {
+    transform: rotate(0deg);
+  }
+
+  .admin-sidebar.collapsed .toggle-icon {
+    transform: rotate(180deg);
   }
 
   .admin-brand {
     display: inline-flex;
     align-items: center;
     gap: 12px;
+    text-decoration: none;
   }
 
   .admin-brand__logo {
     width: 34px;
     height: 34px;
-    border-radius: 10px;
+    border-radius: 50%;
     object-fit: cover;
     border: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+  }
+
+  .sidebar-logo-text {
+    transition: opacity 0.15s, width 0.25s;
+    overflow: hidden;
   }
 
   .admin-brand__title {
     color: #fff;
-    font-size: 0.9rem;
-    font-weight: 700;
+    font-size: 0.82rem;
+    font-weight: 800;
+    line-height: 1.1;
   }
 
   .admin-brand__sub {
@@ -225,6 +341,10 @@ const isActive = (label: string, href: string) => {
     text-transform: uppercase;
   }
 
+  .sidebar-section-label {
+    transition: opacity 0.15s, height 0.25s, margin 0.25s, padding 0.25s;
+  }
+
   .admin-sidebar__nav {
     display: grid;
   }
@@ -240,6 +360,7 @@ const isActive = (label: string, href: string) => {
     font-size: 0.84rem;
     font-weight: 500;
     transition: all 0.15s;
+    text-decoration: none;
   }
 
   .admin-sidebar__link:hover {
@@ -271,6 +392,12 @@ const isActive = (label: string, href: string) => {
     stroke-linejoin: round;
   }
 
+  .sidebar-label {
+    transition: opacity 0.15s, width 0.25s;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
   .admin-sidebar__bottom {
     padding: 16px;
     border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -283,6 +410,11 @@ const isActive = (label: string, href: string) => {
     text-overflow: ellipsis;
     white-space: nowrap;
     margin-bottom: 10px;
+  }
+
+  .sidebar-bottom-text {
+    transition: opacity 0.15s, width 0.25s;
+    overflow: hidden;
   }
 
   .admin-sidebar__logout {
@@ -300,11 +432,30 @@ const isActive = (label: string, href: string) => {
     color: #ef4444;
   }
 
-  .admin-main {
-    flex: 1;
-    min-width: 0;
-    overflow-y: auto;
-    background: #f1f3f9;
+  .admin-sidebar.collapsed .sidebar-label {
+    opacity: 0;
+    width: 0;
+  }
+
+  .admin-sidebar.collapsed .sidebar-section-label {
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  .admin-sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .admin-sidebar.collapsed .sidebar-logo-text {
+    display: none;
+  }
+
+  .admin-sidebar.collapsed .sidebar-bottom-text {
+    display: none;
   }
 
   .admin-topbar {
@@ -341,14 +492,20 @@ const isActive = (label: string, href: string) => {
   @media (max-width: 900px) {
     .admin-shell {
       flex-direction: column;
-      height: auto;
       min-height: 100vh;
     }
 
-    .admin-sidebar {
+    .admin-sidebar,
+    .admin-sidebar.collapsed {
       width: 100%;
+      min-height: auto;
+      position: static;
       border-right: none;
       border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .sidebar-toggle {
+      display: none;
     }
 
     .admin-sidebar__nav {
@@ -356,8 +513,16 @@ const isActive = (label: string, href: string) => {
       padding: 0 8px;
     }
 
-    .admin-main {
-      overflow: visible;
+    .sidebar-label,
+    .sidebar-logo-text,
+    .sidebar-bottom-text,
+    .sidebar-section-label {
+      opacity: 1 !important;
+      width: auto !important;
+      height: auto !important;
+      display: block !important;
+      margin: initial;
+      padding: initial;
     }
   }
 

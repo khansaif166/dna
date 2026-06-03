@@ -12,6 +12,19 @@ function wantsJson(request: Request) {
   return request.headers.get('x-requested-with') === 'XMLHttpRequest';
 }
 
+function getFriendlyQuestionSaveError(error: unknown) {
+  const message = error instanceof Error ? error.message : 'Failed to create question';
+
+  if (
+    message.includes('null value in column "correct_option"') ||
+    message.includes('questions_correct_option_not_null')
+  ) {
+    return 'Your database still requires a correct answer for every question. Apply the latest migration to allow pending answer keys.';
+  }
+
+  return message;
+}
+
 const questionSchema = z.object({
   test_id: z.string().uuid(),
   prompt: z.string().min(1),
@@ -20,7 +33,7 @@ const questionSchema = z.object({
   option_b: z.string().min(1),
   option_c: z.string().min(1),
   option_d: z.string().min(1),
-  correct_option: z.enum(['a', 'b', 'c', 'd']),
+  correct_option: z.enum(['a', 'b', 'c', 'd']).optional().or(z.literal('')),
   explanation: z.string().optional().or(z.literal('')),
   order: z.coerce.number().int(),
 }).superRefine((data, ctx) => {
@@ -78,7 +91,7 @@ export const POST: APIRoute = async (context) => {
     option_b: formData.get('option_b'),
     option_c: formData.get('option_c'),
     option_d: formData.get('option_d'),
-    correct_option: formData.get('correct_option'),
+    correct_option: typeof formData.get('correct_option') === 'string' ? formData.get('correct_option') : '',
     explanation: formData.get('explanation'),
     order: formData.get('order'),
   });
@@ -99,7 +112,7 @@ export const POST: APIRoute = async (context) => {
       optionB: parsed.data.option_b,
       optionC: parsed.data.option_c,
       optionD: parsed.data.option_d,
-      correctOption: parsed.data.correct_option,
+      correctOption: parsed.data.correct_option || null,
       explanation: parsed.data.explanation || null,
       order: parsed.data.order,
       })
@@ -120,7 +133,7 @@ export const POST: APIRoute = async (context) => {
       );
     }
   } catch (error) {
-    return new Response(error instanceof Error ? error.message : 'Failed to create question', { status: 400 });
+    return new Response(getFriendlyQuestionSaveError(error), { status: 400 });
   }
 
   return redirectToAdminReferrer(context.request, '/admin/tests');

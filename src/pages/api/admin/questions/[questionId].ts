@@ -16,7 +16,7 @@ const questionUpdateSchema = z
     option_b: z.string().min(1),
     option_c: z.string().min(1),
     option_d: z.string().min(1),
-    correct_option: z.enum(['a', 'b', 'c', 'd']),
+    correct_option: z.enum(['a', 'b', 'c', 'd']).optional().or(z.literal('')),
     explanation: z.string().optional().or(z.literal('')),
     order: z.coerce.number().int(),
   })
@@ -60,6 +60,19 @@ function json(message: string, status: number) {
   });
 }
 
+function getFriendlyQuestionUpdateError(error: unknown) {
+  const message = error instanceof Error ? error.message : 'Failed to update question.';
+
+  if (
+    message.includes('null value in column "correct_option"') ||
+    message.includes('questions_correct_option_not_null')
+  ) {
+    return 'Your database still requires a correct answer for every question. Apply the latest migration to allow pending answer keys.';
+  }
+
+  return message;
+}
+
 async function requireQuestion(questionId: string) {
   const existing = await db.select().from(questions).where(eq(questions.id, questionId)).limit(1);
   return existing[0] ?? null;
@@ -96,7 +109,7 @@ export const PATCH: APIRoute = async (context) => {
     option_b: formData.get('option_b'),
     option_c: formData.get('option_c'),
     option_d: formData.get('option_d'),
-    correct_option: formData.get('correct_option'),
+    correct_option: typeof formData.get('correct_option') === 'string' ? formData.get('correct_option') : '',
     explanation: formData.get('explanation'),
     order: formData.get('order'),
   });
@@ -132,13 +145,13 @@ export const PATCH: APIRoute = async (context) => {
         optionB: parsed.data.option_b,
         optionC: parsed.data.option_c,
         optionD: parsed.data.option_d,
-        correctOption: parsed.data.correct_option,
+        correctOption: parsed.data.correct_option || null,
         explanation: parsed.data.explanation || null,
         order: parsed.data.order,
       })
       .where(eq(questions.id, questionId));
   } catch (error) {
-    return json(error instanceof Error ? error.message : 'Failed to update question.', 400);
+    return json(getFriendlyQuestionUpdateError(error), 400);
   }
 
   return json('Question updated successfully.', 200);

@@ -75,7 +75,9 @@ const filteredQuestions = allQuestions.filter((question) => {
           </div>
           <h2>{question.prompt}</h2>
           <p>{question.subjectName ?? 'General'} · {question.topicName ?? 'No topic'}</p>
-          <span class="correct-pill">Correct: {question.correctOption.toUpperCase()}</span>
+          <span class:list={['correct-pill', { 'correct-pill--pending': !question.correctOption }]}>
+            {question.correctOption ? `Correct: ${question.correctOption.toUpperCase()}` : 'Answer key pending'}
+          </span>
         </article>
       ))}
     </section>
@@ -189,5 +191,10 @@ const filteredQuestions = allQuestions.filter((question) => {
     padding: 24px 20px;
     color: #9aa5b4;
     font-size: 0.875rem;
+  }
+
+  .correct-pill--pending {
+    background: #eff6ff;
+    color: #1d4ed8;
   }
 </style>

@@ -258,11 +258,26 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
             <span>Ordered by curriculum</span>
           </div>
 
-          <div class="topics-grid">
+          <div class="topic-search" data-topic-search-wrap>
+            <span class="topic-search__icon" aria-hidden="true">🔎</span>
+            <input
+              type="search"
+              class="topic-search__input"
+              placeholder={`Search chapters in ${subject.name}...`}
+              aria-label={`Search chapters in ${subject.name}`}
+              data-topic-search
+              oninput="const q=this.value.trim().toLowerCase();const section=this.closest('.topics-section');if(!section)return;const cards=section.querySelectorAll('[data-topic-card]');let visible=0;cards.forEach((card)=>{const name=(card.dataset.topicName||'').toLowerCase();const matches=!q||name.includes(q);card.style.display=matches?'block':'none';if(matches){visible+=1;card.classList.remove('topic-card--search-pop');requestAnimationFrame(()=>card.classList.add('topic-card--search-pop'));}else{card.classList.remove('topic-card--search-pop');}});const empty=section.querySelector('[data-topic-search-empty]');if(empty)empty.hidden=visible>0;"
+              onsearch="this.dispatchEvent(new Event('input',{bubbles:true}))"
+            />
+          </div>
+
+          <div class="topics-grid" data-topics-grid>
             {topicCards.map((topic) => (
               <a
                 href={`/student/topics/${topic.id}`}
                 class="topic-card"
+                data-topic-card
+                data-topic-name={topic.name}
                 style={`--subject-color:${subjectTheme.color}; --subject-color-dark:${subjectTheme.colorDark}; --subject-bg-light:${subjectTheme.bgLight}; --subject-text:${subjectTheme.textColor}; --subject-shadow-rgb:${subjectTheme.shadowRgb};`}
               >
                 <div class="topic-card__top">
@@ -310,6 +325,10 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
                 </div>
               </a>
             ))}
+          </div>
+
+          <div class="topic-search-empty" data-topic-search-empty hidden>
+            No chapters matched your search in {subject.name}.
           </div>
         </section>
 
@@ -630,10 +649,53 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
     color: #9aa5b4;
   }
 
+  .topic-search {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 8px 24px rgba(10, 15, 30, 0.04);
+  }
+
+  .topic-search__icon {
+    flex-shrink: 0;
+    font-size: 0.95rem;
+    color: #94a3b8;
+  }
+
+  .topic-search__input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #0a0f1e;
+    font-size: 0.92rem;
+    font-weight: 500;
+  }
+
+  .topic-search__input::placeholder {
+    color: #9aa5b4;
+  }
+
   .topics-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 14px;
+  }
+
+  .topic-search-empty {
+    margin-top: 14px;
+    padding: 18px 20px;
+    border-radius: 16px;
+    border: 1px dashed #cbd5e1;
+    background: #fff;
+    color: #64748b;
+    font-size: 0.88rem;
+    text-align: center;
   }
 
   .topic-card {
@@ -643,10 +705,15 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
     padding: 0;
     overflow: hidden;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     text-decoration: none;
     display: block;
     color: inherit;
+    will-change: transform, opacity;
+  }
+
+  .topic-card--search-pop {
+    animation: topicSearchPop 0.24s ease;
   }
 
   .topic-card:hover {
@@ -764,6 +831,18 @@ function pluralize(count: number, singular: string, plural = `${singular}s`) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  @keyframes topicSearchPop {
+    0% {
+      opacity: 0;
+      transform: translateY(8px) scale(0.985);
+    }
+
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
   .subject-empty {

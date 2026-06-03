@@ -71,6 +71,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     .where(eq(questions.testId, attempt.testId))
     .orderBy(questions.order);
 
+  if (testQuestions.some((question) => !question.correctOption)) {
+    return json({ error: 'incomplete_test' }, 409);
+  }
+
   let score = 0;
 
   for (const question of testQuestions) {

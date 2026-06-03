@@ -154,6 +154,9 @@ const filterHref = (status: string) => {
                   {test.status === 'published' ? '↺' : '↑'}
                 </button>
               </form>
+              <button type="button" class="delete-row-btn" data-delete-test-row data-test-id={test.id} data-test-title={test.title}>
+                Delete
+              </button>
             </div>
           </article>
         ))}
@@ -240,12 +243,44 @@ const filterHref = (status: string) => {
       <button type="submit" class="submit-btn">Create Test →</button>
     </form>
   </section>
+
+  <div class="delete-modal" data-delete-test-list-modal hidden>
+    <div class="delete-modal__backdrop" data-delete-test-list-modal-close></div>
+    <div
+      class="delete-modal__dialog delete-modal__dialog--danger"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-test-list-modal-title"
+      aria-describedby="delete-test-list-modal-description"
+    >
+      <div class="delete-modal__icon delete-modal__icon--danger">!</div>
+      <p class="eyebrow">Delete Test</p>
+      <h2 id="delete-test-list-modal-title">Delete this entire test?</h2>
+      <p class="delete-modal__text" id="delete-test-list-modal-description">
+        You are about to permanently delete <strong data-delete-test-list-modal-title-label>this test</strong>.
+      </p>
+      <p class="delete-modal__subtext">
+        This will remove all questions in the test, imported answer keys, and all student attempt history linked to it. This action cannot be undone.
+      </p>
+      <div class="delete-modal__actions">
+        <button type="button" class="cancel-btn" data-delete-test-list-modal-cancel>Keep Test</button>
+        <button type="button" class="submit-btn delete-modal__confirm" data-delete-test-list-modal-confirm>Delete Test</button>
+      </div>
+    </div>
+  </div>
 </AdminLayout>
 
 <script>
   const subjectSelect = document.querySelector('[data-test-subject-select]');
   const topicSelect = document.querySelector('[data-test-topic-select]');
   const subTopicSelect = document.querySelector('[data-test-subtopic-select]');
+  const deleteTestListModal = document.querySelector('[data-delete-test-list-modal]');
+  const deleteTestListModalTitleLabel = document.querySelector('[data-delete-test-list-modal-title-label]');
+  const deleteTestListModalCancel = document.querySelector('[data-delete-test-list-modal-cancel]');
+  const deleteTestListModalConfirm = document.querySelector('[data-delete-test-list-modal-confirm]');
+  const deleteTestListModalCloseTargets = Array.from(document.querySelectorAll('[data-delete-test-list-modal-close]'));
+  let pendingDeleteButton = null;
+  let pendingDeleteTestId = '';
 
   const syncTopicOptions = () => {
     if (!(subjectSelect instanceof HTMLSelectElement) || !(topicSelect instanceof HTMLSelectElement)) {
@@ -319,6 +354,93 @@ const filterHref = (status: string) => {
 
   syncTopicOptions();
   syncSubTopicOptions();
+
+  const closeDeleteTestListModal = () => {
+    if (deleteTestListModal instanceof HTMLElement) {
+      deleteTestListModal.hidden = true;
+    }
+
+    if (deleteTestListModalConfirm instanceof HTMLButtonElement) {
+      deleteTestListModalConfirm.disabled = false;
+      deleteTestListModalConfirm.textContent = 'Delete Test';
+    }
+
+    if (pendingDeleteButton instanceof HTMLButtonElement) {
+      pendingDeleteButton.disabled = false;
+      pendingDeleteButton.textContent = 'Delete';
+    }
+
+    pendingDeleteButton = null;
+    pendingDeleteTestId = '';
+  };
+
+  deleteTestListModalCloseTargets.forEach((node) => {
+    node.addEventListener('click', closeDeleteTestListModal);
+  });
+
+  if (deleteTestListModalCancel instanceof HTMLButtonElement) {
+    deleteTestListModalCancel.addEventListener('click', closeDeleteTestListModal);
+  }
+
+  if (deleteTestListModalConfirm instanceof HTMLButtonElement) {
+    deleteTestListModalConfirm.addEventListener('click', async () => {
+      if (!pendingDeleteTestId) {
+        closeDeleteTestListModal();
+        return;
+      }
+
+      deleteTestListModalConfirm.disabled = true;
+      deleteTestListModalConfirm.textContent = 'Deleting...';
+
+      if (pendingDeleteButton instanceof HTMLButtonElement) {
+        pendingDeleteButton.disabled = true;
+        pendingDeleteButton.textContent = 'Deleting...';
+      }
+
+      try {
+        const response = await fetch(`/api/admin/tests/${pendingDeleteTestId}`, {
+          method: 'DELETE',
+        });
+        const payload = await response.json().catch(() => ({ message: 'Unexpected response from the server.' }));
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to delete test.');
+        }
+
+        window.location.reload();
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : 'Failed to delete test.');
+        closeDeleteTestListModal();
+      }
+    });
+  }
+
+  const deleteButtons = Array.from(document.querySelectorAll('[data-delete-test-row]'));
+
+  deleteButtons.forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.addEventListener('click', () => {
+      const testId = button.dataset.testId;
+      const testTitle = button.dataset.testTitle ?? 'this test';
+
+      if (!testId || !(deleteTestListModal instanceof HTMLElement)) {
+        return;
+      }
+
+      pendingDeleteButton = button;
+      pendingDeleteTestId = testId;
+
+      if (deleteTestListModalTitleLabel instanceof HTMLElement) {
+        deleteTestListModalTitleLabel.textContent = testTitle;
+      }
+
+      button.disabled = true;
+      deleteTestListModal.hidden = false;
+    });
+  });
 </script>
 
 <style>
@@ -500,6 +622,22 @@ const filterHref = (status: string) => {
     gap: 10px;
   }
 
+  .delete-row-btn {
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #fff1f2;
+    color: #b91c1c;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .delete-row-btn:disabled {
+    cursor: wait;
+    opacity: 0.75;
+  }
+
   .status-badge {
     display: inline-flex;
     align-items: center;
@@ -547,6 +685,107 @@ const filterHref = (status: string) => {
   .create-card {
     margin-top: 18px;
     padding: 20px;
+  }
+
+  .delete-modal[hidden] {
+    display: none;
+  }
+
+  .delete-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+
+  .delete-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(4px);
+  }
+
+  .delete-modal__dialog {
+    position: relative;
+    width: min(100%, 440px);
+    padding: 24px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf5 100%);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 32px 80px rgba(15, 23, 42, 0.24);
+  }
+
+  .delete-modal__dialog--danger {
+    background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%);
+  }
+
+  .delete-modal__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 14px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+    color: #b91c1c;
+    font-size: 1.15rem;
+    font-weight: 900;
+  }
+
+  .delete-modal__icon--danger {
+    background: linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%);
+    box-shadow: 0 10px 24px rgba(239, 68, 68, 0.18);
+  }
+
+  .delete-modal__dialog h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.45rem;
+    line-height: 1.2;
+  }
+
+  .delete-modal__text,
+  .delete-modal__subtext {
+    margin: 12px 0 0;
+    line-height: 1.6;
+  }
+
+  .delete-modal__text {
+    color: #1e293b;
+    font-size: 0.97rem;
+  }
+
+  .delete-modal__subtext {
+    color: #64748b;
+    font-size: 0.88rem;
+  }
+
+  .delete-modal__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .delete-modal__confirm {
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+    color: #fff;
+  }
+
+  .cancel-btn {
+    width: 100%;
+    height: 48px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 0 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    color: #334155;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .create-card__head {
@@ -640,6 +879,10 @@ const filterHref = (status: string) => {
     }
 
     .create-form {
+      grid-template-columns: 1fr;
+    }
+
+    .delete-modal__actions {
       grid-template-columns: 1fr;
     }
   }

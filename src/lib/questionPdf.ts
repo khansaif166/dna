@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PageTextResult } from 'pdf-parse';
 
 const optionKeys = ['a', 'b', 'c', 'd'] as const;
 const numericOptionMap = {
@@ -12,6 +13,8 @@ type OptionKey = (typeof optionKeys)[number];
 type NumericOptionKey = keyof typeof numericOptionMap;
 
 type DraftQuestion = {
+  sourceQuestionNumber: number | null;
+  sourcePageNumber: number | null;
   prompt: string;
   options: Partial<Record<OptionKey, string>>;
   correctAnswerRaw: string;
@@ -33,7 +36,7 @@ type SkippedQuestion = {
 };
 
 export type ParsedPdfQuestionsResult = {
-  questions: ImportedQuestion[];
+  questions: ParsedImportedQuestion[];
   skipped: SkippedQuestion[];
 };
 
@@ -44,7 +47,7 @@ export const importedQuestionSchema = z
     optionB: z.string().min(1),
     optionC: z.string().min(1),
     optionD: z.string().min(1),
-    correctOption: z.enum(optionKeys),
+    correctOption: z.enum(optionKeys).nullable(),
     explanation: z.string().nullable(),
   })
   .superRefine((data, ctx) => {
@@ -79,6 +82,14 @@ export const importedQuestionSchema = z
   });
 
 export type ImportedQuestion = z.infer<typeof importedQuestionSchema>;
+export type ParsedImportedQuestion = ImportedQuestion & {
+  sourcePageNumber: number | null;
+  sourceQuestionNumber: number | null;
+};
+export type ParsedAnswerKeyEntry = {
+  questionNumber: number;
+  correctOption: OptionKey;
+};
 
 const questionStartPattern = /^(?:q(?:uestion)?\s*)?(\d+)[)\].:-]?\s+(.+)$/i;
 const optionPattern = /^([a-d])[)\].:-]\s*(.+)$/i;
@@ -128,6 +139,15 @@ function normalizePdfLines(text: string) {
     .filter((line) => line && !shouldIgnorePdfLine(line));
 }
 
+function normalizePdfPageLines(pages: PageTextResult[]) {
+  return pages.flatMap((page) =>
+    normalizePdfLines(page.text).map((line) => ({
+      line,
+      pageNumber: page.num,
+    }))
+  );
+}
+
 function findFirstQuestionStartIndex(lines: string[]) {
   for (let index = 0; index < lines.length; index += 1) {
     if (!numberedQuestionPattern.test(lines[index])) {
@@ -144,8 +164,18 @@ function findFirstQuestionStartIndex(lines: string[]) {
   return 0;
 }
 
-function createDraft(initialPrompt: string): DraftQuestion {
+function looksLikeNumberedOptionPdf(text: string) {
+  const lines = normalizePdfLines(text);
+  const startIndex = findFirstQuestionStartIndex(lines);
+  const relevantLines = lines.slice(startIndex, startIndex + 40);
+
+  return relevantLines.some((line) => numberedOptionPattern.test(line));
+}
+
+function createDraft(initialPrompt: string, sourcePageNumber: number): DraftQuestion {
   return {
+    sourceQuestionNumber: null,
+    sourcePageNumber,
     prompt: initialPrompt,
     options: {},
     correctAnswerRaw: '',
@@ -154,7 +184,7 @@ function createDraft(initialPrompt: string): DraftQuestion {
   };
 }
 
-function finalizeDraft(draft: DraftQuestion, questionIndex: number): ImportedQuestion {
+function finalizeDraft(draft: DraftQuestion, questionIndex: number): ParsedImportedQuestion {
   const optionA = draft.options.a?.trim();
   const optionB = draft.options.b?.trim();
   const optionC = draft.options.c?.trim();
@@ -170,39 +200,43 @@ function finalizeDraft(draft: DraftQuestion, questionIndex: number): ImportedQue
 
   const rawAnswer = draft.correctAnswerRaw.trim();
 
-  if (!rawAnswer) {
-    throw new Error(`Question ${questionIndex} is missing its answer line.`);
+  let correctOption: OptionKey | null = null;
+
+  if (rawAnswer) {
+    const answerLetterMatch = rawAnswer.match(/^([a-d])(?:\b|[)\].:-])/i);
+    correctOption = answerLetterMatch?.[1]?.toLowerCase() as OptionKey | null;
+
+    if (!correctOption) {
+      const normalizedAnswer = normalizeText(rawAnswer);
+      correctOption = optionKeys.find((key) => normalizeText(draft.options[key] ?? '') === normalizedAnswer) ?? null;
+    }
+
+    if (!correctOption) {
+      throw new Error(`Question ${questionIndex} has an answer that does not match options A-D.`);
+    }
   }
 
-  const answerLetterMatch = rawAnswer.match(/^([a-d])(?:\b|[)\].:-])/i);
-  let correctOption: OptionKey | undefined = answerLetterMatch?.[1]?.toLowerCase() as OptionKey | undefined;
-
-  if (!correctOption) {
-    const normalizedAnswer = normalizeText(rawAnswer);
-    correctOption = optionKeys.find((key) => normalizeText(draft.options[key] ?? '') === normalizedAnswer);
-  }
-
-  if (!correctOption) {
-    throw new Error(`Question ${questionIndex} has an answer that does not match options A-D.`);
-  }
-
-  return importedQuestionSchema.parse({
-    prompt: draft.prompt.trim(),
-    optionA,
-    optionB,
-    optionC,
-    optionD,
-    correctOption,
-    explanation: draft.explanation.trim() || null,
-  });
+  return {
+    ...importedQuestionSchema.parse({
+      prompt: draft.prompt.trim(),
+      optionA,
+      optionB,
+      optionC,
+      optionD,
+      correctOption,
+      explanation: draft.explanation.trim() || null,
+    }),
+    sourcePageNumber: draft.sourcePageNumber,
+    sourceQuestionNumber: draft.sourceQuestionNumber ?? questionIndex,
+  };
 }
 
-function parseSimpleQuestionPdf(text: string): ParsedPdfQuestionsResult {
-  const lines = normalizePdfLines(text);
-  const questions: ImportedQuestion[] = [];
+function parseSimpleQuestionPdfFromPages(pages: PageTextResult[]): ParsedPdfQuestionsResult {
+  const lines = normalizePdfPageLines(pages);
+  const questions: ParsedImportedQuestion[] = [];
   let currentDraft: DraftQuestion | null = null;
 
-  for (const line of lines) {
+  for (const { line, pageNumber } of lines) {
     const questionMatch = line.match(questionStartPattern);
 
     if (questionMatch) {
@@ -210,7 +244,8 @@ function parseSimpleQuestionPdf(text: string): ParsedPdfQuestionsResult {
         questions.push(finalizeDraft(currentDraft, questions.length + 1));
       }
 
-      currentDraft = createDraft(questionMatch[2].trim());
+      currentDraft = createDraft(questionMatch[2].trim(), pageNumber);
+      currentDraft.sourceQuestionNumber = Number(questionMatch[1]);
       continue;
     }
 
@@ -321,10 +356,58 @@ function parseAnswerKeySection(text: string) {
   return { answers, skipped };
 }
 
+export function parseAnswerKeyEntriesFromText(text: string) {
+  const normalizedText = text.replace(/\r/g, '');
+  const { answers } = parseAnswerKeySection(normalizedText);
+
+  if (answers.size > 0) {
+    return [...answers.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([questionNumber, correctOption]) => ({
+        questionNumber,
+        correctOption,
+      }));
+  }
+
+  const entries = new Map<number, OptionKey>();
+  const lines = normalizePdfLines(normalizedText);
+  const inlinePatterns = [
+    /^(\d+)\s*[.)-]?\s*[:\s-]*\(?([1-4])\)?$/,
+    /^(\d+)\s*[.)-]?\s*[:\s-]*([A-D])$/i,
+  ];
+
+  for (const line of lines) {
+    for (const pattern of inlinePatterns) {
+      const match = line.match(pattern);
+
+      if (!match) {
+        continue;
+      }
+
+      const questionNumber = Number(match[1]);
+      const rawValue = match[2].toLowerCase();
+      const correctOption = /^[1-4]$/.test(rawValue)
+        ? numericOptionMap[rawValue as NumericOptionKey]
+        : (rawValue as OptionKey);
+
+      entries.set(questionNumber, correctOption);
+      break;
+    }
+  }
+
+  return [...entries.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([questionNumber, correctOption]) => ({
+      questionNumber,
+      correctOption,
+    }));
+}
+
 function finalizeNumericDraft(
   draft: NumericDraftQuestion,
-  answers: Map<number, OptionKey>
-): ImportedQuestion {
+  answers: Map<number, OptionKey>,
+  sourcePageNumber: number
+): ParsedImportedQuestion {
   const option1 = draft.options['1']?.trim();
   const option2 = draft.options['2']?.trim();
   const option3 = draft.options['3']?.trim();
@@ -338,24 +421,24 @@ function finalizeNumericDraft(
     throw new Error('Missing one or more options.');
   }
 
-  const correctOption = answers.get(draft.number);
+  const correctOption = answers.get(draft.number) ?? null;
 
-  if (!correctOption) {
-    throw new Error('Missing a supported single-answer key entry.');
-  }
-
-  return importedQuestionSchema.parse({
-    prompt: draft.prompt.trim(),
-    optionA: option1,
-    optionB: option2,
-    optionC: option3,
-    optionD: option4,
-    correctOption,
-    explanation: null,
-  });
+  return {
+    ...importedQuestionSchema.parse({
+      prompt: draft.prompt.trim(),
+      optionA: option1,
+      optionB: option2,
+      optionC: option3,
+      optionD: option4,
+      correctOption,
+      explanation: null,
+    }),
+    sourcePageNumber,
+    sourceQuestionNumber: draft.number,
+  };
 }
 
-function parseAnswerKeyPdf(text: string): ParsedPdfQuestionsResult {
+function parseAnswerKeyPdf(text: string, pages: PageTextResult[]): ParsedPdfQuestionsResult {
   const answerKeyIndex = text.indexOf('ANSWER KEY');
 
   if (answerKeyIndex === -1) {
@@ -366,9 +449,19 @@ function parseAnswerKeyPdf(text: string): ParsedPdfQuestionsResult {
   const answerSection = text.slice(answerKeyIndex);
   const normalizedQuestionLines = normalizePdfLines(questionSection);
   const questionLines = normalizedQuestionLines.slice(findFirstQuestionStartIndex(normalizedQuestionLines));
+  const pageNumbersByQuestion = new Map<number, number>();
+  const pageLineEntries = normalizePdfPageLines(pages);
   const { answers, skipped: skippedAnswers } = parseAnswerKeySection(answerSection);
 
-  const questions: ImportedQuestion[] = [];
+  for (const { line, pageNumber } of pageLineEntries) {
+    const questionMatch = line.match(numberedQuestionPattern);
+
+    if (questionMatch && !pageNumbersByQuestion.has(Number(questionMatch[1]))) {
+      pageNumbersByQuestion.set(Number(questionMatch[1]), pageNumber);
+    }
+  }
+
+  const questions: ParsedImportedQuestion[] = [];
   const skipped = [...skippedAnswers];
   let currentDraft: NumericDraftQuestion | null = null;
 
@@ -378,7 +471,9 @@ function parseAnswerKeyPdf(text: string): ParsedPdfQuestionsResult {
     }
 
     try {
-      questions.push(finalizeNumericDraft(currentDraft, answers));
+      questions.push(
+        finalizeNumericDraft(currentDraft, answers, pageNumbersByQuestion.get(currentDraft.number) ?? 1)
+      );
     } catch (error) {
       skipped.push({
         questionNumber: currentDraft.number,
@@ -433,10 +528,94 @@ function parseAnswerKeyPdf(text: string): ParsedPdfQuestionsResult {
   };
 }
 
-export function parseQuestionsFromPdfText(text: string): ParsedPdfQuestionsResult {
-  if (text.includes('ANSWER KEY')) {
-    return parseAnswerKeyPdf(text);
+function parseNumberedQuestionPdfWithoutAnswers(text: string, pages: PageTextResult[]): ParsedPdfQuestionsResult {
+  const normalizedQuestionLines = normalizePdfLines(text);
+  const questionLines = normalizedQuestionLines.slice(findFirstQuestionStartIndex(normalizedQuestionLines));
+  const pageNumbersByQuestion = new Map<number, number>();
+  const pageLineEntries = normalizePdfPageLines(pages);
+  const questions: ParsedImportedQuestion[] = [];
+  const skipped: SkippedQuestion[] = [];
+  let currentDraft: NumericDraftQuestion | null = null;
+
+  for (const { line, pageNumber } of pageLineEntries) {
+    const questionMatch = line.match(numberedQuestionPattern);
+
+    if (questionMatch && !pageNumbersByQuestion.has(Number(questionMatch[1]))) {
+      pageNumbersByQuestion.set(Number(questionMatch[1]), pageNumber);
+    }
   }
 
-  return parseSimpleQuestionPdf(text);
+  const pushDraft = () => {
+    if (!currentDraft) {
+      return;
+    }
+
+    try {
+      questions.push(finalizeNumericDraft(currentDraft, new Map(), pageNumbersByQuestion.get(currentDraft.number) ?? 1));
+    } catch (error) {
+      skipped.push({
+        questionNumber: currentDraft.number,
+        reason: error instanceof Error ? error.message : 'Unsupported question format.',
+        prompt: currentDraft.prompt.trim() || undefined,
+      });
+    }
+  };
+
+  for (const line of questionLines) {
+    const questionMatch = line.match(numberedQuestionPattern);
+
+    if (questionMatch) {
+      pushDraft();
+      currentDraft = createNumericDraft(Number(questionMatch[1]), questionMatch[2].trim());
+      continue;
+    }
+
+    if (!currentDraft) {
+      continue;
+    }
+
+    const optionMatch = line.match(numberedOptionPattern);
+
+    if (optionMatch) {
+      const optionKey = optionMatch[1] as NumericOptionKey;
+      currentDraft.options[optionKey] = optionMatch[2].trim();
+      currentDraft.activeField = optionKey;
+      continue;
+    }
+
+    if (currentDraft.activeField === 'prompt') {
+      currentDraft.prompt = appendValue(currentDraft.prompt, line);
+      continue;
+    }
+
+    if (currentDraft.activeField) {
+      const optionKey = currentDraft.activeField;
+      currentDraft.options[optionKey] = appendValue(currentDraft.options[optionKey] ?? '', line);
+    }
+  }
+
+  pushDraft();
+
+  if (!questions.length) {
+    throw new Error('No importable questions were detected in the PDF.');
+  }
+
+  return {
+    questions,
+    skipped,
+  };
+}
+
+export function parseQuestionsFromPdfText(text: string, pages?: PageTextResult[]): ParsedPdfQuestionsResult {
+  const normalizedPages = pages?.length ? pages : [{ num: 1, text }];
+
+  if (text.includes('ANSWER KEY')) {
+    return parseAnswerKeyPdf(text, normalizedPages);
+  }
+
+  if (looksLikeNumberedOptionPdf(text)) {
+    return parseNumberedQuestionPdfWithoutAnswers(text, normalizedPages);
+  }
+
+  return parseSimpleQuestionPdfFromPages(normalizedPages);
 }

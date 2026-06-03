@@ -68,6 +68,10 @@ const testQuestions = await db
   .where(eq(questions.testId, test.id))
   .orderBy(asc(questions.order));
 
+if (testQuestions.some((question) => !question.correctOption)) {
+  return Astro.redirect('/student');
+}
+
 const safeQuestions = testQuestions.map(({ correctOption, explanation, testId: _testId, ...question }) => question);
 const durationSeconds = test.durationMinutes * 60;
 ---
