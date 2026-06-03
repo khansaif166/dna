@@ -1,0 +1,1238 @@
+---
+export const prerender = false;
+
+import { and, asc, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+
+import PlatformLayout from '../../../layouts/PlatformLayout.astro';
+import { db, questions, subTopics, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+const { topicId } = Astro.params;
+
+if (!topicId) {
+  return new Response(null, { status: 404 });
+}
+
+const topicRows = await db
+  .select({
+    id: topics.id,
+    name: topics.name,
+    subjectId: topics.subjectId,
+    subjectName: subjects.name,
+  })
+  .from(topics)
+  .innerJoin(subjects, eq(topics.subjectId, subjects.id))
+  .where(eq(topics.id, topicId));
+
+if (!topicRows || topicRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [topic] = topicRows;
+
+const [topicSubTopics, resources, testRows] = await Promise.all([
+  db
+    .select()
+    .from(subTopics)
+    .where(eq(subTopics.topicId, topic.id))
+    .orderBy(asc(subTopics.order)),
+  db
+    .select()
+    .from(topicResources)
+    .where(eq(topicResources.topicId, topic.id))
+    .orderBy(asc(topicResources.order)),
+  db
+    .select({
+      id: tests.id,
+      title: tests.title,
+      subTopicId: tests.subTopicId,
+      durationMinutes: tests.durationMinutes,
+      questionCount: count(questions.id),
+    })
+    .from(tests)
+    .leftJoin(questions, eq(questions.testId, tests.id))
+    .where(and(eq(tests.topicId, topic.id), eq(tests.status, 'published')))
+    .groupBy(tests.id, tests.title, tests.durationMinutes, tests.createdAt)
+    .orderBy(asc(tests.createdAt)),
+]);
+
+const testIds = testRows.map((test) => test.id);
+
+const attemptRows = testIds.length
+  ? await db
+      .select({
+        testId: testAttempts.testId,
+        score: testAttempts.score,
+        totalQuestions: testAttempts.totalQuestions,
+        submittedAt: testAttempts.submittedAt,
+      })
+      .from(testAttempts)
+      .where(
+        and(
+          eq(testAttempts.studentId, profile.id),
+          inArray(testAttempts.testId, testIds),
+          isNotNull(testAttempts.submittedAt)
+        )
+      )
+      .orderBy(desc(testAttempts.submittedAt))
+  : [];
+
+const attemptsByTestId = new Map<string, typeof attemptRows>();
+
+for (const attempt of attemptRows) {
+  const existing = attemptsByTestId.get(attempt.testId) ?? [];
+  existing.push(attempt);
+  attemptsByTestId.set(attempt.testId, existing);
+}
+
+const attemptedTestIds = new Set(attemptRows.map((attempt) => attempt.testId));
+const chapterLevelTestRows = testRows.filter((test) => !test.subTopicId);
+
+function normalizeLabel(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const matchedResourceIds = new Set<string>();
+const subTopicSections = topicSubTopics.map((subTopic) => {
+  const normalizedName = normalizeLabel(subTopic.name);
+  const matchedResources = resources.filter((resource) => {
+    if (matchedResourceIds.has(resource.id)) {
+      return false;
+    }
+
+    const sameOrder = resource.order === subTopic.order;
+    const sameTitle = normalizeLabel(resource.title) === normalizedName;
+
+    if (sameOrder || sameTitle) {
+      matchedResourceIds.add(resource.id);
+      return true;
+    }
+
+    return false;
+  });
+
+  return {
+    ...subTopic,
+    resources: matchedResources,
+    tests: [],
+  };
+});
+
+const subTopicTestsMap = new Map<string, typeof testRows>();
+
+for (const test of testRows) {
+  if (!test.subTopicId) {
+    continue;
+  }
+
+  const entries = subTopicTestsMap.get(test.subTopicId) ?? [];
+  entries.push(test);
+  subTopicTestsMap.set(test.subTopicId, entries);
+}
+
+const unmatchedResources = resources.filter((resource) => !matchedResourceIds.has(resource.id));
+
+const subTopicSectionsWithTests = subTopicSections.map((subTopic) => ({
+  ...subTopic,
+  tests: (subTopicTestsMap.get(subTopic.id) ?? []).map((test) => {
+    const attempts = attemptsByTestId.get(test.id) ?? [];
+    const bestAttempt = attempts.reduce<
+      | {
+          score: number;
+          totalQuestions: number;
+          percent: number;
+        }
+      | null
+    >((best, attempt) => {
+      const score = attempt.score ?? 0;
+      const totalQuestions = attempt.totalQuestions ?? test.questionCount;
+      const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+      if (!best || percent > best.percent) {
+        return { score, totalQuestions, percent };
+      }
+
+      return best;
+    }, null);
+
+    return {
+      ...test,
+      attempted: attempts.length > 0,
+      attemptCount: attempts.length,
+      bestAttempt,
+    };
+  }),
+}));
+
+const subjectType = topic.subjectName.toLowerCase().includes('physics')
+  ? 'physics'
+  : topic.subjectName.toLowerCase().includes('chemistry')
+    ? 'chemistry'
+    : 'biology';
+
+const theme = {
+  physics: {
+    color: '#3B82F6',
+    colorDark: '#1D4ED8',
+    bgLight: '#EFF6FF',
+    textColor: '#1D4ED8',
+    border: '#BFDBFE',
+    shadowRgb: '59,130,246',
+    gradientFrom: '#1D4ED8',
+    gradientTo: '#3B82F6',
+  },
+  chemistry: {
+    color: '#10B981',
+    colorDark: '#059669',
+    bgLight: '#F0FDF4',
+    textColor: '#166534',
+    border: '#BBF7D0',
+    shadowRgb: '16,185,129',
+    gradientFrom: '#059669',
+    gradientTo: '#10B981',
+  },
+  biology: {
+    color: '#F59E0B',
+    colorDark: '#D97706',
+    bgLight: '#FFFBEB',
+    textColor: '#92400E',
+    border: '#FDE68A',
+    shadowRgb: '245,158,11',
+    gradientFrom: '#D97706',
+    gradientTo: '#F59E0B',
+  },
+}[subjectType];
+
+const practiced = attemptedTestIds.size > 0;
+
+const enrichedTests = testRows.map((test) => {
+  const attempts = attemptsByTestId.get(test.id) ?? [];
+  const bestAttempt = attempts.reduce<
+    | {
+        score: number;
+        totalQuestions: number;
+        percent: number;
+      }
+    | null
+  >((best, attempt) => {
+    const score = attempt.score ?? 0;
+    const totalQuestions = attempt.totalQuestions ?? test.questionCount;
+    const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+    if (!best || percent > best.percent) {
+      return { score, totalQuestions, percent };
+    }
+
+    return best;
+  }, null);
+
+  return {
+    ...test,
+    attempted: attempts.length > 0,
+    attemptCount: attempts.length,
+    bestAttempt,
+  };
+});
+
+function toEmbedUrl(youtubeUrl: string) {
+  if (youtubeUrl.includes('watch?v=')) {
+    return youtubeUrl.replace('watch?v=', 'embed/');
+  }
+
+  if (youtubeUrl.includes('youtu.be/')) {
+    return youtubeUrl.replace('youtu.be/', 'www.youtube.com/embed/');
+  }
+
+  return youtubeUrl;
+}
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function scoreTone(percent: number) {
+  if (percent >= 70) {
+    return {
+      dot: '#10B981',
+      text: '#10B981',
+    };
+  }
+
+  if (percent >= 40) {
+    return {
+      dot: '#F59E0B',
+      text: '#F59E0B',
+    };
+  }
+
+  return {
+    dot: '#EF4444',
+    text: '#EF4444',
+  };
+}
+---
+
+<PlatformLayout title={`${topic.name} | Dream Neet Academy`}>
+  <section class="topic-page">
+    <header class="topic-header">
+      <div class="topic-header__left">
+        <div class="topic-breadcrumbs">
+          <a href="/student">Dashboard</a>
+          <span>›</span>
+          <a href={`/student/subjects/${topic.subjectId}`}>{topic.subjectName}</a>
+          <span>›</span>
+          <span class="topic-breadcrumbs__current">{topic.name}</span>
+        </div>
+
+        <div class="topic-title-row">
+          <span class="topic-title-row__dot" style={`background:${theme.color};`}></span>
+          <h1>{topic.name}</h1>
+        </div>
+
+        <div class="topic-stats">
+          <span>◎ {pluralize(topicSubTopics.length, 'sub-topic')}</span>
+          <span>▶ {pluralize(resources.length, 'video')}</span>
+          <span>📝 {pluralize(testRows.length, 'test')}</span>
+        </div>
+      </div>
+
+      <div class="topic-header__right">
+        <div class:list={['completion-pill', { 'completion-pill--done': practiced }]}>
+          <span>{practiced ? '✓' : '○'}</span>
+          <span>{practiced ? 'Practiced' : 'Not started'}</span>
+        </div>
+        <a href={`/student/subjects/${topic.subjectId}`} class="topic-header__back">← Back to {topic.subjectName}</a>
+      </div>
+    </header>
+
+    <div class="topic-layout">
+      <div class="topic-layout__main">
+        <div class="section-head">
+          <h2>Sub-topics</h2>
+          <span class="section-count" style={`background:${theme.bgLight}; color:${theme.textColor};`}>
+            {topicSubTopics.length} items
+          </span>
+        </div>
+
+        {topicSubTopics.length ? (
+          <div class="subtopic-accordion-list">
+            {subTopicSectionsWithTests.map((subTopic, index) => (
+              <details class="subtopic-accordion" open={index === 0}>
+                <summary class="subtopic-accordion__summary">
+                  <span class="subtopic-accordion__order">{String(subTopic.order).padStart(2, '0')}</span>
+                  <span class="subtopic-accordion__name">{subTopic.name}</span>
+                  <span
+                    class="subtopic-accordion__count"
+                    style={`background:${theme.bgLight}; color:${theme.textColor}; border-color:${theme.border};`}
+                  >
+                    ▶ {pluralize(subTopic.resources.length, 'video')}
+                  </span>
+                  <span class="subtopic-accordion__chevron" aria-hidden="true">▾</span>
+                </summary>
+
+                <div class="subtopic-accordion__body">
+                  {subTopic.resources.length ? (
+                    <div>
+                      {subTopic.resources.map((resource, resourceIndex) => (
+                        <article class="video-card video-card--nested">
+                          <div
+                            class="video-card__accent"
+                            style={`background:linear-gradient(90deg, ${theme.gradientFrom}, ${theme.gradientTo});`}
+                          ></div>
+
+                          <div class="video-card__media">
+                            <iframe
+                              class="video-card__frame"
+                              src={toEmbedUrl(resource.youtubeUrl)}
+                              title={resource.title}
+                              loading="lazy"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowfullscreen
+                            />
+                            <div class="video-card__overlay">VIDEO {resourceIndex + 1}</div>
+                          </div>
+
+                          <div class="video-card__body">
+                            <div class="video-card__title-row">
+                              <h3 class="video-card__title">{resource.title}</h3>
+                            </div>
+
+                            {resource.notes && (
+                              <div class="video-card__notes">
+                                <div class="video-card__notes-label">📌 Note</div>
+                                <div class="video-card__notes-text">{resource.notes}</div>
+                              </div>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div class="subtopic-empty">
+                      <h3>No videos yet</h3>
+                      <p>Videos for this sub-topic will appear here soon.</p>
+                    </div>
+                  )}
+
+                  <div class="subtopic-tests">
+                    <div class="subtopic-tests__head">
+                      <h3>Practice Tests</h3>
+                      <span
+                        class="subtopic-tests__count"
+                        style={`background:${theme.bgLight}; color:${theme.textColor}; border-color:${theme.border};`}
+                      >
+                        📝 {pluralize(subTopic.tests.length, 'test')}
+                      </span>
+                    </div>
+
+                    {subTopic.tests.length ? (
+                      <div class="subtopic-tests__list">
+                        {subTopic.tests.map((test) => (
+                          <a
+                            href={`/student/tests/${test.id}`}
+                            class:list={[
+                              'subtopic-test-link',
+                              { 'subtopic-test-link--attempted': test.attempted },
+                            ]}
+                            style={`--subject-color:${theme.color}; --subject-text:${theme.textColor}; --subject-border:${theme.border};`}
+                          >
+                            <span class="subtopic-test-link__title">{test.title}</span>
+                            <span class="subtopic-test-link__meta">
+                              {test.attempted ? 'Retake test' : 'Start test'}
+                            </span>
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <div class="subtopic-tests__empty">
+                        <p>No tests yet for this sub-topic.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <div class="empty-card empty-card--subtopics">
+            <div class="empty-card__emoji">◎</div>
+            <h3>No sub-topics yet</h3>
+            <p>Sub-topics for this topic will appear here soon</p>
+          </div>
+        )}
+
+        {unmatchedResources.length > 0 && (
+          <>
+            <div class="section-head">
+              <h2>Additional Videos</h2>
+              <span class="section-count" style={`background:${theme.bgLight}; color:${theme.textColor};`}>
+                {unmatchedResources.length} videos
+              </span>
+            </div>
+
+            <div>
+              {unmatchedResources.map((resource, index) => (
+                <article class="video-card">
+                  <div
+                    class="video-card__accent"
+                    style={`background:linear-gradient(90deg, ${theme.gradientFrom}, ${theme.gradientTo});`}
+                  ></div>
+
+                  <div class="video-card__media">
+                    <iframe
+                      class="video-card__frame"
+                      src={toEmbedUrl(resource.youtubeUrl)}
+                      title={resource.title}
+                      loading="lazy"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowfullscreen
+                    />
+                    <div class="video-card__overlay">VIDEO {index + 1}</div>
+                  </div>
+
+                  <div class="video-card__body">
+                    <div class="video-card__title-row">
+                      <h3 class="video-card__title">{resource.title}</h3>
+                    </div>
+
+                    {resource.notes && (
+                      <div class="video-card__notes">
+                        <div class="video-card__notes-label">📌 Note</div>
+                        <div class="video-card__notes-text">{resource.notes}</div>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <aside class="topic-layout__side">
+        <div class="tests-panel">
+          <div class="section-head section-head--tests">
+            <h2>Practice Tests</h2>
+            <span class="section-count section-count--tests">{chapterLevelTestRows.length} tests</span>
+          </div>
+
+          {chapterLevelTestRows.length ? (
+            <div>
+              {chapterLevelTestRows.map((test) => {
+                const attempts = attemptsByTestId.get(test.id) ?? [];
+                const bestAttempt = attempts.reduce<
+                  | {
+                      score: number;
+                      totalQuestions: number;
+                      percent: number;
+                    }
+                  | null
+                >((best, attempt) => {
+                  const score = attempt.score ?? 0;
+                  const totalQuestions = attempt.totalQuestions ?? test.questionCount;
+                  const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+                  if (!best || percent > best.percent) {
+                    return { score, totalQuestions, percent };
+                  }
+
+                  return best;
+                }, null);
+                const enrichedTest = {
+                  ...test,
+                  attempted: attempts.length > 0,
+                  attemptCount: attempts.length,
+                  bestAttempt,
+                };
+                const enrichedTone = enrichedTest.bestAttempt ? scoreTone(enrichedTest.bestAttempt.percent) : null;
+
+                return (
+                  <article
+                    class="test-card"
+                    style={`--subject-color:${theme.color}; --subject-shadow-rgb:${theme.shadowRgb};`}
+                  >
+                    <div class="test-card__top">
+                      <h3 class="test-card__title">{test.title}</h3>
+
+                      <div class="test-card__meta">
+                        <span>⏱ {test.durationMinutes} min</span>
+                        <span>·</span>
+                        <span>{test.questionCount} questions</span>
+                      </div>
+
+                      {enrichedTest.bestAttempt && enrichedTone && (
+                        <div class="test-card__score" style={`color:${enrichedTone.text};`}>
+                          <span class="test-card__score-dot" style={`background:${enrichedTone.dot};`}></span>
+                          <span>
+                            Your best: {enrichedTest.bestAttempt.score}/{enrichedTest.bestAttempt.totalQuestions} ({enrichedTest.bestAttempt.percent}%)
+                          </span>
+                          <span class="test-card__score-attempts">
+                            ({pluralize(enrichedTest.attemptCount, 'attempt')})
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div class="test-card__divider"></div>
+
+                    <div class="test-card__bottom">
+                      {enrichedTest.attempted ? (
+                        <div class="test-card__status">
+                          <span class="test-card__status-dot">✓</span>
+                          <span>Practiced</span>
+                        </div>
+                      ) : (
+                        <span
+                          class="test-card__new"
+                          style={`background:${theme.bgLight}; color:${theme.textColor};`}
+                        >
+                          New
+                        </span>
+                      )}
+
+                      <a
+                        href={`/student/tests/${test.id}`}
+                        class:list={['test-card__button', { 'test-card__button--retake': enrichedTest.attempted }]}
+                        style={!enrichedTest.attempted ? `background:${theme.color};` : undefined}
+                      >
+                        {enrichedTest.attempted ? 'Retake' : 'Start Test →'}
+                      </a>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div class="empty-card empty-card--tests">
+              <div class="empty-card__emoji">📝</div>
+              <h3>No chapter tests yet</h3>
+              <p>Chapter-wide tests for this topic will be added soon</p>
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>
+  </section>
+</PlatformLayout>
+
+<style>
+  .topic-page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .topic-header {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(10, 15, 30, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+  }
+
+  .topic-breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    margin-bottom: 8px;
+  }
+
+  .topic-breadcrumbs a {
+    color: #9aa5b4;
+    transition: color 0.15s ease;
+  }
+
+  .topic-breadcrumbs a:hover {
+    color: #0a0f1e;
+  }
+
+  .topic-breadcrumbs span {
+    color: #e2e8f0;
+  }
+
+  .topic-breadcrumbs__current {
+    color: #0a0f1e !important;
+    font-weight: 600;
+  }
+
+  .topic-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topic-title-row__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .topic-title-row h1 {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: #0a0f1e;
+  }
+
+  .topic-stats {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 0.78rem;
+    color: #9aa5b4;
+  }
+
+  .topic-header__right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+  }
+
+  .completion-pill {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    padding: 6px 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #9aa5b4;
+    font-size: 0.82rem;
+    font-weight: 500;
+  }
+
+  .completion-pill--done {
+    background: #d1fae5;
+    border-color: #a7f3d0;
+    color: #065f46;
+    font-weight: 600;
+  }
+
+  .completion-pill span:first-child {
+    font-size: 0.85rem;
+    font-weight: 800;
+  }
+
+  .topic-header__back {
+    font-size: 0.75rem;
+    color: #9aa5b4;
+    transition: color 0.15s ease;
+  }
+
+  .topic-header__back:hover {
+    color: #0a0f1e;
+  }
+
+  .topic-layout {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+
+  .topic-layout__main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .topic-layout__side {
+    width: 320px;
+    flex-shrink: 0;
+  }
+
+  .tests-panel {
+    position: sticky;
+    top: 80px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .section-head--tests {
+    justify-content: space-between;
+  }
+
+  .section-head h2 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #0a0f1e;
+  }
+
+  .section-count {
+    background: #eff6ff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .section-count--tests {
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .subtopic-accordion-list {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .subtopic-accordion {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .subtopic-accordion[open] {
+    box-shadow: 0 10px 24px rgba(10, 15, 30, 0.06);
+  }
+
+  .subtopic-accordion__summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .subtopic-accordion__summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .subtopic-accordion__order {
+    width: 28px;
+    flex-shrink: 0;
+    color: #9aa5b4;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-align: right;
+  }
+
+  .subtopic-accordion__name {
+    flex: 1;
+    color: #0a0f1e;
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  .subtopic-accordion__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .subtopic-accordion__chevron {
+    color: #9aa5b4;
+    font-size: 0.9rem;
+    transition: transform 0.15s ease;
+  }
+
+  .subtopic-accordion[open] .subtopic-accordion__chevron {
+    transform: rotate(180deg);
+  }
+
+  .subtopic-accordion__body {
+    padding: 0 16px 16px;
+    border-top: 1px solid #f1f3f9;
+    background: #fbfdff;
+  }
+
+  .subtopic-empty {
+    padding: 18px 6px 6px;
+  }
+
+  .subtopic-empty h3,
+  .subtopic-empty p {
+    margin: 0;
+  }
+
+  .subtopic-empty h3 {
+    color: #0a0f1e;
+    font-size: 0.92rem;
+    font-weight: 700;
+  }
+
+  .subtopic-empty p {
+    margin-top: 6px;
+    color: #9aa5b4;
+    font-size: 0.82rem;
+  }
+
+  .video-card--nested {
+    margin-top: 16px;
+    margin-bottom: 0;
+  }
+
+  .subtopic-tests {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  .subtopic-tests__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .subtopic-tests__head h3 {
+    margin: 0;
+    color: #0a0f1e;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .subtopic-tests__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .subtopic-tests__list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .subtopic-test-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--subject-border);
+    background: #fff;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+
+  .subtopic-test-link:hover {
+    transform: translateY(-1px);
+    border-color: var(--subject-color);
+    box-shadow: 0 8px 18px rgba(10, 15, 30, 0.06);
+  }
+
+  .subtopic-test-link--attempted {
+    background: #f8fafc;
+  }
+
+  .subtopic-test-link__title {
+    color: #0a0f1e;
+    font-size: 0.84rem;
+    font-weight: 700;
+  }
+
+  .subtopic-test-link__meta {
+    color: var(--subject-text);
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .subtopic-tests__empty p {
+    margin: 0;
+    color: #9aa5b4;
+    font-size: 0.8rem;
+  }
+
+  .video-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 16px;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .video-card:hover {
+    box-shadow: 0 6px 20px rgba(10, 15, 30, 0.08);
+  }
+
+  .video-card__accent {
+    height: 4px;
+  }
+
+  .video-card__media {
+    position: relative;
+  }
+
+  .video-card__frame {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: none;
+    display: block;
+    background: #0a0f1e;
+  }
+
+  .video-card__overlay {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(10, 15, 30, 0.7);
+    backdrop-filter: blur(4px);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  .video-card__body {
+    padding: 16px 18px;
+  }
+
+  .video-card__title-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .video-card__title {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #0a0f1e;
+  }
+
+  .video-card__notes {
+    margin-top: 10px;
+    background: #fffbeb;
+    border-left: 3px solid #f5c518;
+    border-radius: 0 8px 8px 0;
+    padding: 8px 12px;
+  }
+
+  .video-card__notes-label {
+    margin-bottom: 3px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #92400e;
+  }
+
+  .video-card__notes-text {
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: #4a5568;
+  }
+
+  .test-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1.5px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+  }
+
+  .test-card:hover {
+    border-color: var(--subject-color);
+    box-shadow: 0 4px 16px rgba(var(--subject-shadow-rgb), 0.1);
+    transform: translateY(-1px);
+  }
+
+  .test-card__top {
+    padding: 16px 16px 12px;
+  }
+
+  .test-card__title {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: #0a0f1e;
+  }
+
+  .test-card__meta {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 0.75rem;
+    color: #9aa5b4;
+  }
+
+  .test-card__score {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .test-card__score-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .test-card__score-attempts {
+    font-size: 0.72rem;
+    color: #9aa5b4;
+    font-weight: 500;
+  }
+
+  .test-card__divider {
+    height: 1px;
+    background: #f1f3f9;
+  }
+
+  .test-card__bottom {
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .test-card__status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #065f46;
+  }
+
+  .test-card__status-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #d1fae5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #065f46;
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  .test-card__new {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .test-card__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #fff;
+    transition: all 0.15s ease;
+  }
+
+  .test-card__button:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+  }
+
+  .test-card__button--retake {
+    background: transparent;
+    border: 1.5px solid #e2e8f0;
+    color: #4a5568;
+    padding: 7px 16px;
+    font-weight: 600;
+  }
+
+  .test-card__button--retake:hover {
+    opacity: 1;
+    border-color: #0a0f1e;
+    color: #0a0f1e;
+  }
+
+  .empty-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    padding: 40px 24px;
+    text-align: center;
+  }
+
+  .empty-card--tests {
+    border-radius: 14px;
+    border-style: dashed;
+    padding: 28px 20px;
+  }
+
+  .empty-card__icon {
+    font-size: 2rem;
+    color: #e2e8f0;
+    margin-bottom: 12px;
+  }
+
+  .empty-card__emoji {
+    font-size: 1.3rem;
+    margin-bottom: 8px;
+  }
+
+  .empty-card h3 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #0a0f1e;
+  }
+
+  .empty-card p {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: #9aa5b4;
+  }
+
+  @media (max-width: 768px) {
+    .topic-page {
+      padding: 20px 16px 36px;
+    }
+
+    .topic-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .topic-header__right {
+      align-items: flex-start;
+    }
+
+    .topic-layout {
+      flex-direction: column;
+    }
+
+    .topic-layout__side {
+      width: 100%;
+      order: -1;
+    }
+
+    .tests-panel {
+      position: static;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .topic-header {
+      padding: 18px 16px;
+    }
+
+    .topic-layout__side,
+    .topic-layout__main {
+      min-width: 0;
+    }
+
+    .test-card__bottom,
+    .video-card__title-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .test-card__button {
+      width: 100%;
+    }
+  }
+</style>

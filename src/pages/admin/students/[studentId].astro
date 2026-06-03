@@ -1,0 +1,1074 @@
+---
+export const prerender = false;
+
+import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { attemptAnswers, db, questions, subjects, testAttempts, tests, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+import { hasProfileIsActiveColumn } from '../../../lib/profileColumns';
+import { getAdminSupabase } from '../../../lib/supabase';
+
+function formatDate(dateValue: string | Date): string {
+  const date = new Date(dateValue);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  const timeStr = date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  if (diffDays === 0) return `Today, ${timeStr}`;
+  if (diffDays === 1) return `Yesterday, ${timeStr}`;
+  if (diffDays < 7) {
+    const day = date.toLocaleDateString('en-IN', { weekday: 'short' });
+    return `${day}, ${timeStr}`;
+  }
+
+  const dateFormatted = date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+  });
+
+  return `${dateFormatted}, ${timeStr}`;
+}
+
+function toValidDate(value: Date | string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds) return '—';
+  if (seconds < 60) return `${seconds}s`;
+
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+
+  if (seconds < 3600) return `${m}m ${s}s`;
+
+  const h = Math.floor(seconds / 3600);
+  const rem = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${rem}m`;
+}
+
+function relativeLastActive(value: Date | string | null) {
+  const date = toValidDate(value);
+
+  if (!date) {
+    return 'Never';
+  }
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
+
+function initialsFor(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? 'S';
+  const last = parts[1]?.[0] ?? parts[0]?.[1] ?? '';
+  return `${first}${last}`.toUpperCase();
+}
+
+function accuracyPercent(score: number | null, totalQuestions: number | null) {
+  const scoreValue = score ?? 0;
+  const totalValue = totalQuestions ?? 0;
+  return totalValue > 0 ? Math.round((scoreValue / totalValue) * 100) : 0;
+}
+
+function subjectTheme(subjectName: string | null) {
+  const key = (subjectName ?? '').toLowerCase();
+
+  if (key.includes('physics')) {
+    return {
+      pillBg: '#EFF6FF',
+      pillText: '#1D4ED8',
+      bar: '#3B82F6',
+    };
+  }
+
+  if (key.includes('chemistry')) {
+    return {
+      pillBg: '#F0FDF4',
+      pillText: '#166534',
+      bar: '#10B981',
+    };
+  }
+
+  if (key.includes('biology')) {
+    return {
+      pillBg: '#FFFBEB',
+      pillText: '#92400E',
+      bar: '#F59E0B',
+    };
+  }
+
+  return {
+    pillBg: '#F3F4F6',
+    pillText: '#6B7280',
+    bar: '#CBD5E1',
+  };
+}
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const admin = authResult;
+const { studentId } = Astro.params;
+const attemptFilter = Astro.url.searchParams.get('filter')?.trim() ?? 'all';
+const hasIsActiveColumn = await hasProfileIsActiveColumn();
+
+if (!studentId) {
+  return new Response(null, { status: 404 });
+}
+
+const studentRows = await db.execute(sql`
+  select
+    id,
+    full_name as "fullName",
+    role,
+    created_at as "createdAt",
+    ${hasIsActiveColumn ? sql`is_active` : sql`true`} as "isActive"
+  from profiles
+  where id = ${studentId}
+  limit 1
+`);
+
+if (!studentRows || studentRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [student] = studentRows as Array<{
+  id: string;
+  fullName: string;
+  role: 'student' | 'admin';
+  createdAt: Date | null;
+  isActive: boolean;
+}>;
+
+const [attempts, subjectAccuracyRows, adminSupabaseUser] = await Promise.all([
+  db
+    .select({
+      id: testAttempts.id,
+      score: testAttempts.score,
+      totalQuestions: testAttempts.totalQuestions,
+      submittedAt: testAttempts.submittedAt,
+      timeTakenSeconds: testAttempts.timeTakenSeconds,
+      testTitle: tests.title,
+      subjectName: subjects.name,
+      topicName: topics.name,
+    })
+    .from(testAttempts)
+    .innerJoin(tests, eq(testAttempts.testId, tests.id))
+    .leftJoin(topics, eq(tests.topicId, topics.id))
+    .leftJoin(subjects, sql`${subjects.id} = coalesce(${topics.subjectId}, ${tests.subjectId})`)
+    .where(and(eq(testAttempts.studentId, student.id), isNotNull(testAttempts.submittedAt)))
+    .orderBy(desc(testAttempts.submittedAt)),
+  db
+    .select({
+      subjectName: subjects.name,
+      correct: sql<number>`sum(case when ${attemptAnswers.isCorrect} = true then 1 else 0 end)::int`,
+      total: sql<number>`count(*)::int`,
+    })
+    .from(attemptAnswers)
+    .innerJoin(testAttempts, eq(attemptAnswers.attemptId, testAttempts.id))
+    .innerJoin(questions, eq(attemptAnswers.questionId, questions.id))
+    .innerJoin(tests, eq(questions.testId, tests.id))
+    .leftJoin(topics, eq(tests.topicId, topics.id))
+    .innerJoin(subjects, sql`${subjects.id} = coalesce(${topics.subjectId}, ${tests.subjectId})`)
+    .where(and(eq(testAttempts.studentId, student.id), isNotNull(testAttempts.submittedAt)))
+    .groupBy(subjects.id, subjects.name),
+  getAdminSupabase().auth.admin.getUserById(student.id),
+]);
+
+const email = adminSupabaseUser.data.user?.email ?? 'No email available';
+
+const attemptsWithPercent = attempts.map((attempt) => ({
+  ...attempt,
+  percent: accuracyPercent(attempt.score, attempt.totalQuestions),
+}));
+
+const filteredAttempts = attemptsWithPercent.filter((attempt) => {
+  if (attemptFilter === 'passed') {
+    return attempt.percent >= 40;
+  }
+
+  if (attemptFilter === 'failed') {
+    return attempt.percent < 40;
+  }
+
+  return true;
+});
+
+const totalAttempts = attemptsWithPercent.length;
+const totalQuestionsAnswered = attemptsWithPercent.reduce((sum, attempt) => sum + (attempt.totalQuestions ?? 0), 0);
+const totalCorrect = attemptsWithPercent.reduce((sum, attempt) => sum + (attempt.score ?? 0), 0);
+const averageScore = totalAttempts
+  ? Math.round(attemptsWithPercent.reduce((sum, attempt) => sum + attempt.percent, 0) / totalAttempts)
+  : 0;
+const bestScore = totalAttempts ? Math.max(...attemptsWithPercent.map((attempt) => attempt.percent)) : 0;
+const lastActive = attemptsWithPercent[0]?.submittedAt ?? null;
+const joinedDate = toValidDate(student.createdAt);
+const joinedLabel = joinedDate
+  ? new Intl.DateTimeFormat('en-IN', { month: 'short', year: 'numeric' }).format(joinedDate)
+  : 'Unknown';
+
+const recentScoreBars = attemptsWithPercent.slice(0, 5);
+const recentScoreSlots = Array.from({ length: 5 }, (_, index) => recentScoreBars[index] ?? null);
+
+const subjectAccuracyMap = new Map(
+  subjectAccuracyRows.map((row) => [
+    row.subjectName,
+    row.total > 0 ? Math.round((row.correct / row.total) * 100) : 0,
+  ])
+);
+
+const subjectRows = ['Physics', 'Chemistry', 'Biology'].map((name) => ({
+  name,
+  percent: subjectAccuracyMap.get(name) ?? 0,
+  theme: subjectTheme(name),
+}));
+
+const filterHref = (filter: 'all' | 'passed' | 'failed') => {
+  const params = new URLSearchParams(Astro.url.searchParams);
+
+  if (filter === 'all') {
+    params.delete('filter');
+  } else {
+    params.set('filter', filter);
+  }
+
+  const query = params.toString();
+  return query ? `/admin/students/${student.id}?${query}` : `/admin/students/${student.id}`;
+};
+---
+
+<AdminLayout
+  title={`${student.fullName} | Admin | Dream Neet Academy`}
+  pageTitle="Student Profile"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <a slot="actions" href="/admin/students" class="top-action">← Back to Students</a>
+
+  <section class="profile-hero">
+    <div class="profile-hero__avatar">{initialsFor(student.fullName)}</div>
+
+    <div class="profile-hero__content">
+      <h2>{student.fullName}</h2>
+      <div class="profile-hero__email">✉ {email}</div>
+      <div class="profile-hero__tags">
+        <span class="tag tag--role">Student</span>
+        <span class:list={['tag', student.isActive ? 'tag--active' : 'tag--disabled']}>
+          {student.isActive ? 'Active' : 'Disabled'}
+        </span>
+        <span class="tag tag--joined">Joined {joinedLabel}</span>
+      </div>
+
+      <div class="profile-hero__actions">
+        <form action="/api/admin/students" method="POST">
+          <input type="hidden" name="student_id" value={student.id} />
+          <input type="hidden" name="action" value={student.isActive ? 'disable' : 'enable'} />
+          <button type="submit" class="hero-button hero-button--ghost" disabled={!hasIsActiveColumn}>
+            {student.isActive ? 'Disable Account' : 'Enable Account'}
+          </button>
+        </form>
+
+      </div>
+      {!hasIsActiveColumn && <p class="profile-hero__migration-note">Apply the latest database migration to use disable and enable controls.</p>}
+    </div>
+
+    <div class="profile-hero__stats">
+      <div class="hero-stat-box">
+        <strong>{totalAttempts}</strong>
+        <span>Total Attempts</span>
+      </div>
+      <div class="hero-stat-box">
+        <strong>{averageScore}%</strong>
+        <span>Avg Score</span>
+      </div>
+      <div class="hero-stat-box">
+        <strong>{bestScore}%</strong>
+        <span>Best Score</span>
+      </div>
+      <div class="hero-stat-box">
+        <strong>{relativeLastActive(lastActive)}</strong>
+        <span>Last Active</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="summary-strip">
+    <article class="summary-card">
+      <h3>Subject Accuracy</h3>
+      <div class="subject-bars">
+        {subjectRows.map((subject) => (
+          <div class="subject-bar-row">
+            <span class="subject-bar-row__name">{subject.name}</span>
+            <div class="subject-bar-row__track">
+              <span
+                class="subject-bar-row__fill"
+                style={`width:${subject.percent}%; background:${subject.theme.bar};`}
+              ></span>
+            </div>
+            <span class="subject-bar-row__value" style={`color:${subject.theme.bar};`}>{subject.percent}%</span>
+          </div>
+        ))}
+      </div>
+    </article>
+
+    <article class="summary-card">
+      <h3>Recent Scores</h3>
+      <div class="score-sparkline">
+        {recentScoreSlots.map((attempt) => (
+          <div class="score-sparkline__item">
+            <div class="score-sparkline__track">
+              {attempt ? (
+                <span
+                  class:list={[
+                    'score-sparkline__bar',
+                    attempt.percent >= 70
+                      ? 'score-sparkline__bar--good'
+                      : attempt.percent >= 40
+                        ? 'score-sparkline__bar--mid'
+                        : 'score-sparkline__bar--low',
+                  ]}
+                  style={`height:${Math.max(attempt.percent, 12)}%;`}
+                ></span>
+              ) : (
+                <span class="score-sparkline__bar score-sparkline__bar--empty" style="height:16%;"></span>
+              )}
+            </div>
+            <span class="score-sparkline__label">{attempt ? `${attempt.percent}%` : '—'}</span>
+          </div>
+        ))}
+      </div>
+      <p class="score-sparkline__note">Last 5 tests</p>
+    </article>
+
+    <article class="summary-card">
+      <h3>Activity</h3>
+      <div class="activity-list">
+        <div class="activity-row">
+          <span>Tests Attempted</span>
+          <strong>{totalAttempts}</strong>
+        </div>
+        <div class="activity-row">
+          <span>Questions Answered</span>
+          <strong>{totalQuestionsAnswered}</strong>
+        </div>
+        <div class="activity-row">
+          <span>Correct Answers</span>
+          <strong>{totalCorrect}</strong>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="attempts-card">
+    <div class="attempts-card__header">
+      <div class="attempts-card__title-group">
+        <h3>Test Attempts</h3>
+        <span class="count-badge">{totalAttempts} total attempts</span>
+      </div>
+
+      <div class="filter-pills">
+        <a href={filterHref('all')} class:list={['filter-pill', { 'filter-pill--active': attemptFilter === 'all' }]}>All</a>
+        <a href={filterHref('passed')} class:list={['filter-pill', { 'filter-pill--active': attemptFilter === 'passed' }]}>
+          Passed (≥40%)
+        </a>
+        <a href={filterHref('failed')} class:list={['filter-pill', { 'filter-pill--active': attemptFilter === 'failed' }]}>
+          Failed (&lt;40%)
+        </a>
+      </div>
+    </div>
+
+    {filteredAttempts.length ? (
+      <div class="attempts-table-wrap">
+        <table class="attempts-table">
+          <thead>
+            <tr>
+              <th scope="col">Test Name</th>
+              <th scope="col">Subject</th>
+              <th scope="col">Score</th>
+              <th scope="col">Accuracy</th>
+              <th scope="col">Time Taken</th>
+              <th scope="col">Date</th>
+              <th scope="col">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredAttempts.map((attempt) => {
+              const score = attempt.score ?? 0;
+              const total = attempt.totalQuestions ?? 0;
+              const scoreTone =
+                attempt.percent >= 70 ? '#065F46' : attempt.percent >= 40 ? '#92400E' : '#991B1B';
+              const subjectColors = subjectTheme(attempt.subjectName);
+
+              return (
+                <tr>
+                  <td>
+                    <div class="attempt-name">{attempt.testTitle}</div>
+                    <div class="attempt-topic">{attempt.topicName ?? 'No topic assigned'}</div>
+                  </td>
+                  <td>
+                    <span
+                      class="subject-pill"
+                      style={`background:${subjectColors.pillBg}; color:${subjectColors.pillText};`}
+                    >
+                      {attempt.subjectName ?? 'General'}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="score-value">
+                      <strong style={`color:${scoreTone};`}>{score}</strong>
+                      <span> / </span>
+                      <em>{total}</em>
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      class:list={[
+                        'accuracy-pill',
+                        attempt.percent >= 70
+                          ? 'accuracy-pill--good'
+                          : attempt.percent >= 40
+                            ? 'accuracy-pill--mid'
+                            : 'accuracy-pill--low',
+                      ]}
+                    >
+                      {attempt.percent >= 70 ? '✓' : attempt.percent >= 40 ? '~' : '✗'} {attempt.percent}%
+                    </span>
+                  </td>
+                  <td class="muted-cell">{formatDuration(attempt.timeTakenSeconds)}</td>
+                  <td class="muted-cell">{attempt.submittedAt ? formatDate(attempt.submittedAt) : '—'}</td>
+                  <td>
+                    <a href={`/admin/students/${student.id}/attempts/${attempt.id}`} class="review-button">Review →</a>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div class="empty-state">
+        <div class="empty-state__icon">📋</div>
+        <div class="empty-state__title">No attempts yet</div>
+        <div class="empty-state__text">This student hasn't submitted any tests</div>
+      </div>
+    )}
+  </section>
+</AdminLayout>
+
+<style>
+  .top-action {
+    color: #9aa5b4;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: color 0.15s ease;
+  }
+
+  .top-action:hover {
+    color: #0a0f1e;
+  }
+
+  .profile-hero {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+    padding: 28px 32px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #0a0f1e 0%, #1a2544 100%);
+  }
+
+  .profile-hero__avatar {
+    width: 72px;
+    height: 72px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 3px solid rgba(255, 255, 255, 0.15);
+    background: linear-gradient(135deg, #f5c518 0%, #e6b800 100%);
+    color: #0a0f1e;
+    font-size: 1.6rem;
+    font-weight: 800;
+  }
+
+  .profile-hero__content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .profile-hero__content h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.4rem;
+    font-weight: 800;
+  }
+
+  .profile-hero__email {
+    margin-top: 4px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.82rem;
+  }
+
+  .profile-hero__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+
+  .tag--role {
+    background: rgba(245, 197, 24, 0.15);
+    color: #f5c518;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .tag--joined {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+
+  .tag--active {
+    background: rgba(34, 197, 94, 0.18);
+    color: #bbf7d0;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .tag--disabled {
+    background: rgba(239, 68, 68, 0.18);
+    color: #fecaca;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .profile-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .profile-hero__migration-note {
+    margin: 12px 0 0;
+    color: #fde68a;
+    font-size: 0.78rem;
+  }
+
+  .profile-hero__stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
+    gap: 10px;
+  }
+
+  .hero-stat-box {
+    min-width: 110px;
+    text-align: center;
+    padding: 12px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .hero-stat-box strong {
+    display: block;
+    color: #f5c518;
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+
+  .hero-stat-box span {
+    display: block;
+    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.35);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .hero-button {
+    min-height: 40px;
+    border-radius: 10px;
+    padding: 0 14px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+
+  .hero-button--ghost {
+    border: 1px solid rgba(245, 197, 24, 0.28);
+    background: rgba(245, 197, 24, 0.08);
+    color: #f5c518;
+  }
+
+  .hero-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .hero-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(10, 15, 30, 0.24);
+  }
+
+  .hero-button--ghost:hover {
+    border-color: #f5c518;
+    background: #f5c518;
+    color: #0a0f1e;
+    box-shadow: 0 12px 28px rgba(245, 197, 24, 0.24);
+  }
+
+  .hero-button:disabled:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .hero-button--ghost:disabled:hover {
+    border-color: rgba(245, 197, 24, 0.28);
+    background: rgba(245, 197, 24, 0.08);
+    color: #f5c518;
+  }
+
+  .summary-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .summary-card,
+  .attempts-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+  }
+
+  .summary-card {
+    padding: 20px;
+  }
+
+  .summary-card h3,
+  .attempts-card__title-group h3 {
+    margin: 0 0 14px;
+    color: #0a0f1e;
+    font-size: 0.875rem;
+    font-weight: 700;
+  }
+
+  .subject-bars {
+    display: grid;
+    gap: 10px;
+  }
+
+  .subject-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .subject-bar-row__name {
+    width: 80px;
+    flex-shrink: 0;
+    color: #4a5568;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .subject-bar-row__track {
+    position: relative;
+    flex: 1;
+    height: 8px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: #f1f3f9;
+  }
+
+  .subject-bar-row__fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .subject-bar-row__value {
+    width: 36px;
+    text-align: right;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .score-sparkline {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    min-height: 88px;
+  }
+
+  .score-sparkline__item {
+    flex: 1;
+  }
+
+  .score-sparkline__track {
+    display: flex;
+    align-items: end;
+    justify-content: center;
+    height: 60px;
+  }
+
+  .score-sparkline__bar {
+    width: 100%;
+    max-height: 60px;
+    border-radius: 4px 4px 0 0;
+  }
+
+  .score-sparkline__bar--good {
+    background: #10b981;
+  }
+
+  .score-sparkline__bar--mid {
+    background: #f59e0b;
+  }
+
+  .score-sparkline__bar--low {
+    background: #ef4444;
+  }
+
+  .score-sparkline__bar--empty {
+    background: #f1f3f9;
+  }
+
+  .score-sparkline__label {
+    display: block;
+    margin-top: 8px;
+    text-align: center;
+    color: #9aa5b4;
+    font-size: 0.65rem;
+  }
+
+  .score-sparkline__note {
+    margin: 8px 0 0;
+    color: #9aa5b4;
+    font-size: 0.72rem;
+    text-align: center;
+  }
+
+  .activity-list {
+    display: grid;
+  }
+
+  .activity-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f8f9ff;
+  }
+
+  .activity-row:last-child {
+    border-bottom: none;
+  }
+
+  .activity-row span {
+    color: #4a5568;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  .activity-row strong {
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
+  .attempts-card {
+    overflow: hidden;
+  }
+
+  .attempts-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 24px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .attempts-card__title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .attempts-card__title-group h3 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  .count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  .filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filter-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    color: #6b7280;
+    background: transparent;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+
+  .filter-pill--active {
+    background: #0a0f1e;
+    border-color: #0a0f1e;
+    color: #fff;
+  }
+
+  .attempts-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .attempts-table thead th {
+    padding: 10px 24px;
+    background: #f8f9ff;
+    border-bottom: 1px solid #e2e8f0;
+    color: #9aa5b4;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .attempts-table tbody td {
+    padding: 14px 24px;
+    border-bottom: 1px solid #f8f9ff;
+    vertical-align: middle;
+  }
+
+  .attempts-table tbody tr:hover td {
+    background: #fafbff;
+  }
+
+  .attempts-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .attempt-name {
+    max-width: 180px;
+    overflow: hidden;
+    color: #0a0f1e;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .attempt-topic {
+    margin-top: 4px;
+    color: #9aa5b4;
+    font-size: 0.75rem;
+  }
+
+  .subject-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .score-value {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-size: 0.9rem;
+  }
+
+  .score-value strong {
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
+  .score-value span,
+  .score-value em {
+    color: #9aa5b4;
+    font-style: normal;
+  }
+
+  .accuracy-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .accuracy-pill--good {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .accuracy-pill--mid {
+    background: #fffbeb;
+    color: #92400e;
+  }
+
+  .accuracy-pill--low {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .muted-cell {
+    color: #9aa5b4;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .review-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: transparent;
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .review-button:hover {
+    background: #0a0f1e;
+    border-color: #0a0f1e;
+    color: #fff;
+  }
+
+  .empty-state {
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .empty-state__icon {
+    font-size: 1.5rem;
+  }
+
+  .empty-state__title {
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .empty-state__text {
+    color: #9aa5b4;
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 1180px) {
+    .profile-hero {
+      flex-wrap: wrap;
+    }
+
+    .profile-hero__stats,
+    .summary-strip {
+      width: 100%;
+    }
+
+    .summary-strip {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .attempts-card__header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .attempts-table-wrap {
+      overflow-x: auto;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .profile-hero {
+      padding: 22px 20px;
+    }
+
+    .profile-hero__stats {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .profile-hero__actions {
+      flex-direction: column;
+    }
+  }
+</style>

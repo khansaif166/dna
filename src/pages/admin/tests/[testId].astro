@@ -1,0 +1,3416 @@
+---
+export const prerender = false;
+
+import { asc, eq } from 'drizzle-orm';
+
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { db, questions, subjects, tests, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const admin = authResult;
+const { testId } = Astro.params;
+
+if (!testId) {
+  return new Response(null, { status: 404 });
+}
+
+const testRows = await db
+  .select({
+    id: tests.id,
+    title: tests.title,
+    status: tests.status,
+    testType: tests.testType,
+    attemptMode: tests.attemptMode,
+    durationMinutes: tests.durationMinutes,
+    publishedAt: tests.publishedAt,
+    createdAt: tests.createdAt,
+    subjectName: subjects.name,
+    topicName: topics.name,
+  })
+  .from(tests)
+  .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+  .leftJoin(topics, eq(tests.topicId, topics.id))
+  .where(eq(tests.id, testId));
+
+if (!testRows || testRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [test] = testRows;
+const testQuestions = await db.select().from(questions).where(eq(questions.testId, test.id)).orderBy(asc(questions.order));
+const nextOrder = (testQuestions.at(-1)?.order ?? 0) + 1;
+const questionCount = testQuestions.length;
+const testTypeLabel = test.testType === 'mock_exam' ? 'Mock Exam' : 'Practice';
+const attemptModeLabel = test.attemptMode === 'multiple_attempts' ? 'Multiple attempts' : 'Single attempt';
+const metaSubject = test.subjectName ?? 'General';
+const metaChapter = test.topicName ?? 'No chapter assigned';
+---
+
+<AdminLayout
+  title={`${test.title} | Admin | Dream Neet Academy`}
+  pageTitle="Questions"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+  hideTopbar={true}
+>
+  <div class="questions-editor" data-current-test-id={test.id}>
+    <section class="meta-bar">
+      <div class="meta-bar__identity">
+        <p class="meta-bar__breadcrumb">Tests / {test.title}</p>
+        <h1 class="meta-bar__title">{test.title}</h1>
+        <span class="meta-bar__subject-pill">{metaSubject} · {metaChapter}</span>
+      </div>
+
+      <div class="meta-bar__stats">
+        <span class="meta-pill" data-question-count>📝 {questionCount} Questions</span>
+        <span class="meta-pill">⏱ {test.durationMinutes} Min</span>
+        <span class:list={['meta-pill', 'meta-pill--status', { 'meta-pill--published': test.status === 'published' }]}>
+          {test.status === 'published' ? '✓ Published' : '◯ Draft'}
+        </span>
+        <span class="meta-pill meta-pill--type">{testTypeLabel}</span>
+        <span class="meta-pill meta-pill--mode">{attemptModeLabel}</span>
+      </div>
+
+      <div class="meta-bar__actions">
+        <a href="/admin/tests" class="back-link">← Back to Tests</a>
+
+        <form action={`/api/admin/tests/${test.id}/publish`} method="POST">
+          <input type="hidden" name="test_id" value={test.id} />
+          <button type="submit" class:list={['publish-btn', { 'publish-btn--published': test.status === 'published' }]}>
+            {test.status === 'published' ? '✓ Published · Unpublish' : 'Publish Test →'}
+          </button>
+        </form>
+
+        <button type="button" class="panel-toggle-btn" id="panel-toggle" title="Toggle side panel" aria-label="Toggle side panel">
+          ☰
+        </button>
+
+        <button type="button" class="delete-test-link" data-delete-test-button>Delete Test</button>
+      </div>
+    </section>
+
+    <section class="editor-shell">
+      <div class="questions-zone">
+        <div class="search-filter-bar">
+          <span class="search-filter-bar__icon" aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            class="search-filter-bar__input"
+            placeholder="Search questions..."
+            data-question-search
+          />
+          <span class="search-filter-bar__separator"></span>
+          <div class="filter-pills" data-filter-pills>
+            <button type="button" class="filter-pill is-active" data-filter-option="all">All</button>
+            <button type="button" class="filter-pill" data-filter-option="a">Correct A</button>
+            <button type="button" class="filter-pill" data-filter-option="b">Correct B</button>
+            <button type="button" class="filter-pill" data-filter-option="c">Correct C</button>
+            <button type="button" class="filter-pill" data-filter-option="d">Correct D</button>
+          </div>
+        </div>
+
+        {questionCount ? (
+          <div class="question-list" data-question-list>
+            {testQuestions.map((question) => {
+              const options = [
+                { key: 'a', label: 'A', text: question.optionA },
+                { key: 'b', label: 'B', text: question.optionB },
+                { key: 'c', label: 'C', text: question.optionC },
+                { key: 'd', label: 'D', text: question.optionD },
+              ] as const;
+
+              return (
+                <article
+                  class="question-card"
+                  data-question-card
+                  data-correct-option={question.correctOption ?? ''}
+                  data-question-id={question.id}
+                  data-question-order={question.order}
+                  data-question-prompt={question.prompt}
+                  data-question-option-a={question.optionA}
+                  data-question-option-b={question.optionB}
+                  data-question-option-c={question.optionC}
+                  data-question-option-d={question.optionD}
+                  data-question-correct-option={question.correctOption ?? ''}
+                  data-question-image-url={question.questionImageUrl ?? ''}
+                  data-question-explanation={question.explanation ?? ''}
+                >
+                  <div class="question-accent" aria-hidden="true"></div>
+
+                  <div class="view-mode">
+                    <div class="question-card__header">
+                      <span class="question-badge">Q{question.order}</span>
+
+                      <div class="question-card__prompt-wrap">
+                        <p class="question-prompt" data-prompt-text>{question.prompt}</p>
+                        <button
+                          type="button"
+                          class="expand-prompt-btn"
+                          data-expand-prompt
+                          hidden={question.prompt.length < 160}
+                        >
+                          Expand
+                        </button>
+                      </div>
+
+                      <div class="question-card__actions">
+                        <button type="button" class="icon-btn edit-question-btn" data-edit-question aria-label={`Edit question ${question.order}`}>
+                          ✎
+                        </button>
+                        <button type="button" class="icon-btn icon-btn--danger" data-delete-question aria-label={`Delete question ${question.order}`}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+
+                    {question.questionImageUrl && (
+                      <div class="question-card__media">
+                        <img src={question.questionImageUrl} alt={`Question ${question.order} illustration`} loading="lazy" />
+                      </div>
+                    )}
+
+                    <div class="question-options">
+                      {options.map((option) => (
+                        <div class:list={['option-chip', `option-chip--${option.key}`, { 'option-chip--correct': question.correctOption === option.key }]}>
+                          <span class:list={['option-bubble', { 'option-bubble--correct': question.correctOption === option.key }]}>{option.label}</span>
+                          <span class="option-text">{option.text}</span>
+                          {question.correctOption === option.key && <span class="option-status">Correct</span>}
+                        </div>
+                      ))}
+                    </div>
+
+                    {!question.correctOption && <p class="pending-answer-chip">Answer key pending</p>}
+
+                    {question.explanation && (
+                      <div class="question-explanation">
+                        <strong>Explanation</strong>
+                        <p>{question.explanation}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <form class="edit-mode" data-inline-editor hidden>
+                    <div class="edit-mode__head">
+                      <span class="editing-pill">Editing Q{question.order}</span>
+                      <button type="button" class="cancel-edit-text cancel-edit-btn" data-inline-cancel>Cancel</button>
+                    </div>
+
+                    <p class="form-status" data-inline-status hidden></p>
+
+                    <label class="field">
+                      <span>Question Prompt</span>
+                      <textarea class="input-field textarea-field" name="prompt" required>{question.prompt}</textarea>
+                    </label>
+
+                    <label class="field">
+                      <span>Question Image</span>
+                      <input type="hidden" name="question_image_url" value={question.questionImageUrl ?? ''} />
+                    </label>
+
+                    <div class="image-upload-panel" data-image-upload-panel>
+                      <label class="field">
+                        <span>Upload Question Image</span>
+                        <input class="input-field" type="file" name="question_image_file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                      </label>
+                      <input type="hidden" value={test.id} data-question-image-test-id />
+                      <p class="upload-status" data-upload-status hidden></p>
+                    </div>
+
+                    <div class="image-preview" data-image-preview hidden>
+                      <img src={question.questionImageUrl ?? ''} alt="Question preview" data-image-preview-img />
+                    </div>
+
+                    <div class="options-grid">
+                      {options.map((option) => (
+                        <label class="field option-field">
+                          <span>{option.label}</span>
+                          <input
+                            class="input-field"
+                            type="text"
+                            name={`option_${option.key}`}
+                            required
+                            value={option.text}
+                          />
+                        </label>
+                      ))}
+                    </div>
+
+                    <div class="field">
+                      <span>Correct Answer</span>
+                      <div class="answer-group answer-group--editor">
+                        <input type="hidden" name="correct_option" value={question.correctOption ?? ''} />
+                        {options.map((option) => (
+                          <button
+                            type="button"
+                            class:list={['answer-pill', 'answer-pill--editor', `answer-pill--${option.key}`, { selected: question.correctOption === option.key }]}
+                            data-option={option.key}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <label class="field">
+                      <span>Explanation (optional)</span>
+                      <textarea class="input-field explanation-field" name="explanation">{question.explanation ?? ''}</textarea>
+                    </label>
+
+                    <label class="field order-field">
+                      <span>Question Order</span>
+                      <input class="input-field" type="number" name="order" required value={question.order} />
+                    </label>
+
+                    <div class="edit-mode__actions">
+                      <button type="button" class="text-btn cancel-edit-btn" data-inline-cancel>Cancel</button>
+                      <button type="submit" class="submit-btn" data-inline-save>Save Changes</button>
+                    </div>
+                  </form>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div class="empty-state" data-empty-state>
+            <div class="empty-state__icon">📝</div>
+            <h2>No questions yet</h2>
+            <p>Add your first question using the panel on the right</p>
+            <div class="empty-state__arrow">→</div>
+          </div>
+        )}
+
+        <div class="empty-state empty-state--filtered" data-filter-empty hidden>
+          <div class="empty-state__icon">📝</div>
+          <h2>No matching questions</h2>
+          <p>Try a different search term or answer filter.</p>
+        </div>
+      </div>
+
+      <aside class="right-panel" id="right-panel">
+        <div class="panel-card add-question-card">
+          <div class="panel-card__header panel-card__header--blue">
+            <span class="panel-card__accent panel-card__accent--dark"></span>
+            <div>
+              <p class="panel-card__eyebrow">Create New</p>
+              <h2>Add Question</h2>
+            </div>
+          </div>
+
+          <form action="/api/admin/questions" method="POST" class="question-form" data-question-form>
+            <input type="hidden" name="test_id" value={test.id} />
+            <div class="form-flash" data-question-form-flash hidden></div>
+            <p class="form-status" data-question-form-status hidden></p>
+
+            <section class="form-section form-section--prompt">
+              <div class="section-label-row">
+                <span class="section-label">Question Prompt</span>
+                <span class="section-counter" id="char-count">0 chars</span>
+              </div>
+              <textarea
+                class="input-field textarea-field prompt-textarea"
+                id="question-prompt"
+                name="prompt"
+                required
+              ></textarea>
+            </section>
+
+            <div class="form-divider"></div>
+
+            <section class="form-section">
+              <div class="section-label-row section-label-row--single">
+                <span class="section-label">Question Image <span class="section-optional">(optional)</span></span>
+              </div>
+              <input type="hidden" name="question_image_url" value="" />
+              <div class="image-upload-panel image-upload-panel--create" data-image-upload-panel>
+                <label class="upload-zone" id="upload-zone">
+                  <span class="upload-zone__default" id="upload-default">
+                    <span class="upload-zone__emoji">🖼</span>
+                    <span class="upload-zone__title">Click to upload image</span>
+                    <span class="upload-zone__hint">PNG, JPG up to 5MB</span>
+                  </span>
+                  <span class="upload-zone__selected" id="upload-selected" hidden>
+                    <span class="upload-zone__filename" id="upload-filename">✓ image.png</span>
+                    <button type="button" class="upload-zone__remove" id="remove-file" aria-label="Remove selected file">×</button>
+                  </span>
+                  <input
+                    type="file"
+                    id="question-image-input"
+                    name="question_image_file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    class="upload-zone__input"
+                  />
+                </label>
+                <input type="hidden" value={test.id} data-question-image-test-id />
+                <p class="upload-status" data-upload-status hidden></p>
+              </div>
+
+              <div class="image-preview image-preview--create" data-image-preview hidden>
+                <img src="" alt="Question preview" data-image-preview-img />
+              </div>
+            </section>
+
+            <div class="form-divider"></div>
+
+            <section class="form-section">
+              <div class="section-label-row section-label-row--single">
+                <span class="section-label">Answer Options</span>
+              </div>
+              <div class="options-stack">
+                <label class="option-row option-row--a">
+                  <span class="option-row__badge">A</span>
+                  <input class="input-field option-row__input" id="option-a" type="text" name="option_a" placeholder="Option A" required />
+                </label>
+                <label class="option-row option-row--b">
+                  <span class="option-row__badge">B</span>
+                  <input class="input-field option-row__input" id="option-b" type="text" name="option_b" placeholder="Option B" required />
+                </label>
+                <label class="option-row option-row--c">
+                  <span class="option-row__badge">C</span>
+                  <input class="input-field option-row__input" id="option-c" type="text" name="option_c" placeholder="Option C" required />
+                </label>
+                <label class="option-row option-row--d">
+                  <span class="option-row__badge">D</span>
+                  <input class="input-field option-row__input" id="option-d" type="text" name="option_d" placeholder="Option D" required />
+                </label>
+              </div>
+            </section>
+
+            <div class="form-divider"></div>
+
+            <section class="form-section">
+              <div class="section-label-row section-label-row--single">
+                <span class="section-label">Correct Answer</span>
+              </div>
+              <div class="answer-group answer-group--create">
+                <input type="hidden" name="correct_option" id="correct-option-input" value="" />
+                <button type="button" class="answer-pill answer-pill--create answer-pill--a" data-option="a">
+                  <span class="answer-pill__letter">A</span>
+                  <span class="answer-pill__preview" id="pill-preview-a"></span>
+                </button>
+                <button type="button" class="answer-pill answer-pill--create answer-pill--b" data-option="b">
+                  <span class="answer-pill__letter">B</span>
+                  <span class="answer-pill__preview" id="pill-preview-b"></span>
+                </button>
+                <button type="button" class="answer-pill answer-pill--create answer-pill--c" data-option="c">
+                  <span class="answer-pill__letter">C</span>
+                  <span class="answer-pill__preview" id="pill-preview-c"></span>
+                </button>
+                <button type="button" class="answer-pill answer-pill--create answer-pill--d" data-option="d">
+                  <span class="answer-pill__letter">D</span>
+                  <span class="answer-pill__preview" id="pill-preview-d"></span>
+                </button>
+              </div>
+            </section>
+
+            <div class="form-divider"></div>
+
+            <section class="form-section">
+              <div class="section-label-row section-label-row--single">
+                <span class="section-label">Explanation <span class="section-optional">(optional)</span></span>
+              </div>
+              <textarea
+                class="input-field explanation-field explanation-field--create"
+                name="explanation"
+                placeholder="Why is this the correct answer? (shown after submission)"
+              ></textarea>
+            </section>
+
+            <div class="form-divider"></div>
+
+            <section class="order-row">
+              <span class="section-label">Order</span>
+              <input class="input-field order-row__input" type="number" name="order" required value={nextOrder} />
+              <span class="order-row__hint">Lower = appears first</span>
+            </section>
+
+            <div class="form-submit-wrap">
+              <button type="submit" class="submit-btn submit-btn--create" data-question-form-submit>+ Add Question</button>
+              <p class="form-inline-error" data-form-inline-error hidden>
+                Please fill in the question, all options, and select the correct answer
+              </p>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel-card import-panel-card">
+          <div class="panel-card__header panel-card__header--amber">
+            <span class="panel-card__accent panel-card__accent--amber"></span>
+            <div>
+              <p class="panel-card__eyebrow panel-card__eyebrow--amber">Bulk Import</p>
+              <h2>Upload PDF</h2>
+            </div>
+          </div>
+
+          <form
+            action="/api/admin/questions/import-pdf"
+            method="POST"
+            enctype="multipart/form-data"
+            class="question-form"
+            data-pdf-import-form
+          >
+            <input type="hidden" name="test_id" value={test.id} />
+
+            <label class="pdf-dropzone" data-pdf-dropzone>
+              <input class="pdf-dropzone__input" type="file" name="pdf" accept="application/pdf,.pdf" required />
+              <span class="pdf-dropzone__icon">📄</span>
+              <span class="pdf-dropzone__text" data-pdf-dropzone-label>Drop PDF here or click to browse</span>
+            </label>
+
+            <div class="format-box">
+              <p class="format-box__label">Expected Format</p>
+              <pre>1. Question text
+A. Option one
+B. Option two
+C. Option three
+D. Option four
+Answer: B
+Explanation: optional</pre>
+            </div>
+
+            <p class="import-status" data-pdf-import-status hidden></p>
+            <a class="secondary-btn report-link" data-pdf-report-link hidden download>⬇ Download Skipped Report</a>
+            <button type="submit" class="submit-btn" data-pdf-import-button>Import Questions →</button>
+          </form>
+        </div>
+      </aside>
+    </section>
+  </div>
+
+  <div class="delete-modal" data-delete-modal hidden>
+    <div class="delete-modal__backdrop" data-delete-modal-close></div>
+    <div
+      class="delete-modal__dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-modal-title"
+      aria-describedby="delete-modal-description"
+    >
+      <div class="delete-modal__icon">!</div>
+      <p class="panel-card__eyebrow">Delete Question</p>
+      <h2 id="delete-modal-title">Are you sure?</h2>
+      <p class="delete-modal__text" id="delete-modal-description">
+        This will permanently delete <strong data-delete-modal-question-label>this question</strong>.
+      </p>
+      <p class="delete-modal__subtext">
+        Any saved student answers linked to this question will also be removed. This action cannot be undone.
+      </p>
+      <div class="delete-modal__actions">
+        <button type="button" class="secondary-btn" data-delete-modal-cancel>Cancel</button>
+        <button type="button" class="submit-btn delete-modal__confirm" data-delete-modal-confirm>Delete Question</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="delete-modal" data-delete-test-modal hidden>
+    <div class="delete-modal__backdrop" data-delete-test-modal-close></div>
+    <div
+      class="delete-modal__dialog delete-modal__dialog--danger"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-test-modal-title"
+      aria-describedby="delete-test-modal-description"
+    >
+      <div class="delete-modal__icon delete-modal__icon--danger">!</div>
+      <p class="panel-card__eyebrow">Delete Test</p>
+      <h2 id="delete-test-modal-title">Delete this entire test?</h2>
+      <p class="delete-modal__text" id="delete-test-modal-description">
+        You are about to permanently delete <strong>{test.title}</strong>.
+      </p>
+      <p class="delete-modal__subtext">
+        This will remove all questions in this test, every imported answer key, and all student attempt history linked to it. This action cannot be undone.
+      </p>
+      <div class="delete-modal__actions">
+        <button type="button" class="secondary-btn" data-delete-test-modal-cancel>Keep Test</button>
+        <button type="button" class="submit-btn delete-modal__confirm" data-delete-test-modal-confirm>Delete Test</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script is:inline>
+  const editorGrid = document.querySelector('[data-current-test-id]');
+  const currentTestId = editorGrid instanceof HTMLElement ? editorGrid.dataset.currentTestId ?? '' : '';
+  const questionForm = document.querySelector('[data-question-form]');
+  const pdfImportForm = document.querySelector('[data-pdf-import-form]');
+  const deleteTestButton = document.querySelector('[data-delete-test-button]');
+  const deleteModal = document.querySelector('[data-delete-modal]');
+  const deleteTestModal = document.querySelector('[data-delete-test-modal]');
+  const deleteModalQuestionLabel = document.querySelector('[data-delete-modal-question-label]');
+  const deleteModalCancel = document.querySelector('[data-delete-modal-cancel]');
+  const deleteModalConfirm = document.querySelector('[data-delete-modal-confirm]');
+  const deleteModalCloseTargets = Array.from(document.querySelectorAll('[data-delete-modal-close]'));
+  const deleteTestModalCancel = document.querySelector('[data-delete-test-modal-cancel]');
+  const deleteTestModalConfirm = document.querySelector('[data-delete-test-modal-confirm]');
+  const deleteTestModalCloseTargets = Array.from(document.querySelectorAll('[data-delete-test-modal-close]'));
+  const questionCountChip = document.querySelector('[data-question-count]');
+  const questionsZone = document.querySelector('.questions-zone');
+  const searchInput = document.querySelector('[data-question-search]');
+  const filterPills = Array.from(document.querySelectorAll('.filter-pill'));
+  const filterEmptyState = document.querySelector('[data-filter-empty]');
+  const panelToggle = document.getElementById('panel-toggle');
+  const rightPanel = document.getElementById('right-panel');
+  const PANEL_KEY = 'questions_panel_open';
+  const RIGHT_PANEL_WIDTH = '360px';
+  let questionList = document.querySelector('[data-question-list]');
+  let pendingDelete = null;
+  let deleteTestPending = false;
+  let activeInlineCard = null;
+  let activeFilter = 'all';
+
+  const escapeHtml = (value) =>
+    String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+
+  const closeDeleteModal = () => {
+    if (deleteModal instanceof HTMLElement) {
+      deleteModal.hidden = true;
+    }
+
+    pendingDelete = null;
+
+    if (deleteModalConfirm instanceof HTMLButtonElement) {
+      deleteModalConfirm.disabled = false;
+      deleteModalConfirm.textContent = 'Delete Question';
+    }
+  };
+
+  const closeDeleteTestModal = () => {
+    if (deleteTestPending) {
+      return;
+    }
+
+    if (deleteTestModal instanceof HTMLElement) {
+      deleteTestModal.hidden = true;
+    }
+
+    if (deleteTestModalConfirm instanceof HTMLButtonElement) {
+      deleteTestModalConfirm.disabled = false;
+      deleteTestModalConfirm.textContent = 'Delete Test';
+    }
+
+    if (deleteTestButton instanceof HTMLButtonElement) {
+      deleteTestButton.disabled = false;
+      deleteTestButton.textContent = 'Delete Test';
+    }
+  };
+
+  const attachQuestionImageUpload = (form) => {
+    if (!(form instanceof HTMLFormElement)) {
+      return { uploadSelectedImage: async () => {}, reset: () => {} };
+    }
+
+    const imageUrlInput = form.elements.namedItem('question_image_url');
+    const imageFileInput = form.elements.namedItem('question_image_file');
+    const testIdInput = form.querySelector('[data-question-image-test-id]');
+    const uploadStatus = form.querySelector('[data-upload-status]');
+    const imagePreview = form.querySelector('[data-image-preview]');
+    const imagePreviewImg = form.querySelector('[data-image-preview-img]');
+    let localPreviewUrl = null;
+
+    const syncPreview = () => {
+      if (!(imageUrlInput instanceof HTMLInputElement) || !(imagePreview instanceof HTMLElement) || !(imagePreviewImg instanceof HTMLImageElement)) {
+        return;
+      }
+
+      const value = imageUrlInput.value.trim();
+      imagePreview.hidden = !value;
+      imagePreviewImg.src = value;
+    };
+
+    const syncLocalPreview = () => {
+      if (!(imageFileInput instanceof HTMLInputElement) || !(imagePreview instanceof HTMLElement) || !(imagePreviewImg instanceof HTMLImageElement)) {
+        return;
+      }
+
+      const file = imageFileInput.files?.[0];
+
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+        localPreviewUrl = null;
+      }
+
+      if (!file) {
+        syncPreview();
+        return;
+      }
+
+      localPreviewUrl = URL.createObjectURL(file);
+      imagePreview.hidden = false;
+      imagePreviewImg.src = localPreviewUrl;
+    };
+
+    const setUploadStatus = (message, type = 'pending') => {
+      if (!(uploadStatus instanceof HTMLElement)) {
+        return;
+      }
+
+      uploadStatus.hidden = false;
+      uploadStatus.textContent = message;
+      uploadStatus.className = `upload-status upload-status--${type}`;
+    };
+
+    const clearUploadStatus = () => {
+      if (!(uploadStatus instanceof HTMLElement)) {
+        return;
+      }
+
+      uploadStatus.hidden = true;
+      uploadStatus.textContent = '';
+      uploadStatus.className = 'upload-status';
+    };
+
+    if (imageUrlInput instanceof HTMLInputElement) {
+      syncPreview();
+    }
+
+    if (imageFileInput instanceof HTMLInputElement) {
+      imageFileInput.addEventListener('change', syncLocalPreview);
+    }
+
+    const uploadSelectedImage = async () => {
+      if (!(imageFileInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const file = imageFileInput.files?.[0];
+
+      if (!file) {
+        return;
+      }
+
+      const testId = testIdInput instanceof HTMLInputElement ? testIdInput.value : '';
+
+      if (!testId) {
+        setUploadStatus('Missing test information for upload.', 'error');
+        throw new Error('Missing test information for upload.');
+      }
+
+      setUploadStatus('Uploading image...', 'pending');
+
+      try {
+        const body = new FormData();
+        body.set('test_id', testId);
+        body.set('image', file);
+
+        const response = await fetch('/api/admin/question-images', {
+          method: 'POST',
+          body,
+        });
+
+        const payload = await response.json().catch(() => ({ message: 'Unexpected response from the server.' }));
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to upload image.');
+        }
+
+        if (imageUrlInput instanceof HTMLInputElement) {
+          imageUrlInput.value = payload.imageUrl || '';
+          syncPreview();
+        }
+
+        imageFileInput.value = '';
+
+        if (localPreviewUrl) {
+          URL.revokeObjectURL(localPreviewUrl);
+          localPreviewUrl = null;
+        }
+
+        setUploadStatus(payload.message || 'Image uploaded successfully.', 'success');
+      } catch (error) {
+        setUploadStatus(error instanceof Error ? error.message : 'Failed to upload image.', 'error');
+        throw error;
+      }
+    };
+
+    const reset = () => {
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+        localPreviewUrl = null;
+      }
+
+      clearUploadStatus();
+      syncPreview();
+    };
+
+    return { uploadSelectedImage, reset };
+  };
+
+  const createOptionMarkup = (option, correctOption) => `
+    <div class="option-chip option-chip--${option.key} ${correctOption === option.key ? 'option-chip--correct' : ''}">
+      <span class="option-bubble ${correctOption === option.key ? 'option-bubble--correct' : ''}">${option.label}</span>
+      <span class="option-text">${escapeHtml(option.text)}</span>
+      ${correctOption === option.key ? '<span class="option-status">Correct</span>' : ''}
+    </div>
+  `;
+
+  const createAnswerPillMarkup = (option, correctOption, editor = false) => `
+    <button
+      type="button"
+      class="answer-pill ${editor ? 'answer-pill--editor' : ''} answer-pill--${option} ${correctOption === option ? 'selected' : ''}"
+      data-option="${option}"
+    >
+      ${option.toUpperCase()}
+    </button>
+  `;
+
+  const createQuestionCardElement = (question) => {
+    const article = document.createElement('article');
+    article.className = 'question-card';
+    article.dataset.questionCard = '';
+    article.dataset.correctOption = question.correctOption ?? '';
+    article.dataset.questionId = question.id;
+    article.dataset.questionOrder = String(question.order);
+    article.dataset.questionPrompt = question.prompt;
+    article.dataset.questionOptionA = question.optionA;
+    article.dataset.questionOptionB = question.optionB;
+    article.dataset.questionOptionC = question.optionC;
+    article.dataset.questionOptionD = question.optionD;
+    article.dataset.questionCorrectOption = question.correctOption ?? '';
+    article.dataset.questionImageUrl = question.questionImageUrl ?? '';
+    article.dataset.questionExplanation = question.explanation ?? '';
+
+    const options = [
+      { key: 'a', label: 'A', text: question.optionA },
+      { key: 'b', label: 'B', text: question.optionB },
+      { key: 'c', label: 'C', text: question.optionC },
+      { key: 'd', label: 'D', text: question.optionD },
+    ];
+
+    article.innerHTML = `
+      <div class="question-accent" aria-hidden="true"></div>
+      <div class="view-mode">
+        <div class="question-card__header">
+          <span class="question-badge">Q${escapeHtml(question.order)}</span>
+          <div class="question-card__prompt-wrap">
+            <p class="question-prompt" data-prompt-text>${escapeHtml(question.prompt)}</p>
+            <button type="button" class="expand-prompt-btn" data-expand-prompt ${String(question.prompt).length < 160 ? 'hidden' : ''}>Expand</button>
+          </div>
+          <div class="question-card__actions">
+            <button type="button" class="icon-btn edit-question-btn" data-edit-question aria-label="Edit question">✎</button>
+            <button type="button" class="icon-btn icon-btn--danger" data-delete-question aria-label="Delete question">✕</button>
+          </div>
+        </div>
+        ${
+          question.questionImageUrl
+            ? `<div class="question-card__media"><img src="${escapeHtml(question.questionImageUrl)}" alt="Question ${escapeHtml(question.order)} illustration" loading="lazy" /></div>`
+            : ''
+        }
+        <div class="question-options">
+          ${options.map((option) => createOptionMarkup(option, question.correctOption)).join('')}
+        </div>
+        ${question.correctOption ? '' : '<p class="pending-answer-chip">Answer key pending</p>'}
+        ${
+          question.explanation
+            ? `<div class="question-explanation"><strong>Explanation</strong><p>${escapeHtml(question.explanation)}</p></div>`
+            : ''
+        }
+      </div>
+      <form class="edit-mode" data-inline-editor hidden>
+        <div class="edit-mode__head">
+          <span class="editing-pill">Editing Q${escapeHtml(question.order)}</span>
+          <button type="button" class="cancel-edit-text cancel-edit-btn" data-inline-cancel>Cancel</button>
+        </div>
+        <p class="form-status" data-inline-status hidden></p>
+        <label class="field">
+          <span>Question Prompt</span>
+          <textarea class="input-field textarea-field" name="prompt" required>${escapeHtml(question.prompt)}</textarea>
+        </label>
+        <label class="field">
+          <span>Question Image</span>
+          <input type="hidden" name="question_image_url" value="${escapeHtml(question.questionImageUrl ?? '')}" />
+        </label>
+        <div class="image-upload-panel" data-image-upload-panel>
+          <label class="field">
+            <span>Upload Question Image</span>
+            <input class="input-field" type="file" name="question_image_file" accept="image/png,image/jpeg,image/webp,image/gif" />
+          </label>
+          <input type="hidden" value="${escapeHtml(currentTestId)}" data-question-image-test-id />
+          <p class="upload-status" data-upload-status hidden></p>
+        </div>
+        <div class="image-preview" data-image-preview ${question.questionImageUrl ? '' : 'hidden'}>
+          <img src="${escapeHtml(question.questionImageUrl ?? '')}" alt="Question preview" data-image-preview-img />
+        </div>
+        <div class="options-grid">
+          <label class="field option-field"><span>A</span><input class="input-field" type="text" name="option_a" required value="${escapeHtml(question.optionA)}" /></label>
+          <label class="field option-field"><span>B</span><input class="input-field" type="text" name="option_b" required value="${escapeHtml(question.optionB)}" /></label>
+          <label class="field option-field"><span>C</span><input class="input-field" type="text" name="option_c" required value="${escapeHtml(question.optionC)}" /></label>
+          <label class="field option-field"><span>D</span><input class="input-field" type="text" name="option_d" required value="${escapeHtml(question.optionD)}" /></label>
+        </div>
+        <div class="field">
+          <span>Correct Answer</span>
+          <div class="answer-group answer-group--editor">
+            <input type="hidden" name="correct_option" value="${escapeHtml(question.correctOption ?? '')}" />
+            ${['a', 'b', 'c', 'd'].map((option) => createAnswerPillMarkup(option, question.correctOption, true)).join('')}
+          </div>
+        </div>
+        <label class="field">
+          <span>Explanation (optional)</span>
+          <textarea class="input-field explanation-field" name="explanation">${escapeHtml(question.explanation ?? '')}</textarea>
+        </label>
+        <label class="field order-field">
+          <span>Question Order</span>
+          <input class="input-field" type="number" name="order" required value="${escapeHtml(question.order)}" />
+        </label>
+        <div class="edit-mode__actions">
+          <button type="button" class="text-btn cancel-edit-btn" data-inline-cancel>Cancel</button>
+          <button type="submit" class="submit-btn" data-inline-save>Save Changes</button>
+        </div>
+      </form>
+    `;
+
+    return article;
+  };
+
+  const syncQuestionNumbers = () => {
+    const cards = Array.from(document.querySelectorAll('[data-question-card]'));
+
+    cards.forEach((node, index) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+
+      const nextOrder = index + 1;
+      node.dataset.questionOrder = String(nextOrder);
+
+      const badge = node.querySelector('.question-badge');
+      const editingPill = node.querySelector('.editing-pill');
+      const inlineOrderInput = node.querySelector('[name="order"]');
+
+      if (badge instanceof HTMLElement) {
+        badge.textContent = `Q${nextOrder}`;
+      }
+
+      if (editingPill instanceof HTMLElement) {
+        editingPill.textContent = `Editing Q${nextOrder}`;
+      }
+
+      if (inlineOrderInput instanceof HTMLInputElement) {
+        inlineOrderInput.value = String(nextOrder);
+      }
+    });
+
+    if (questionCountChip instanceof HTMLElement) {
+      questionCountChip.textContent = `📝 ${cards.length} Questions`;
+    }
+
+    if (questionForm instanceof HTMLFormElement) {
+      const createOrderInput = questionForm.elements.namedItem('order');
+
+      if (createOrderInput instanceof HTMLInputElement) {
+        createOrderInput.value = String(cards.length + 1);
+      }
+    }
+
+    toggleEmptyStates();
+  };
+
+  const closeInlineEditor = (card) => {
+    if (!(card instanceof HTMLElement)) {
+      return;
+    }
+
+    const editor = card.querySelector('[data-inline-editor]');
+    const viewMode = card.querySelector('.view-mode');
+
+    if (editor instanceof HTMLFormElement) {
+      editor.hidden = true;
+    }
+
+    if (viewMode instanceof HTMLElement) {
+      viewMode.style.display = '';
+    }
+
+    card.classList.remove('question-card--editing');
+    activeInlineCard = activeInlineCard === card ? null : activeInlineCard;
+  };
+
+  const openInlineEditor = (card) => {
+    if (!(card instanceof HTMLElement)) {
+      return;
+    }
+
+    if (activeInlineCard && activeInlineCard !== card) {
+      closeInlineEditor(activeInlineCard);
+    }
+
+    const editor = card.querySelector('[data-inline-editor]');
+    const viewMode = card.querySelector('.view-mode');
+
+    if (editor instanceof HTMLFormElement) {
+      editor.hidden = false;
+      if (viewMode instanceof HTMLElement) {
+        viewMode.style.display = 'none';
+      }
+      card.classList.add('question-card--editing');
+      activeInlineCard = card;
+      editor.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
+  const attachUniqueValidation = (form) => {
+    const fields = ['option_a', 'option_b', 'option_c', 'option_d']
+      .map((name) => form.elements.namedItem(name))
+      .filter((field) => field instanceof HTMLInputElement);
+
+    const validate = () => {
+      fields.forEach((field) => field.setCustomValidity(''));
+      const seen = new Map();
+
+      fields.forEach((field) => {
+        const value = field.value.trim().toLowerCase();
+
+        if (!value) {
+          return;
+        }
+
+        const duplicateField = seen.get(value);
+
+        if (duplicateField) {
+          const message = 'Each option must be unique.';
+          field.setCustomValidity(message);
+          duplicateField.setCustomValidity(message);
+        } else {
+          seen.set(value, field);
+        }
+      });
+    };
+
+    fields.forEach((field) => {
+      field.addEventListener('input', validate);
+      field.addEventListener('blur', validate);
+    });
+
+    return validate;
+  };
+
+  const wireAnswerGroups = (scope = document) => {
+    scope.querySelectorAll('.answer-group').forEach((group) => {
+      if (!(group instanceof HTMLElement) || group.dataset.answerBound === 'true') {
+        return;
+      }
+
+      group.dataset.answerBound = 'true';
+
+      group.querySelectorAll('.answer-pill').forEach((pill) => {
+        pill.addEventListener('click', () => {
+          group.querySelectorAll('.answer-pill').forEach((node) => node.classList.remove('selected'));
+          pill.classList.add('selected');
+
+          const input = group.querySelector('input[name="correct_option"]');
+          if (input instanceof HTMLInputElement && pill instanceof HTMLElement) {
+            input.value = pill.dataset.option ?? '';
+          }
+        });
+      });
+    });
+  };
+
+  const wirePromptExpander = (card) => {
+    if (!(card instanceof HTMLElement)) {
+      return;
+    }
+
+    const button = card.querySelector('[data-expand-prompt]');
+    const prompt = card.querySelector('[data-prompt-text]');
+
+    if (!(button instanceof HTMLButtonElement) || !(prompt instanceof HTMLElement)) {
+      return;
+    }
+
+    button.addEventListener('click', () => {
+      const expanded = prompt.classList.toggle('is-expanded');
+      button.textContent = expanded ? 'Collapse' : 'Expand';
+    });
+  };
+
+  const openDeleteModal = ({ card, onError }) => {
+    if (!(deleteModal instanceof HTMLElement) || !(card instanceof HTMLElement)) {
+      return;
+    }
+
+    const questionOrder = card.dataset.questionOrder;
+
+    if (deleteModalQuestionLabel instanceof HTMLElement) {
+      deleteModalQuestionLabel.textContent = questionOrder ? `Q${questionOrder}` : 'this question';
+    }
+
+    pendingDelete = { card, onError };
+    deleteModal.hidden = false;
+  };
+
+  const applyQuestionFilter = () => {
+    const term = searchInput instanceof HTMLInputElement ? searchInput.value.trim().toLowerCase() : '';
+    const cards = Array.from(document.querySelectorAll('[data-question-card]'));
+    let visibleCount = 0;
+
+    cards.forEach((card) => {
+      if (!(card instanceof HTMLElement)) {
+        return;
+      }
+
+      const haystack = [
+        card.dataset.questionPrompt,
+        card.dataset.questionOptionA,
+        card.dataset.questionOptionB,
+        card.dataset.questionOptionC,
+        card.dataset.questionOptionD,
+        card.dataset.questionExplanation,
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      const matchesSearch = !term || haystack.includes(term);
+      const correctOption = (card.dataset.questionCorrectOption ?? '').toLowerCase();
+      const matchesFilter = activeFilter === 'all' || correctOption === activeFilter;
+      const shouldShow = matchesSearch && matchesFilter;
+
+      card.style.display = shouldShow ? '' : 'none';
+      if (shouldShow) {
+        visibleCount += 1;
+      }
+    });
+
+    if (filterEmptyState instanceof HTMLElement) {
+      filterEmptyState.hidden = visibleCount > 0 || cards.length === 0;
+    }
+  };
+
+  const toggleEmptyStates = () => {
+    const cards = Array.from(document.querySelectorAll('[data-question-card]'));
+    const emptyState = document.querySelector('[data-empty-state]');
+
+    if (emptyState instanceof HTMLElement) {
+      emptyState.hidden = cards.length > 0;
+    }
+
+    if (cards.length === 0 && filterEmptyState instanceof HTMLElement) {
+      filterEmptyState.hidden = true;
+    }
+
+    applyQuestionFilter();
+  };
+
+  const initializeQuestionCard = (card) => {
+    if (!(card instanceof HTMLElement)) {
+      return;
+    }
+
+    const editButton = card.querySelector('[data-edit-question]');
+    const deleteButton = card.querySelector('[data-delete-question]');
+    const inlineEditor = card.querySelector('[data-inline-editor]');
+    const inlineCancelButtons = Array.from(card.querySelectorAll('[data-inline-cancel]'));
+    const inlineStatus = card.querySelector('[data-inline-status]');
+    const inlineSave = card.querySelector('[data-inline-save]');
+
+    wireAnswerGroups(card);
+    wirePromptExpander(card);
+
+    const setInlineStatus = (message, type = 'pending') => {
+      if (!(inlineStatus instanceof HTMLElement)) {
+        return;
+      }
+
+      inlineStatus.hidden = false;
+      inlineStatus.textContent = message;
+      inlineStatus.className = `form-status form-status--${type}`;
+    };
+
+    const clearInlineStatus = () => {
+      if (!(inlineStatus instanceof HTMLElement)) {
+        return;
+      }
+
+      inlineStatus.hidden = true;
+      inlineStatus.textContent = '';
+      inlineStatus.className = 'form-status';
+    };
+
+    if (editButton instanceof HTMLButtonElement) {
+      editButton.addEventListener('click', () => {
+        openInlineEditor(card);
+        clearInlineStatus();
+      });
+    }
+
+    inlineCancelButtons.forEach((button) => {
+      if (button instanceof HTMLButtonElement) {
+        button.addEventListener('click', () => {
+          closeInlineEditor(card);
+          clearInlineStatus();
+        });
+      }
+    });
+
+    if (deleteButton instanceof HTMLButtonElement) {
+      deleteButton.addEventListener('click', () => {
+        const questionId = card.dataset.questionId;
+
+        if (!questionId) {
+          return;
+        }
+
+        openDeleteModal({
+          card,
+          onError: (message) => {
+            setInlineStatus(message, 'error');
+            openInlineEditor(card);
+          },
+        });
+      });
+    }
+
+    if (inlineEditor instanceof HTMLFormElement) {
+      const validateInlineOptions = attachUniqueValidation(inlineEditor);
+      const inlineImageUpload = attachQuestionImageUpload(inlineEditor);
+
+      inlineEditor.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        validateInlineOptions();
+
+        if (!inlineEditor.reportValidity()) {
+          return;
+        }
+
+        const questionId = card.dataset.questionId;
+
+        if (!questionId) {
+          return;
+        }
+
+        if (inlineSave instanceof HTMLButtonElement) {
+          inlineSave.disabled = true;
+        }
+
+        setInlineStatus('Saving question changes...', 'pending');
+
+        try {
+          await inlineImageUpload.uploadSelectedImage();
+
+          const response = await fetch(`/api/admin/questions/${questionId}`, {
+            method: 'PATCH',
+            body: new FormData(inlineEditor),
+          });
+          const payload = await response.json().catch(() => ({ message: 'Unexpected response from the server.' }));
+
+          if (!response.ok) {
+            throw new Error(payload.message || 'Failed to save question.');
+          }
+
+          setInlineStatus(payload.message || 'Question updated successfully.', 'success');
+          window.setTimeout(() => window.location.reload(), 500);
+        } catch (error) {
+          setInlineStatus(error instanceof Error ? error.message : 'Failed to save question.', 'error');
+        } finally {
+          if (inlineSave instanceof HTMLButtonElement) {
+            inlineSave.disabled = false;
+          }
+        }
+      });
+    }
+  };
+
+  if (localStorage.getItem(PANEL_KEY) === 'false' && rightPanel instanceof HTMLElement) {
+    rightPanel.style.width = '0';
+    rightPanel.style.padding = '0';
+    rightPanel.style.overflow = 'hidden';
+  }
+
+  if (panelToggle instanceof HTMLButtonElement && rightPanel instanceof HTMLElement) {
+    panelToggle.addEventListener('click', () => {
+      const isHidden = rightPanel.style.width === '0px' || rightPanel.style.width === '0';
+
+      if (isHidden) {
+        rightPanel.style.width = RIGHT_PANEL_WIDTH;
+        rightPanel.style.padding = '0 24px 0 0';
+        rightPanel.style.overflow = 'visible';
+        localStorage.setItem(PANEL_KEY, 'true');
+      } else {
+        rightPanel.style.width = '0';
+        rightPanel.style.padding = '0';
+        rightPanel.style.overflow = 'hidden';
+        localStorage.setItem(PANEL_KEY, 'false');
+      }
+    });
+  }
+
+  deleteModalCloseTargets.forEach((node) => {
+    node.addEventListener('click', closeDeleteModal);
+  });
+
+  deleteTestModalCloseTargets.forEach((node) => {
+    node.addEventListener('click', closeDeleteTestModal);
+  });
+
+  if (deleteModalCancel instanceof HTMLButtonElement) {
+    deleteModalCancel.addEventListener('click', closeDeleteModal);
+  }
+
+  if (deleteTestModalCancel instanceof HTMLButtonElement) {
+    deleteTestModalCancel.addEventListener('click', closeDeleteTestModal);
+  }
+
+  if (deleteModalConfirm instanceof HTMLButtonElement) {
+    deleteModalConfirm.addEventListener('click', async () => {
+      if (!pendingDelete?.card) {
+        closeDeleteModal();
+        return;
+      }
+
+      const { card, onError } = pendingDelete;
+      const questionId = card.dataset.questionId;
+
+      if (!questionId) {
+        closeDeleteModal();
+        return;
+      }
+
+      deleteModalConfirm.disabled = true;
+      deleteModalConfirm.textContent = 'Deleting...';
+
+      try {
+        const response = await fetch(`/api/admin/questions/${questionId}`, {
+          method: 'DELETE',
+        });
+        const payload = await response.json().catch(() => ({ message: 'Unexpected response from the server.' }));
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to delete question.');
+        }
+
+        card.remove();
+        closeDeleteModal();
+        syncQuestionNumbers();
+      } catch (error) {
+        closeDeleteModal();
+
+        if (typeof onError === 'function') {
+          onError(error instanceof Error ? error.message : 'Failed to delete question.');
+        }
+      }
+    });
+  }
+
+  if (deleteTestModalConfirm instanceof HTMLButtonElement) {
+    deleteTestModalConfirm.addEventListener('click', async () => {
+      if (!currentTestId) {
+        closeDeleteTestModal();
+        return;
+      }
+
+      deleteTestPending = true;
+      deleteTestModalConfirm.disabled = true;
+      deleteTestModalConfirm.textContent = 'Deleting...';
+
+      if (deleteTestButton instanceof HTMLButtonElement) {
+        deleteTestButton.disabled = true;
+        deleteTestButton.textContent = 'Deleting...';
+      }
+
+      try {
+        const response = await fetch(`/api/admin/tests/${currentTestId}`, {
+          method: 'DELETE',
+        });
+        const payload = await response.json().catch(() => ({ message: 'Unexpected response from the server.' }));
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to delete test.');
+        }
+
+        window.location.href = '/admin/tests';
+      } catch (error) {
+        deleteTestPending = false;
+        window.alert(error instanceof Error ? error.message : 'Failed to delete test.');
+        closeDeleteTestModal();
+      }
+    });
+  }
+
+  if (questionForm instanceof HTMLFormElement) {
+    const formStatus = questionForm.querySelector('[data-question-form-status]');
+    const formFlash = questionForm.querySelector('[data-question-form-flash]');
+    const inlineError = questionForm.querySelector('[data-form-inline-error]');
+    const submitButton = questionForm.querySelector('[data-question-form-submit]');
+    const orderField = questionForm.elements.namedItem('order');
+    const questionImageUpload = attachQuestionImageUpload(questionForm);
+    const promptTA = document.getElementById('question-prompt');
+    const charCount = document.getElementById('char-count');
+    const fileInput = document.getElementById('question-image-input');
+    const uploadZone = document.getElementById('upload-zone');
+    const uploadDefault = document.getElementById('upload-default');
+    const uploadSelected = document.getElementById('upload-selected');
+    const uploadFilename = document.getElementById('upload-filename');
+    const removeFile = document.getElementById('remove-file');
+    const correctInput = document.getElementById('correct-option-input');
+
+    const optionFields = ['option_a', 'option_b', 'option_c', 'option_d']
+      .map((name) => questionForm.elements.namedItem(name))
+      .filter((field) => field instanceof HTMLInputElement);
+
+    const optionInputMap = {
+      a: document.getElementById('option-a'),
+      b: document.getElementById('option-b'),
+      c: document.getElementById('option-c'),
+      d: document.getElementById('option-d'),
+    };
+
+    let flashTimeout = null;
+
+    const setFormStatus = (message, type = 'pending') => {
+      if (!(formStatus instanceof HTMLElement)) {
+        return;
+      }
+
+      formStatus.hidden = false;
+      formStatus.textContent = message;
+      formStatus.className = `form-status form-status--${type}`;
+    };
+
+    const clearFormStatus = () => {
+      if (!(formStatus instanceof HTMLElement)) {
+        return;
+      }
+
+      formStatus.hidden = true;
+      formStatus.textContent = '';
+      formStatus.className = 'form-status';
+    };
+
+    const showFormFlash = (message) => {
+      if (!(formFlash instanceof HTMLElement)) {
+        return;
+      }
+
+      if (flashTimeout) {
+        window.clearTimeout(flashTimeout);
+      }
+
+      formFlash.hidden = false;
+      formFlash.textContent = `✓ ${message}`;
+      flashTimeout = window.setTimeout(() => {
+        formFlash.hidden = true;
+        formFlash.textContent = '';
+      }, 3000);
+    };
+
+    const setInlineError = (visible) => {
+      if (!(inlineError instanceof HTMLElement)) {
+        return;
+      }
+
+      inlineError.hidden = !visible;
+    };
+
+    const updateCharCount = () => {
+      if (promptTA instanceof HTMLTextAreaElement && charCount instanceof HTMLElement) {
+        charCount.textContent = `${promptTA.value.length} chars`;
+      }
+    };
+
+    const syncUploadZone = () => {
+      if (
+        !(fileInput instanceof HTMLInputElement) ||
+        !(uploadZone instanceof HTMLElement) ||
+        !(uploadDefault instanceof HTMLElement) ||
+        !(uploadSelected instanceof HTMLElement) ||
+        !(uploadFilename instanceof HTMLElement)
+      ) {
+        return;
+      }
+
+      const file = fileInput.files?.[0];
+
+      if (file) {
+        uploadDefault.style.display = 'none';
+        uploadSelected.hidden = false;
+        uploadSelected.style.display = 'block';
+        uploadFilename.textContent = `✓ ${file.name}`;
+        uploadZone.style.borderColor = '#A7F3D0';
+        uploadZone.style.background = '#F0FDF4';
+      } else {
+        uploadDefault.style.display = 'block';
+        uploadSelected.hidden = true;
+        uploadSelected.style.display = 'none';
+        uploadFilename.textContent = '';
+        uploadZone.style.borderColor = '#E2E8F0';
+        uploadZone.style.background = '#FAFBFF';
+      }
+    };
+
+    const clearCreateValidationState = () => {
+      questionForm.querySelectorAll('.is-invalid').forEach((node) => node.classList.remove('is-invalid'));
+      setInlineError(false);
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.classList.remove('shake');
+      }
+    };
+
+    const updatePillPreviews = () => {
+      Object.entries(optionInputMap).forEach(([letter, input]) => {
+        if (!(input instanceof HTMLInputElement)) {
+          return;
+        }
+
+        const preview = document.getElementById(`pill-preview-${letter}`);
+        if (!(preview instanceof HTMLElement)) {
+          return;
+        }
+
+        preview.textContent = input.value.slice(0, 12) || '';
+        preview.hidden = input.value.trim().length === 0;
+      });
+    };
+
+    const validateUniqueOptions = () => {
+      optionFields.forEach((field) => field.setCustomValidity(''));
+
+      const seen = new Map();
+
+      optionFields.forEach((field) => {
+        const value = field.value.trim().toLowerCase();
+
+        if (!value) {
+          return;
+        }
+
+        const duplicateField = seen.get(value);
+
+        if (duplicateField) {
+          const message = 'Each option must be unique.';
+          field.setCustomValidity(message);
+          duplicateField.setCustomValidity(message);
+        } else {
+          seen.set(value, field);
+        }
+      });
+    };
+
+    const resetQuestionForm = () => {
+      questionForm.reset();
+
+      if (orderField instanceof HTMLInputElement) {
+        orderField.value = String(document.querySelectorAll('[data-question-card]').length + 1);
+      }
+
+      questionForm.querySelectorAll('.answer-pill').forEach((pill) => pill.classList.remove('selected'));
+      if (correctInput instanceof HTMLInputElement) {
+        correctInput.value = '';
+      }
+      questionImageUpload.reset();
+      clearFormStatus();
+      clearCreateValidationState();
+      updateCharCount();
+      updatePillPreviews();
+      syncUploadZone();
+      validateUniqueOptions();
+    };
+
+    optionFields.forEach((field) => {
+      field.addEventListener('input', validateUniqueOptions);
+      field.addEventListener('input', () => {
+        field.classList.remove('is-invalid');
+        clearCreateValidationState();
+        updatePillPreviews();
+      });
+      field.addEventListener('blur', validateUniqueOptions);
+    });
+
+    if (promptTA instanceof HTMLTextAreaElement) {
+      promptTA.addEventListener('input', () => {
+        promptTA.classList.remove('is-invalid');
+        clearCreateValidationState();
+        updateCharCount();
+      });
+      updateCharCount();
+    }
+
+    Object.values(optionInputMap).forEach((input) => {
+      if (input instanceof HTMLInputElement) {
+        input.addEventListener('input', updatePillPreviews);
+      }
+    });
+
+    updatePillPreviews();
+    syncUploadZone();
+
+    if (fileInput instanceof HTMLInputElement) {
+      fileInput.addEventListener('change', syncUploadZone);
+    }
+
+    if (removeFile instanceof HTMLButtonElement && fileInput instanceof HTMLInputElement) {
+      removeFile.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        fileInput.value = '';
+        syncUploadZone();
+        questionImageUpload.reset();
+      });
+    }
+
+    questionForm.querySelectorAll('.answer-group--create .answer-pill').forEach((pill) => {
+      if (pill instanceof HTMLButtonElement) {
+        pill.addEventListener('click', () => {
+          if (correctInput instanceof HTMLInputElement) {
+            correctInput.value = pill.dataset.option ?? '';
+          }
+          clearCreateValidationState();
+        });
+      }
+    });
+
+    questionForm.addEventListener('submit', async (event) => {
+      validateUniqueOptions();
+
+      if (!questionForm.reportValidity()) {
+        event.preventDefault();
+        clearCreateValidationState();
+        if (promptTA instanceof HTMLTextAreaElement && !promptTA.value.trim()) {
+          promptTA.classList.add('is-invalid');
+        }
+        optionFields.forEach((field) => {
+          if (!field.value.trim()) {
+            field.classList.add('is-invalid');
+          }
+        });
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.classList.remove('shake');
+          void submitButton.offsetWidth;
+          submitButton.classList.add('shake');
+        }
+        setInlineError(true);
+        return;
+      }
+
+      if (!(correctInput instanceof HTMLInputElement) || !correctInput.value) {
+        event.preventDefault();
+        clearCreateValidationState();
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.classList.remove('shake');
+          void submitButton.offsetWidth;
+          submitButton.classList.add('shake');
+        }
+        setInlineError(true);
+        return;
+      }
+
+      event.preventDefault();
+      clearCreateValidationState();
+
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.disabled = true;
+        submitButton.classList.add('loading');
+        submitButton.textContent = 'Adding...';
+      }
+
+      setFormStatus('Adding question...', 'pending');
+
+      try {
+        await questionImageUpload.uploadSelectedImage();
+
+        const response = await fetch(questionForm.action, {
+          method: 'POST',
+          headers: {
+            'x-requested-with': 'XMLHttpRequest',
+          },
+          body: new FormData(questionForm),
+        });
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        const payload = isJson
+          ? await response.json().catch(() => ({ message: 'Unexpected response from the server.' }))
+          : { message: response.ok ? '' : await response.text() };
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to save question.');
+        }
+
+        const createdQuestion = payload.question;
+
+        if (!createdQuestion) {
+          throw new Error('Question was created but the server did not return the new item.');
+        }
+
+        let targetList = questionList;
+
+        if (!(targetList instanceof HTMLElement)) {
+          const newList = document.createElement('div');
+          newList.className = 'question-list';
+          newList.setAttribute('data-question-list', '');
+          questionsZone?.appendChild(newList);
+          targetList = newList;
+          questionList = newList;
+        }
+
+        const newCard = createQuestionCardElement(createdQuestion);
+        targetList.appendChild(newCard);
+        initializeQuestionCard(newCard);
+        syncQuestionNumbers();
+        resetQuestionForm();
+        clearFormStatus();
+        showFormFlash('Question added successfully');
+        newCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (error) {
+        setFormStatus(error instanceof Error ? error.message : 'Failed to save question.', 'error');
+      } finally {
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = false;
+          submitButton.classList.remove('loading');
+          submitButton.textContent = '+ Add Question';
+        }
+      }
+    });
+  }
+
+  Array.from(document.querySelectorAll('[data-question-card]')).forEach((card) => {
+    initializeQuestionCard(card);
+  });
+
+  if (pdfImportForm instanceof HTMLFormElement) {
+    const status = pdfImportForm.querySelector('[data-pdf-import-status]');
+    const submitButton = pdfImportForm.querySelector('[data-pdf-import-button]');
+    const reportLink = pdfImportForm.querySelector('[data-pdf-report-link]');
+    const pdfDropzone = pdfImportForm.querySelector('[data-pdf-dropzone]');
+    const pdfInput = pdfImportForm.querySelector('input[name="pdf"]');
+    const pdfLabel = pdfImportForm.querySelector('[data-pdf-dropzone-label]');
+    let reportUrl = null;
+
+    const syncPdfLabel = () => {
+      if (!(pdfLabel instanceof HTMLElement) || !(pdfInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      const file = pdfInput.files?.[0];
+      pdfLabel.textContent = file ? `✓ ${file.name}` : 'Drop PDF here or click to browse';
+
+      if (pdfDropzone instanceof HTMLElement) {
+        pdfDropzone.classList.toggle('has-file', Boolean(file));
+      }
+    };
+
+    const revokeReportUrl = () => {
+      if (reportUrl) {
+        URL.revokeObjectURL(reportUrl);
+        reportUrl = null;
+      }
+    };
+
+    const buildSkippedReportCsv = (skipped) => {
+      const rows = [
+        ['question_number', 'reason', 'prompt_preview'],
+        ...skipped.map((item) => [
+          String(item.questionNumber ?? ''),
+          String(item.reason ?? ''),
+          String(item.prompt ?? ''),
+        ]),
+      ];
+
+      return rows
+        .map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(','))
+        .join('\n');
+    };
+
+    if (pdfInput instanceof HTMLInputElement) {
+      pdfInput.addEventListener('change', syncPdfLabel);
+    }
+
+    pdfImportForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      if (!pdfImportForm.reportValidity()) {
+        return;
+      }
+
+      revokeReportUrl();
+
+      if (reportLink instanceof HTMLAnchorElement) {
+        reportLink.hidden = true;
+        reportLink.removeAttribute('href');
+        reportLink.removeAttribute('download');
+      }
+
+      if (status instanceof HTMLElement) {
+        status.hidden = false;
+        status.textContent = 'Importing questions from PDF...';
+        status.className = 'import-status import-status--pending';
+      }
+
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.disabled = true;
+      }
+
+      try {
+        const response = await fetch(pdfImportForm.action, {
+          method: 'POST',
+          body: new FormData(pdfImportForm),
+        });
+
+        const payload = await response.json().catch(() => ({ message: 'Unexpected response from the server.' }));
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to import the PDF.');
+        }
+
+        const skipped = Array.isArray(payload.skipped) ? payload.skipped : [];
+
+        if (status instanceof HTMLElement) {
+          status.textContent = payload.message || 'Questions imported successfully.';
+          status.className = 'import-status import-status--success';
+        }
+
+        if (skipped.length && reportLink instanceof HTMLAnchorElement) {
+          const csv = buildSkippedReportCsv(skipped);
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+          reportUrl = URL.createObjectURL(blob);
+          const sourceName = payload.sourceFileName || 'question-import';
+
+          reportLink.href = reportUrl;
+          reportLink.download = `${sourceName.replace(/\.pdf$/i, '')}-skipped-questions.csv`;
+          reportLink.hidden = false;
+        }
+
+        window.setTimeout(() => window.location.reload(), 800);
+      } catch (error) {
+        if (status instanceof HTMLElement) {
+          status.textContent = error instanceof Error ? error.message : 'Failed to import the PDF.';
+          status.className = 'import-status import-status--error';
+        }
+      } finally {
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = false;
+        }
+      }
+    });
+  }
+
+  if (deleteTestButton instanceof HTMLButtonElement) {
+    deleteTestButton.addEventListener('click', () => {
+      if (!(deleteTestModal instanceof HTMLElement)) {
+        return;
+      }
+
+      deleteTestPending = false;
+      deleteTestModal.hidden = false;
+      deleteTestButton.textContent = 'Delete Test';
+    });
+  }
+
+  if (searchInput instanceof HTMLInputElement) {
+    searchInput.addEventListener('input', applyQuestionFilter);
+  }
+
+  filterPills.forEach((pill) => {
+    if (!(pill instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    pill.addEventListener('click', () => {
+      activeFilter = pill.dataset.filterOption ?? 'all';
+      filterPills.forEach((node) => node.classList.remove('is-active'));
+      pill.classList.add('is-active');
+      applyQuestionFilter();
+    });
+  });
+
+  wireAnswerGroups();
+  toggleEmptyStates();
+</script>
+
+<style>
+  .questions-editor {
+    margin: -24px -28px 0;
+  }
+
+  .meta-bar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .meta-bar__identity,
+  .meta-bar__stats,
+  .meta-bar__actions {
+    min-width: 0;
+  }
+
+  .meta-bar__identity {
+    display: grid;
+    gap: 4px;
+  }
+
+  .meta-bar__breadcrumb {
+    margin: 0;
+    font-size: 0.72rem;
+    color: #9aa5b4;
+  }
+
+  .meta-bar__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #0a0f1e;
+  }
+
+  .meta-bar__subject-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .meta-bar__stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #f8f9ff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #4a5568;
+    white-space: nowrap;
+  }
+
+  .meta-pill--status {
+    background: #fef3c7;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+
+  .meta-pill--published {
+    background: #d1fae5;
+    border-color: #a7f3d0;
+    color: #065f46;
+  }
+
+  .meta-pill--type {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+  }
+
+  .meta-pill--mode {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .meta-bar__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .back-link,
+  .delete-test-link {
+    color: #9aa5b4;
+    font-size: 0.875rem;
+    text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .delete-test-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #fecaca;
+    border-radius: 10px;
+    background: #fff5f5;
+    color: #dc2626;
+    font-weight: 700;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  }
+
+  .delete-test-link:hover {
+    background: #fee2e2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+    transform: translateY(-1px);
+  }
+
+  .delete-test-link:disabled {
+    cursor: wait;
+    opacity: 0.7;
+    transform: none;
+  }
+
+  .publish-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 20px;
+    background: #f5c518;
+    color: #0a0f1e;
+    font-size: 0.875rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .publish-btn:hover,
+  .submit-btn:hover {
+    background: #e6b800;
+  }
+
+  .publish-btn--published {
+    background: #d1fae5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+  }
+
+  .publish-btn--published:hover {
+    background: #b9f3d7;
+  }
+
+  .panel-toggle-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #f3f4f6;
+    border: 1px solid #e2e8f0;
+    color: #6b7280;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .panel-toggle-btn:hover {
+    background: #0a0f1e;
+    border-color: #0a0f1e;
+    color: #fff;
+  }
+
+  .editor-shell {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-width: 0;
+  }
+
+  .questions-zone {
+    flex: 1;
+    min-width: 0;
+    padding: 20px 24px;
+  }
+
+  .search-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 8px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+  }
+
+  .search-filter-bar__icon {
+    color: #9aa5b4;
+    font-size: 0.875rem;
+  }
+
+  .search-filter-bar__input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.875rem;
+    color: #0a0f1e;
+  }
+
+  .search-filter-bar__separator {
+    width: 1px;
+    height: 20px;
+    background: #e2e8f0;
+  }
+
+  .filter-pills {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .filter-pill {
+    border: none;
+    border-radius: 999px;
+    padding: 3px 10px;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .filter-pill.is-active {
+    background: #0a0f1e;
+    color: #fff;
+  }
+
+  .question-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .question-card {
+    position: relative;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 14px;
+    overflow: hidden;
+    transition: all 0.15s ease;
+  }
+
+  .question-card:hover {
+    box-shadow: 0 4px 16px rgba(10, 15, 30, 0.07);
+  }
+
+  .question-card--editing {
+    border-color: #0a0f1e;
+    box-shadow: 0 4px 20px rgba(10, 15, 30, 0.12);
+  }
+
+  .question-accent {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--accent-color, #cbd5e1);
+  }
+
+  .question-card[data-correct-option='a'] {
+    --accent-color: #3b82f6;
+  }
+
+  .question-card[data-correct-option='b'] {
+    --accent-color: #10b981;
+  }
+
+  .question-card[data-correct-option='c'] {
+    --accent-color: #f59e0b;
+  }
+
+  .question-card[data-correct-option='d'] {
+    --accent-color: #8b5cf6;
+  }
+
+  .view-mode,
+  .edit-mode {
+    padding: 12px 16px 14px;
+  }
+
+  .question-card__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .question-badge {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #0a0f1e;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 8px;
+  }
+
+  .question-card__prompt-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .question-prompt {
+    margin: 0;
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    font-weight: 500;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .question-prompt.is-expanded {
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+
+  .expand-prompt-btn {
+    margin-top: 6px;
+    border: none;
+    padding: 0;
+    background: none;
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .question-card__actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .question-card:hover .question-card__actions {
+    opacity: 1;
+  }
+
+  .icon-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #f3f4f6;
+    color: #6b7280;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .icon-btn:hover {
+    background: #eff6ff;
+    color: #3b82f6;
+  }
+
+  .icon-btn--danger:hover {
+    background: #fef2f2;
+    color: #ef4444;
+  }
+
+  .question-card__media {
+    margin: 10px 0 0 24px;
+  }
+
+  .question-card__media img {
+    display: block;
+    width: 100%;
+    max-height: 280px;
+    object-fit: contain;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }
+
+  .question-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 8px 0 0 24px;
+  }
+
+  .option-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    background: #f8f9ff;
+    color: #6b7280;
+  }
+
+  .option-chip--correct.option-chip--a {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .option-chip--correct.option-chip--b {
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .option-chip--correct.option-chip--c {
+    background: #fffbeb;
+    color: #92400e;
+  }
+
+  .option-chip--correct.option-chip--d {
+    background: #f5f3ff;
+    color: #5b21b6;
+  }
+
+  .option-bubble {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #f3f4f6;
+    color: #9ca3af;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .option-chip--correct.option-chip--a .option-bubble,
+  .answer-pill.answer-pill--a.selected {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1d4ed8;
+  }
+
+  .option-chip--correct.option-chip--b .option-bubble,
+  .answer-pill.answer-pill--b.selected {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+    color: #166534;
+  }
+
+  .option-chip--correct.option-chip--c .option-bubble,
+  .answer-pill.answer-pill--c.selected {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+  }
+
+  .option-chip--correct.option-chip--d .option-bubble,
+  .answer-pill.answer-pill--d.selected {
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+    color: #5b21b6;
+  }
+
+  .option-bubble--correct,
+  .option-chip--correct.option-chip--a .option-bubble,
+  .option-chip--correct.option-chip--b .option-bubble,
+  .option-chip--correct.option-chip--c .option-bubble,
+  .option-chip--correct.option-chip--d .option-bubble {
+    color: #fff;
+  }
+
+  .option-chip--correct.option-chip--a .option-bubble {
+    background: #3b82f6;
+  }
+
+  .option-chip--correct.option-chip--b .option-bubble {
+    background: #10b981;
+  }
+
+  .option-chip--correct.option-chip--c .option-bubble {
+    background: #f59e0b;
+  }
+
+  .option-chip--correct.option-chip--d .option-bubble {
+    background: #8b5cf6;
+  }
+
+  .option-text {
+    flex: 1;
+    line-height: 1.4;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .option-status {
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(10, 15, 30, 0.08);
+    color: currentColor;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .pending-answer-chip {
+    margin: 12px 0 0 24px;
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #f8f9ff;
+    color: #6b7280;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .question-explanation {
+    margin: 12px 0 0 24px;
+    padding-top: 12px;
+    border-top: 1px dashed #e2e8f0;
+  }
+
+  .question-explanation strong {
+    display: block;
+    color: #0a0f1e;
+    font-size: 0.75rem;
+    margin-bottom: 4px;
+  }
+
+  .question-explanation p {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+
+  .edit-mode[hidden] {
+    display: none !important;
+  }
+
+  .edit-mode {
+    display: grid;
+    gap: 12px;
+  }
+
+  .edit-mode__head,
+  .edit-mode__actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .editing-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    background: #fef3c7;
+    color: #92400e;
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .cancel-edit-text,
+  .text-btn {
+    border: none;
+    background: none;
+    color: #9aa5b4;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+
+  .field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .field span {
+    color: #4a5568;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .input-field {
+    width: 100%;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 14px;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.875rem;
+    box-sizing: border-box;
+  }
+
+  .input-field:focus {
+    outline: none;
+    border-color: #0a0f1e;
+  }
+
+  .textarea-field {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  .explanation-field {
+    min-height: 60px;
+    resize: vertical;
+  }
+
+  .options-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .option-field:nth-child(1) span {
+    color: #1d4ed8;
+  }
+
+  .option-field:nth-child(2) span {
+    color: #166534;
+  }
+
+  .option-field:nth-child(3) span {
+    color: #92400e;
+  }
+
+  .option-field:nth-child(4) span {
+    color: #5b21b6;
+  }
+
+  .answer-group {
+    display: flex;
+    gap: 8px;
+  }
+
+  .answer-pill {
+    flex: 1;
+    padding: 6px;
+    text-align: center;
+    border-radius: 8px;
+    border: 1.5px solid transparent;
+    background: #f3f4f6;
+    color: #9ca3af;
+    font-weight: 800;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .answer-pill--editor.selected {
+    background: #0a0f1e;
+    color: #f5c518;
+    border-color: #0a0f1e;
+  }
+
+  .answer-group--create {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+  }
+
+  .answer-pill--create {
+    min-width: 0;
+    height: 36px;
+    padding: 0 6px;
+    border-radius: 9px;
+    border: 2px solid;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+
+  .answer-pill__letter {
+    font-size: 0.82rem;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .answer-pill__preview {
+    display: none;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 0.6rem;
+    opacity: 0.7;
+  }
+
+  .answer-pill--create.answer-pill--a {
+    background: #eff6ff;
+    color: #93c5fd;
+    border-color: #dbeafe;
+  }
+
+  .answer-pill--create.answer-pill--b {
+    background: #f0fdf4;
+    color: #6ee7b7;
+    border-color: #d1fae5;
+  }
+
+  .answer-pill--create.answer-pill--c {
+    background: #fffbeb;
+    color: #fcd34d;
+    border-color: #fef3c7;
+  }
+
+  .answer-pill--create.answer-pill--d {
+    background: #f5f3ff;
+    color: #c4b5fd;
+    border-color: #ede9fe;
+  }
+
+  .answer-pill--create.answer-pill--a:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+    border-color: #93c5fd;
+  }
+
+  .answer-pill--create.answer-pill--b:hover {
+    background: #d1fae5;
+    color: #059669;
+    border-color: #6ee7b7;
+  }
+
+  .answer-pill--create.answer-pill--c:hover {
+    background: #fef3c7;
+    color: #d97706;
+    border-color: #fcd34d;
+  }
+
+  .answer-pill--create.answer-pill--d:hover {
+    background: #ede9fe;
+    color: #7c3aed;
+    border-color: #c4b5fd;
+  }
+
+  .answer-pill--create.answer-pill--a.selected {
+    background: #1d4ed8;
+    color: #fff;
+    border-color: #1d4ed8;
+    box-shadow: 0 3px 10px rgba(29, 78, 216, 0.35);
+    transform: scale(1.05);
+  }
+
+  .answer-pill--create.answer-pill--b.selected {
+    background: #059669;
+    color: #fff;
+    border-color: #059669;
+    box-shadow: 0 3px 10px rgba(5, 150, 105, 0.35);
+    transform: scale(1.05);
+  }
+
+  .answer-pill--create.answer-pill--c.selected {
+    background: #d97706;
+    color: #fff;
+    border-color: #d97706;
+    box-shadow: 0 3px 10px rgba(217, 119, 6, 0.35);
+    transform: scale(1.05);
+  }
+
+  .answer-pill--create.answer-pill--d.selected {
+    background: #7c3aed;
+    color: #fff;
+    border-color: #7c3aed;
+    box-shadow: 0 3px 10px rgba(124, 58, 237, 0.35);
+    transform: scale(1.05);
+  }
+
+  .order-field {
+    max-width: 180px;
+  }
+
+  .options-stack {
+    display: grid;
+    gap: 7px;
+  }
+
+  .option-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .option-row__badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 800;
+  }
+
+  .option-row--a .option-row__badge {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+
+  .option-row--b .option-row__badge {
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .option-row--c .option-row__badge {
+    background: #fffbeb;
+    color: #92400e;
+  }
+
+  .option-row--d .option-row__badge {
+    background: #f5f3ff;
+    color: #5b21b6;
+  }
+
+  .option-row__input {
+    flex: 1;
+    height: 34px;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+    background: #f8f9ff;
+    transition: border 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .option-row--a .option-row__input:focus {
+    border-color: #3b82f6;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+  }
+
+  .option-row--b .option-row__input:focus {
+    border-color: #10b981;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+  }
+
+  .option-row--c .option-row__input:focus {
+    border-color: #f59e0b;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.1);
+  }
+
+  .option-row--d .option-row__input:focus {
+    border-color: #8b5cf6;
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+  }
+
+  .prompt-textarea,
+  .explanation-field--create,
+  .order-row__input {
+    background: #f8f9ff;
+    transition: border 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .prompt-textarea {
+    min-height: 90px;
+    line-height: 1.6;
+    font-family: inherit;
+  }
+
+  .prompt-textarea:focus,
+  .explanation-field--create:focus,
+  .order-row__input:focus {
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(10, 15, 30, 0.06);
+  }
+
+  .explanation-field--create {
+    min-height: 60px;
+    font-size: 0.82rem;
+  }
+
+  .order-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .order-row__input {
+    width: 70px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+
+  .form-submit-wrap {
+    margin-top: 14px;
+  }
+
+  .form-inline-error {
+    margin: 6px 0 0;
+    text-align: center;
+    font-size: 0.72rem;
+    color: #ef4444;
+  }
+
+  .add-question-card .is-invalid {
+    border-color: #ef4444 !important;
+    background: #fef2f2 !important;
+    box-shadow: none !important;
+  }
+
+  .shake {
+    animation: shake 0.4s ease;
+  }
+
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    20%,
+    60% {
+      transform: translateX(-4px);
+    }
+
+    40%,
+    80% {
+      transform: translateX(4px);
+    }
+  }
+
+  .right-panel {
+    width: 360px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 120px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    padding: 0 24px 0 0;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+  }
+
+  .panel-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+
+  .panel-card__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .panel-card__header--blue {
+    background: linear-gradient(135deg, #f8f9ff, #eef0ff);
+  }
+
+  .panel-card__header--amber {
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  }
+
+  .panel-card__accent {
+    width: 4px;
+    min-height: 38px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+
+  .panel-card__accent--dark {
+    background: #0a0f1e;
+  }
+
+  .panel-card__accent--amber {
+    background: #f5c518;
+  }
+
+  .panel-card__eyebrow {
+    margin: 0 0 2px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #9aa5b4;
+  }
+
+  .panel-card__eyebrow--amber {
+    color: #92400e;
+  }
+
+  .panel-card__header h2 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #0a0f1e;
+  }
+
+  .question-form {
+    display: grid;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .add-question-card .question-form {
+    gap: 0;
+  }
+
+  .form-flash[hidden] {
+    display: none;
+  }
+
+  .form-flash {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    border: 1px solid #a7f3d0;
+    border-radius: 8px;
+    background: #d1fae5;
+    color: #065f46;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .form-section {
+    display: grid;
+    gap: 10px;
+  }
+
+  .section-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .section-label-row--single {
+    margin-bottom: 8px;
+  }
+
+  .section-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .section-counter,
+  .section-optional,
+  .order-row__hint {
+    font-size: 0.68rem;
+    color: #9aa5b4;
+  }
+
+  .section-optional {
+    margin-left: 4px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .form-divider {
+    height: 1px;
+    margin: 12px 0;
+    background: #f1f3f9;
+  }
+
+  .image-upload-panel {
+    display: grid;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px dashed #cbd5e1;
+    background: #f8fafc;
+  }
+
+  .image-upload-panel--create {
+    padding: 0;
+    border: none;
+    background: transparent;
+  }
+
+  .upload-zone {
+    position: relative;
+    display: block;
+    border: 1.5px dashed #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: #fafbff;
+  }
+
+  .upload-zone:hover {
+    border-color: #f5c518;
+    background: #fffbeb;
+  }
+
+  .upload-zone__default,
+  .upload-zone__selected {
+    display: block;
+  }
+
+  .upload-zone__selected[hidden] {
+    display: none !important;
+  }
+
+  .upload-zone__emoji {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 1rem;
+  }
+
+  .upload-zone__title {
+    display: block;
+    margin-top: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #6b7280;
+  }
+
+  .upload-zone__hint {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.65rem;
+    color: #9aa5b4;
+  }
+
+  .upload-zone__filename {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #065f46;
+  }
+
+  .upload-zone__remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 16px;
+    height: 16px;
+    border: none;
+    border-radius: 50%;
+    background: #fee2e2;
+    color: #991b1b;
+    font-size: 0.6rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+
+  .upload-zone__input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .upload-status,
+  .form-status,
+  .import-status {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .upload-status--pending,
+  .form-status--pending,
+  .import-status--pending {
+    background: #fffbeb;
+    color: #92400e;
+  }
+
+  .upload-status--success,
+  .form-status--success,
+  .import-status--success {
+    background: #ecfdf5;
+    color: #065f46;
+  }
+
+  .upload-status--error,
+  .form-status--error,
+  .import-status--error {
+    background: #fef2f2;
+    color: #b91c1c;
+  }
+
+  .image-preview {
+    padding: 10px;
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .image-preview img {
+    display: block;
+    width: 100%;
+    max-height: 240px;
+    object-fit: contain;
+    border-radius: 10px;
+  }
+
+  .image-preview--create {
+    margin-top: 10px;
+  }
+
+  .submit-btn,
+  .secondary-btn {
+    width: 100%;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 0.875rem;
+    font-weight: 800;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  .submit-btn {
+    border: none;
+    background: #f5c518;
+    color: #0a0f1e;
+  }
+
+  .submit-btn:disabled {
+    cursor: wait;
+    opacity: 0.75;
+  }
+
+  .submit-btn--create {
+    margin-top: 16px;
+    height: 44px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .submit-btn--create:not(.loading):hover {
+    background: #e6b800;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(245, 197, 24, 0.4);
+  }
+
+  .submit-btn--create.loading {
+    background: #e6b800;
+    cursor: not-allowed;
+  }
+
+  .secondary-btn {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    color: #4a5568;
+  }
+
+  .secondary-btn:hover {
+    border-color: #0a0f1e;
+    color: #0a0f1e;
+  }
+
+  .pdf-dropzone {
+    display: grid;
+    gap: 8px;
+    justify-items: center;
+    border: 2px dashed #e2e8f0;
+    border-radius: 10px;
+    padding: 20px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .pdf-dropzone:hover,
+  .pdf-dropzone.has-file {
+    border-color: #f5c518;
+    background: #fffbeb;
+  }
+
+  .pdf-dropzone.has-file {
+    border-color: #a7f3d0;
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .pdf-dropzone__input {
+    display: none;
+  }
+
+  .pdf-dropzone__icon {
+    font-size: 1.5rem;
+  }
+
+  .pdf-dropzone__text {
+    font-size: 0.78rem;
+    color: #9aa5b4;
+    font-weight: 500;
+  }
+
+  .pdf-dropzone.has-file .pdf-dropzone__text {
+    color: #166534;
+  }
+
+  .format-box {
+    background: #f8f9ff;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .format-box__label {
+    margin: 0 0 6px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9aa5b4;
+  }
+
+  .format-box pre {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #f3f4f6;
+    color: #4a5568;
+    font-size: 0.72rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .report-link[hidden] {
+    display: none;
+  }
+
+  .empty-state {
+    background: #fff;
+    border: 2px dashed #e2e8f0;
+    border-radius: 16px;
+    padding: 60px 24px;
+    text-align: center;
+  }
+
+  .empty-state--filtered {
+    margin-top: 16px;
+  }
+
+  .empty-state__icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+  }
+
+  .empty-state h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .empty-state p {
+    margin: 4px 0 0;
+    color: #6b7280;
+    font-size: 0.82rem;
+  }
+
+  .empty-state__arrow {
+    margin-top: 12px;
+    color: #f5c518;
+    font-size: 1.2rem;
+    animation: pulseArrow 1.5s infinite;
+  }
+
+  .delete-modal[hidden] {
+    display: none;
+  }
+
+  .delete-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+
+  .delete-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(4px);
+  }
+
+  .delete-modal__dialog {
+    position: relative;
+    width: min(100%, 440px);
+    padding: 24px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf5 100%);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 32px 80px rgba(15, 23, 42, 0.24);
+  }
+
+  .delete-modal__dialog--danger {
+    background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%);
+  }
+
+  .delete-modal__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 14px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+    color: #b91c1c;
+    font-size: 1.15rem;
+    font-weight: 900;
+  }
+
+  .delete-modal__icon--danger {
+    background: linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%);
+    box-shadow: 0 10px 24px rgba(239, 68, 68, 0.18);
+  }
+
+  .delete-modal__dialog h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.45rem;
+    line-height: 1.2;
+  }
+
+  .delete-modal__text,
+  .delete-modal__subtext {
+    margin: 12px 0 0;
+    line-height: 1.6;
+  }
+
+  .delete-modal__text {
+    color: #1e293b;
+    font-size: 0.97rem;
+  }
+
+  .delete-modal__subtext {
+    color: #64748b;
+    font-size: 0.88rem;
+  }
+
+  .delete-modal__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .delete-modal__confirm {
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+    color: #fff;
+  }
+
+  .delete-modal__confirm:hover {
+    background: #dc2626;
+  }
+
+  @keyframes pulseArrow {
+    0%,
+    100% {
+      opacity: 0.55;
+      transform: translateX(0);
+    }
+
+    50% {
+      opacity: 1;
+      transform: translateX(4px);
+    }
+  }
+
+  @media (max-width: 1180px) {
+    .meta-bar {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .meta-bar__stats,
+    .meta-bar__actions {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 1080px) {
+    .editor-shell {
+      flex-direction: column;
+    }
+
+    .right-panel {
+      position: static;
+      width: 100% !important;
+      max-height: none;
+      padding: 0 24px 24px !important;
+      overflow: visible !important;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .questions-editor {
+      margin: -20px -16px 0;
+    }
+
+    .meta-bar,
+    .questions-zone,
+    .right-panel {
+      padding-left: 16px !important;
+      padding-right: 16px !important;
+    }
+
+    .search-filter-bar {
+      flex-wrap: wrap;
+    }
+
+    .search-filter-bar__separator {
+      display: none;
+    }
+
+    .question-card__header {
+      flex-direction: column;
+    }
+
+    .question-card__actions {
+      opacity: 1;
+    }
+
+    .question-options,
+    .options-grid {
+      grid-template-columns: 1fr;
+      padding-left: 0;
+    }
+
+    .question-card__media,
+    .pending-answer-chip,
+    .question-explanation {
+      margin-left: 0;
+    }
+
+    .answer-group,
+    .edit-mode__actions,
+    .delete-modal__actions {
+      grid-template-columns: 1fr;
+      flex-direction: column;
+    }
+
+    .order-field {
+      max-width: none;
+    }
+  }
+</style>

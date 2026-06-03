@@ -1,0 +1,200 @@
+---
+export const prerender = false;
+
+import { asc, eq } from 'drizzle-orm';
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { db, questions, subjects, tests, topics } from '../../db';
+import { requireAuth } from '../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const admin = authResult;
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+
+const allQuestions = await db
+  .select({
+    id: questions.id,
+    testId: tests.id,
+    order: questions.order,
+    prompt: questions.prompt,
+    correctOption: questions.correctOption,
+    testTitle: tests.title,
+    subjectName: subjects.name,
+    topicName: topics.name,
+  })
+  .from(questions)
+  .innerJoin(tests, eq(questions.testId, tests.id))
+  .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+  .leftJoin(topics, eq(tests.topicId, topics.id))
+  .orderBy(asc(tests.title), asc(questions.order));
+
+const filteredQuestions = allQuestions.filter((question) => {
+  if (!query) {
+    return true;
+  }
+
+  return (
+    question.prompt.toLowerCase().includes(query.toLowerCase()) ||
+    question.testTitle.toLowerCase().includes(query.toLowerCase()) ||
+    (question.subjectName ?? '').toLowerCase().includes(query.toLowerCase()) ||
+    (question.topicName ?? '').toLowerCase().includes(query.toLowerCase())
+  );
+});
+---
+
+<AdminLayout
+  title="Admin Questions | Dream Neet Academy"
+  pageTitle="Questions"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <section class="filters-card">
+    <form action="/admin/questions" method="GET" class="filters-form">
+      <label class="search-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input type="search" name="q" value={query} placeholder="Search prompts, tests, subjects, or topics" />
+      </label>
+    </form>
+  </section>
+
+  {filteredQuestions.length ? (
+    <section class="question-stack">
+      {filteredQuestions.map((question) => (
+        <article class="question-card">
+          <div class="question-card__head">
+            <span class="question-order">Q{question.order}</span>
+            <a href={`/admin/tests/${question.testId}`} class="question-tag">{question.testTitle}</a>
+          </div>
+          <h2>{question.prompt}</h2>
+          <p>{question.subjectName ?? 'General'} · {question.topicName ?? 'No topic'}</p>
+          <span class:list={['correct-pill', { 'correct-pill--pending': !question.correctOption }]}>
+            {question.correctOption ? `Correct: ${question.correctOption.toUpperCase()}` : 'Answer key pending'}
+          </span>
+        </article>
+      ))}
+    </section>
+  ) : (
+    <div class="empty-state">No questions matched this search.</div>
+  )}
+</AdminLayout>
+
+<style>
+  .filters-card,
+  .question-card,
+  .empty-state {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+  }
+
+  .filters-card {
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+
+  .filters-form,
+  .search-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .search-field {
+    width: 100%;
+  }
+
+  .search-field svg {
+    width: 18px;
+    height: 18px;
+    stroke: #9aa5b4;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  .search-field input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.9rem;
+  }
+
+  .question-stack {
+    display: grid;
+    gap: 10px;
+  }
+
+  .question-card {
+    padding: 16px 18px;
+  }
+
+  .question-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .question-order {
+    display: inline-flex;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: #0a0f1e;
+    color: #fff;
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .question-tag {
+    color: #0a0f1e;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .question-card h2 {
+    margin: 0;
+    color: #0a0f1e;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .question-card p {
+    margin: 6px 0 0;
+    color: #9aa5b4;
+    font-size: 0.8rem;
+  }
+
+  .correct-pill {
+    display: inline-flex;
+    margin-top: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+
+  .empty-state {
+    padding: 24px 20px;
+    color: #9aa5b4;
+    font-size: 0.875rem;
+  }
+
+  .correct-pill--pending {
+    background: #eff6ff;
+    color: #1d4ed8;
+  }
+</style>

@@ -1,0 +1,1388 @@
+---
+export const prerender = false;
+
+import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
+
+import Base from '../../layouts/Base.astro';
+import { db, subjects, testAttempts, tests, topics } from '../../db';
+import { requireAuth } from '../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+
+const [
+  allSubjects,
+  topicCountRows,
+  testCountRows,
+  submittedAttemptRows,
+  topicProgressRows,
+  recentAttempts,
+] = await Promise.all([
+  db.select().from(subjects).orderBy(asc(subjects.order)),
+  db
+    .select({
+      subjectId: topics.subjectId,
+      topicCount: sql<number>`count(*)::int`,
+    })
+    .from(topics)
+    .groupBy(topics.subjectId),
+  db
+    .select({
+      subjectId: tests.subjectId,
+      testCount: sql<number>`count(*)::int`,
+    })
+    .from(tests)
+    .groupBy(tests.subjectId),
+  db
+    .select({
+      score: testAttempts.score,
+      totalQuestions: testAttempts.totalQuestions,
+      submittedAt: testAttempts.submittedAt,
+    })
+    .from(testAttempts)
+    .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt))),
+  db
+    .select({
+      subjectId: tests.subjectId,
+      topicId: tests.topicId,
+      submittedAt: testAttempts.submittedAt,
+    })
+    .from(testAttempts)
+    .innerJoin(tests, eq(testAttempts.testId, tests.id))
+    .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt))),
+  db
+    .select({
+      id: testAttempts.id,
+      score: testAttempts.score,
+      totalQuestions: testAttempts.totalQuestions,
+      submittedAt: testAttempts.submittedAt,
+      testTitle: tests.title,
+      subjectName: subjects.name,
+    })
+    .from(testAttempts)
+    .innerJoin(tests, eq(testAttempts.testId, tests.id))
+    .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+    .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt)))
+    .orderBy(desc(testAttempts.submittedAt))
+    .limit(5),
+]);
+
+const now = new Date();
+const dayMs = 24 * 60 * 60 * 1000;
+const weekAgo = new Date(now.getTime() - 7 * dayMs);
+const twoWeeksAgo = new Date(now.getTime() - 14 * dayMs);
+
+const fullNameParts = profile.fullName.trim().split(/\s+/).filter(Boolean);
+const firstName = fullNameParts[0] ?? 'Student';
+const lastName = fullNameParts[fullNameParts.length - 1] ?? '';
+const initials = `${firstName[0] ?? 'S'}${lastName[0] ?? firstName[1] ?? ''}`.toUpperCase();
+const dashboardTimeZone = 'Asia/Kolkata';
+
+const currentHour = Number(
+  new Intl.DateTimeFormat('en-IN', {
+    hour: 'numeric',
+    hour12: false,
+    timeZone: dashboardTimeZone,
+  }).format(now)
+);
+
+const greeting =
+  currentHour < 12
+    ? 'Good morning'
+    : currentHour < 17
+      ? 'Good afternoon'
+      : 'Good evening';
+
+const welcomeDate = new Intl.DateTimeFormat('en-IN', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  timeZone: dashboardTimeZone,
+}).format(now);
+
+const tableDateFormatter = new Intl.DateTimeFormat('en-IN', {
+  dateStyle: 'medium',
+});
+
+const subjectTopicCounts = new Map(topicCountRows.map((row) => [row.subjectId, row.topicCount]));
+const subjectTestCounts = new Map(
+  testCountRows
+    .filter((row): row is { subjectId: string; testCount: number } => Boolean(row.subjectId))
+    .map((row) => [row.subjectId, row.testCount])
+);
+
+const subjectAttemptedTopics = topicProgressRows.reduce((map, row) => {
+  if (!row.subjectId || !row.topicId) {
+    return map;
+  }
+
+  const topicIds = map.get(row.subjectId) ?? new Set<string>();
+  topicIds.add(row.topicId);
+  map.set(row.subjectId, topicIds);
+  return map;
+}, new Map<string, Set<string>>());
+
+const topicsCovered = new Set(
+  topicProgressRows
+    .map((row) => row.topicId)
+    .filter((topicId): topicId is string => Boolean(topicId))
+).size;
+
+const topicsCoveredThisWeek = new Set(
+  topicProgressRows
+    .filter((row) => row.submittedAt && row.submittedAt >= weekAgo)
+    .map((row) => row.topicId)
+    .filter((topicId): topicId is string => Boolean(topicId))
+).size;
+
+const topicsCoveredPreviousWeek = new Set(
+  topicProgressRows
+    .filter((row) => row.submittedAt && row.submittedAt >= twoWeeksAgo && row.submittedAt < weekAgo)
+    .map((row) => row.topicId)
+    .filter((topicId): topicId is string => Boolean(topicId))
+).size;
+
+const totalTestsAttempted = submittedAttemptRows.length;
+const testsThisWeek = submittedAttemptRows.filter((attempt) => attempt.submittedAt && attempt.submittedAt >= weekAgo).length;
+const testsPreviousWeek = submittedAttemptRows.filter(
+  (attempt) => attempt.submittedAt && attempt.submittedAt >= twoWeeksAgo && attempt.submittedAt < weekAgo
+).length;
+
+function averagePercent(
+  attempts: Array<{ score: number | null; totalQuestions: number | null; submittedAt?: Date | null }>
+) {
+  if (attempts.length === 0) {
+    return 0;
+  }
+
+  const total = attempts.reduce((sum, attempt) => {
+    const totalQuestions = attempt.totalQuestions ?? 0;
+    const score = attempt.score ?? 0;
+    return totalQuestions > 0 ? sum + (score / totalQuestions) * 100 : sum;
+  }, 0);
+
+  return Math.round(total / attempts.length);
+}
+
+const averageScore = averagePercent(submittedAttemptRows);
+const averageScoreThisWeek = averagePercent(
+  submittedAttemptRows.filter((attempt) => attempt.submittedAt && attempt.submittedAt >= weekAgo)
+);
+const averageScorePreviousWeek = averagePercent(
+  submittedAttemptRows.filter((attempt) => attempt.submittedAt && attempt.submittedAt >= twoWeeksAgo && attempt.submittedAt < weekAgo)
+);
+
+const distinctAttemptDays = Array.from(
+  new Set(
+    submittedAttemptRows
+      .map((attempt) => attempt.submittedAt)
+      .filter((submittedAt): submittedAt is Date => Boolean(submittedAt))
+      .map((submittedAt) => submittedAt.toISOString().slice(0, 10))
+  )
+)
+  .sort()
+  .reverse();
+
+let streakDays = 0;
+let previousDay: Date | null = null;
+
+for (const dayKey of distinctAttemptDays) {
+  const currentDay = new Date(`${dayKey}T00:00:00.000Z`);
+
+  if (!previousDay) {
+    streakDays = 1;
+    previousDay = currentDay;
+    continue;
+  }
+
+  const diffDays = Math.round((previousDay.getTime() - currentDay.getTime()) / dayMs);
+
+  if (diffDays === 1) {
+    streakDays += 1;
+    previousDay = currentDay;
+    continue;
+  }
+
+  break;
+}
+
+const streakThisWeek = distinctAttemptDays.filter((dayKey) => new Date(`${dayKey}T00:00:00.000Z`) >= weekAgo).length;
+
+const subjectStyles = {
+  physics: {
+    gradient: 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)',
+    border: '#BFDBFE',
+    iconBg: '#3B82F6',
+    text: '#1E3A8A',
+    meta: '#3B82F6',
+    progress: '#3B82F6',
+    button: '#3B82F6',
+  },
+  chemistry: {
+    gradient: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+    border: '#BBF7D0',
+    iconBg: '#10B981',
+    text: '#14532D',
+    meta: '#059669',
+    progress: '#10B981',
+    button: '#10B981',
+  },
+  biology: {
+    gradient: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
+    border: '#FDE68A',
+    iconBg: '#F59E0B',
+    text: '#78350F',
+    meta: '#D97706',
+    progress: '#F59E0B',
+    button: '#F59E0B',
+  },
+  default: {
+    gradient: 'linear-gradient(135deg, #F8F9FF 0%, #EEF2FF 100%)',
+    border: '#D6DBFF',
+    iconBg: '#2D3A6B',
+    text: '#1A2544',
+    meta: '#2D3A6B',
+    progress: '#2D3A6B',
+    button: '#0A0F1E',
+  },
+} as const;
+
+const preferredSubjectOrder = ['physics', 'chemistry', 'biology'];
+
+const subjectCards = allSubjects
+  .map((subject) => {
+    const key = subject.name.toLowerCase() as keyof typeof subjectStyles;
+    const style = subjectStyles[key] ?? subjectStyles.default;
+    const totalTopics = subjectTopicCounts.get(subject.id) ?? 0;
+    const attemptedTopics = subjectAttemptedTopics.get(subject.id)?.size ?? 0;
+    const totalTests = subjectTestCounts.get(subject.id) ?? 0;
+    const progress = totalTopics > 0 ? Math.round((attemptedTopics / totalTopics) * 100) : 0;
+
+    return {
+      ...subject,
+      style,
+      key,
+      totalTopics,
+      totalTests,
+      progress,
+    };
+  })
+  .sort((a, b) => {
+    const aIndex = preferredSubjectOrder.indexOf(a.name.toLowerCase());
+    const bIndex = preferredSubjectOrder.indexOf(b.name.toLowerCase());
+    const safeA = aIndex === -1 ? preferredSubjectOrder.length : aIndex;
+    const safeB = bIndex === -1 ? preferredSubjectOrder.length : bIndex;
+    return safeA - safeB;
+  })
+  .slice(0, 3);
+
+const recentActivity = recentAttempts.map((attempt) => {
+  const totalQuestions = attempt.totalQuestions ?? 0;
+  const score = attempt.score ?? 0;
+  const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+  return {
+    ...attempt,
+    percent,
+  };
+});
+
+const scoreBadgeClass = (percent: number) => {
+  if (percent >= 70) return 'score-pill score-pill--good';
+  if (percent >= 40) return 'score-pill score-pill--mid';
+  return 'score-pill score-pill--low';
+};
+
+const testsTrend =
+  testsThisWeek > testsPreviousWeek
+    ? `+${testsThisWeek - testsPreviousWeek} this week`
+    : testsThisWeek === testsPreviousWeek
+      ? 'same as last week'
+      : `${testsPreviousWeek - testsThisWeek} fewer than last week`;
+
+const averageTrend =
+  averageScoreThisWeek > averageScorePreviousWeek
+    ? `+${averageScoreThisWeek - averageScorePreviousWeek}% vs last week`
+    : averageScoreThisWeek === averageScorePreviousWeek
+      ? 'same as last week'
+      : `${averageScorePreviousWeek - averageScoreThisWeek}% below last week`;
+
+const streakTrend = streakDays > 0 ? `${streakThisWeek} active days this week` : 'start your streak today';
+
+const topicsTrend =
+  topicsCoveredThisWeek > topicsCoveredPreviousWeek
+    ? `+${topicsCoveredThisWeek - topicsCoveredPreviousWeek} new this week`
+    : topicsCoveredThisWeek === topicsCoveredPreviousWeek
+      ? 'same as last week'
+      : `${topicsCoveredPreviousWeek - topicsCoveredThisWeek} fewer than last week`;
+
+const firstSubjectLink = subjectCards[0] ? `/student/subjects/${subjectCards[0].id}` : '/student';
+---
+
+<Base title="Student Dashboard | Dream Neet Academy">
+  <div class="dashboard-shell">
+    <aside class="sidebar">
+      <div class="sidebar__inner">
+        <div class="sidebar__top">
+          <a href="/student" class="brand">
+            <img src="/images/logo.jpeg" alt="Dream Neet Academy logo" class="brand__logo" />
+            <span class="brand__text">Dream Neet Academy</span>
+          </a>
+
+          <div class="student-card">
+            <div class="student-card__avatar">{initials}</div>
+            <div class="student-card__meta">
+              <div class="student-card__name">{profile.fullName}</div>
+              <span class="student-card__role">Student</span>
+            </div>
+          </div>
+
+          <div class="sidebar__divider"></div>
+        </div>
+
+        <nav class="sidebar__nav" aria-label="Student dashboard">
+          <a href="/student" class="sidebar__link sidebar__link--active">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-5V14h-5v7H4.5A1.5 1.5 0 0 1 3 19.5z"></path>
+            </svg>
+            Dashboard
+          </a>
+          <a href="#subjects" class="sidebar__link">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v16H7.5A2.5 2.5 0 0 0 5 20.5z"></path>
+              <path d="M5 4.5v16"></path>
+              <path d="M8.5 7H16"></path>
+              <path d="M8.5 11H16"></path>
+            </svg>
+            Subjects
+          </a>
+          <a href="/student/analysis" class="sidebar__link">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 19h16"></path>
+              <path d="M7 16V9"></path>
+              <path d="M12 16V5"></path>
+              <path d="M17 16v-4"></path>
+            </svg>
+            Analysis
+          </a>
+        </nav>
+
+        <div class="sidebar__bottom">
+          <form action="/api/auth/logout" method="POST" class="logout-form">
+            <button type="submit" class="logout-btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <path d="m16 17 5-5-5-5"></path>
+                <path d="M21 12H9"></path>
+              </svg>
+              Logout
+            </button>
+          </form>
+        </div>
+      </div>
+    </aside>
+
+    <main class="dashboard-main">
+      <section class="welcome-strip">
+        <div>
+          <h1 class="welcome-strip__title">{greeting}, {firstName}! 👋</h1>
+          <p class="welcome-strip__meta">{welcomeDate} · NEET preparation</p>
+        </div>
+
+        <div class="streak-card">
+          <div class="streak-card__emoji">🔥</div>
+          <div>
+            <p class="streak-card__value">{streakDays} day streak</p>
+            <p class="streak-card__note">Keep it up!</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="stats-grid" aria-label="Study overview">
+        <article class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__icon stat-card__icon--blue">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 19h16"></path>
+                <path d="M7 16V9"></path>
+                <path d="M12 16V5"></path>
+                <path d="M17 16v-4"></path>
+              </svg>
+            </span>
+            <div>
+              <div class="stat-card__value">{totalTestsAttempted}</div>
+              <div class="stat-card__label">Tests Attempted</div>
+            </div>
+          </div>
+          <p class:list={['stat-card__trend', { 'stat-card__trend--up': testsThisWeek > testsPreviousWeek }]}>
+            {testsTrend}
+          </p>
+        </article>
+
+        <article class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__icon stat-card__icon--yellow">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v18"></path>
+                <path d="M7 8.5c0-1.7 2.2-3 5-3s5 1.3 5 3-2.2 3-5 3-5 1.3-5 3 2.2 3 5 3 5-1.3 5-3"></path>
+              </svg>
+            </span>
+            <div>
+              <div class="stat-card__value">{averageScore}%</div>
+              <div class="stat-card__label">Avg Score</div>
+            </div>
+          </div>
+          <p class:list={['stat-card__trend', { 'stat-card__trend--up': averageScoreThisWeek > averageScorePreviousWeek }]}>
+            {averageTrend}
+          </p>
+        </article>
+
+        <article class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__icon stat-card__icon--orange">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3c.7 2.8 3 4.9 5.8 5.6-.9 4.8-4.7 8.6-9.5 9.5C7.6 15.3 9.7 13 12.5 12 13 8.8 10.7 6 7.5 5.5A8.9 8.9 0 0 1 12 3z"></path>
+              </svg>
+            </span>
+            <div>
+              <div class="stat-card__value">{streakDays}</div>
+              <div class="stat-card__label">Study Streak</div>
+            </div>
+          </div>
+          <p class:list={['stat-card__trend', { 'stat-card__trend--up': streakDays > 0 }]}>
+            {streakTrend}
+          </p>
+        </article>
+
+        <article class="stat-card">
+          <div class="stat-card__top">
+            <span class="stat-card__icon stat-card__icon--green">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v16H7.5A2.5 2.5 0 0 0 5 20.5z"></path>
+                <path d="M5 4.5v16"></path>
+                <path d="M8.5 7H16"></path>
+                <path d="M8.5 11H16"></path>
+              </svg>
+            </span>
+            <div>
+              <div class="stat-card__value">{topicsCovered}</div>
+              <div class="stat-card__label">Topics Covered</div>
+            </div>
+          </div>
+          <p class:list={['stat-card__trend', { 'stat-card__trend--up': topicsCoveredThisWeek > topicsCoveredPreviousWeek }]}>
+            {topicsTrend}
+          </p>
+        </article>
+      </section>
+
+      <section id="subjects" class="subjects-section">
+        <div class="section-heading">
+          <h2>Continue Learning</h2>
+          <a href="#subjects">View all →</a>
+        </div>
+
+        {subjectCards.length ? (
+          <div class="subjects-grid">
+            {subjectCards.map((subject) => (
+              <article
+                class="subject-card"
+                style={`background:${subject.style.gradient}; border-color:${subject.style.border};`}
+              >
+                <a
+                  href={`/student/subjects/${subject.id}`}
+                  class="subject-card__link"
+                  aria-label={`Open ${subject.name}`}
+                ></a>
+                <div class="subject-card__top">
+                  <span class="subject-card__icon" style={`background:${subject.style.iconBg};`}>
+                    {
+                      subject.name.toLowerCase() === 'physics' ? (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="12" cy="12" r="1.4"></circle>
+                          <path d="M4 12c2.1-3.6 5-5.5 8-5.5s5.9 1.9 8 5.5c-2.1 3.6-5 5.5-8 5.5S6.1 15.6 4 12z"></path>
+                          <path d="M7.2 5.7c4.2.1 7.5 1.6 9 4.2 1.5 2.6 1 6.1-1 9.7-4.2-.1-7.5-1.6-9-4.2-1.5-2.6-1-6.1 1-9.7z"></path>
+                          <path d="M7.2 18.3c-.1-4.2 1.4-7.6 4-9.1 2.6-1.5 6.1-1.1 9.8.8.1 4.2-1.4 7.6-4 9.1-2.6 1.5-6.1 1.1-9.8-.8z"></path>
+                        </svg>
+                      ) : subject.name.toLowerCase() === 'chemistry' ? (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M10 3v5l-4.8 8.3A3 3 0 0 0 7.8 21h8.4a3 3 0 0 0 2.6-4.7L14 8V3"></path>
+                          <path d="M9 8h6"></path>
+                          <path d="M8.5 15h7"></path>
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 21s-6.5-4.2-6.5-10.3A4.7 4.7 0 0 1 10.2 6c1 .1 1.8.6 1.8.6s.8-.5 1.8-.6a4.7 4.7 0 0 1 4.7 4.7C18.5 16.8 12 21 12 21z"></path>
+                        </svg>
+                      )
+                    }
+                  </span>
+                  <span class="subject-card__badge" style={`color:${subject.style.meta};`}>
+                    {subject.progress}% done
+                  </span>
+                </div>
+
+                <h3 class="subject-card__title" style={`color:${subject.style.text};`}>{subject.name}</h3>
+                <p class="subject-card__meta" style={`color:${subject.style.meta};`}>
+                  {subject.totalTopics} topics · {subject.totalTests} tests
+                </p>
+
+                <div class="subject-card__progress">
+                  <span
+                    class="subject-card__progress-fill"
+                    style={`width:${subject.progress}%; background:${subject.style.progress};`}
+                  ></span>
+                </div>
+
+                <a
+                  href={`/student/subjects/${subject.id}`}
+                  class="subject-card__cta"
+                  style={`background:${subject.style.button};`}
+                >
+                  Continue →
+                </a>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div class="empty-card">
+            No subjects available yet. Your study dashboard will light up here once content is added.
+          </div>
+        )}
+      </section>
+
+      <section class="bottom-grid">
+        <article class="table-card">
+          <div class="table-card__header">
+            <h2>Recent Tests</h2>
+            <a href="/student/analysis">View all</a>
+          </div>
+
+          {recentActivity.length ? (
+            <div class="table-wrap">
+              <table class="activity-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Test</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Date</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentActivity.map((attempt) => (
+                    <tr>
+                      <td>
+                        <div class="activity-table__test">{attempt.testTitle}</div>
+                      </td>
+                      <td>
+                        <span class={scoreBadgeClass(attempt.percent)}>{attempt.percent}%</span>
+                      </td>
+                      <td>{attempt.submittedAt ? tableDateFormatter.format(attempt.submittedAt) : '-'}</td>
+                      <td>
+                        <a href={`/student/attempts/${attempt.id}`} class="review-link">Review →</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div class="table-card__empty">No tests attempted yet — pick a subject above</div>
+          )}
+        </article>
+
+        <aside class="quick-card">
+          <p class="quick-card__eyebrow">Quick Actions</p>
+
+          <a href={firstSubjectLink} class="quick-card__item">
+            <span class="quick-card__icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 4h8l4 4v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
+                <path d="M8 12h8"></path>
+                <path d="M12 8v8"></path>
+              </svg>
+            </span>
+            <span class="quick-card__text">
+              <strong>Take a Practice Test</strong>
+              <small>Choose from 200+ tests</small>
+            </span>
+            <span class="quick-card__arrow">→</span>
+          </a>
+
+          <a href="/student/analysis" class="quick-card__item">
+            <span class="quick-card__icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 19h16"></path>
+                <path d="M7 16V9"></path>
+                <path d="M12 16V5"></path>
+                <path d="M17 16v-4"></path>
+              </svg>
+            </span>
+            <span class="quick-card__text">
+              <strong>View Analysis</strong>
+              <small>See your strengths & weaknesses</small>
+            </span>
+            <span class="quick-card__arrow">→</span>
+          </a>
+
+          <a href={firstSubjectLink} class="quick-card__item">
+            <span class="quick-card__icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v16H7.5A2.5 2.5 0 0 0 5 20.5z"></path>
+                <path d="M5 4.5v16"></path>
+                <path d="M8.5 7H16"></path>
+                <path d="M8.5 11H16"></path>
+              </svg>
+            </span>
+            <span class="quick-card__text">
+              <strong>Study Videos</strong>
+              <small>Watch topic-wise explanations</small>
+            </span>
+            <span class="quick-card__arrow">→</span>
+          </a>
+        </aside>
+      </section>
+    </main>
+  </div>
+</Base>
+
+<style>
+  :global(body) {
+    margin: 0;
+    min-height: 100vh;
+    padding-top: 0;
+    background: #f8f9ff;
+    color: #0a0f1e;
+  }
+
+  :global(main > section) {
+    content-visibility: visible;
+    contain-intrinsic-size: auto;
+  }
+
+  .dashboard-shell {
+    min-height: 100vh;
+    background: #f8f9ff;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 240px;
+    background: #0a0f1e;
+    padding: 24px 0;
+    z-index: 10;
+  }
+
+  .sidebar__inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .sidebar__top {
+    padding: 0 20px;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .brand__logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .brand__text {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .student-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .student-card__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #f5c518, #e6b800);
+    color: #0a0f1e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .student-card__name {
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .student-card__role {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(245, 197, 24, 0.15);
+    color: #f5c518;
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .sidebar__divider {
+    height: 1px;
+    margin: 20px 0;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .sidebar__nav {
+    padding: 0 12px;
+  }
+
+  .sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+
+  .sidebar__link svg,
+  .logout-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  .sidebar__link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+  }
+
+  .sidebar__link--active {
+    background: rgba(245, 197, 24, 0.12);
+    color: #f5c518;
+    border-left: 3px solid #f5c518;
+    padding-left: 9px;
+  }
+
+  .sidebar__bottom {
+    margin-top: auto;
+    padding: 20px;
+  }
+
+  .logout-form {
+    margin: 0;
+  }
+
+  .logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+
+  .logout-btn:hover {
+    color: #ef4444;
+  }
+
+  .dashboard-main {
+    margin-left: 240px;
+    padding: 32px;
+    min-height: 100vh;
+    background: #f8f9ff;
+  }
+
+  .welcome-strip {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    margin-bottom: 28px;
+  }
+
+  .welcome-strip__title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #0a0f1e;
+  }
+
+  .welcome-strip__meta {
+    margin: 4px 0 0;
+    font-size: 0.875rem;
+    color: #9aa5b4;
+  }
+
+  .streak-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0a0f1e 0%, #1a2544 100%);
+    box-shadow: 0 16px 30px rgba(10, 15, 30, 0.18);
+  }
+
+  .streak-card__emoji {
+    font-size: 1.5rem;
+  }
+
+  .streak-card__value {
+    margin: 0;
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .streak-card__note {
+    margin: 2px 0 0;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.75rem;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 20px 24px;
+    box-shadow: 0 1px 4px rgba(10, 15, 30, 0.05);
+  }
+
+  .stat-card__top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .stat-card__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .stat-card__icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .stat-card__icon--blue {
+    background: #eff6ff;
+    color: #2563eb;
+  }
+
+  .stat-card__icon--yellow {
+    background: #fffbeb;
+    color: #d97706;
+  }
+
+  .stat-card__icon--orange {
+    background: #fef3c7;
+    color: #ea580c;
+  }
+
+  .stat-card__icon--green {
+    background: #f0fdf4;
+    color: #16a34a;
+  }
+
+  .stat-card__value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #0a0f1e;
+  }
+
+  .stat-card__label {
+    margin-top: 4px;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #9aa5b4;
+  }
+
+  .stat-card__trend {
+    margin: 14px 0 0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: #94a3b8;
+  }
+
+  .stat-card__trend--up {
+    color: #16a34a;
+  }
+
+  .subjects-section {
+    margin-bottom: 32px;
+  }
+
+  .section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .section-heading h2,
+  .table-card__header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .section-heading a,
+  .table-card__header a,
+  .review-link {
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .subjects-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .subject-card {
+    position: relative;
+    border: 1px solid;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 14px 28px rgba(10, 15, 30, 0.06);
+    transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  }
+
+  .subject-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 32px rgba(10, 15, 30, 0.1);
+  }
+
+  .subject-card:focus-within {
+    border-color: rgba(59, 130, 246, 0.4);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16), 0 18px 32px rgba(10, 15, 30, 0.1);
+  }
+
+  .subject-card__link {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 1;
+  }
+
+  .subject-card__link:focus-visible {
+    outline: none;
+  }
+
+  .subject-card__top {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .subject-card__icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    box-shadow: 0 10px 18px rgba(10, 15, 30, 0.15);
+  }
+
+  .subject-card__icon svg {
+    width: 22px;
+    height: 22px;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .subject-card__badge {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .subject-card__title {
+    position: relative;
+    z-index: 2;
+    margin: 12px 0 4px;
+    font-size: 1.1rem;
+    font-weight: 800;
+  }
+
+  .subject-card__meta {
+    position: relative;
+    z-index: 2;
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  .subject-card__progress {
+    position: relative;
+    z-index: 2;
+    height: 6px;
+    margin: 12px 0 16px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.5);
+    overflow: hidden;
+  }
+
+  .subject-card__progress-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .subject-card__cta {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    box-shadow: 0 10px 18px rgba(10, 15, 30, 0.12);
+  }
+
+  .empty-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    padding: 24px;
+    border-radius: 18px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #64748b;
+    text-align: center;
+  }
+
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  .table-card {
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+  }
+
+  .table-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  .activity-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .activity-table th {
+    padding: 14px 24px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9aa5b4;
+    text-align: left;
+  }
+
+  .activity-table td {
+    padding: 14px 24px;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 0.875rem;
+    vertical-align: middle;
+  }
+
+  .activity-table__test {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #0a0f1e;
+    font-weight: 500;
+  }
+
+  .score-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .score-pill--good {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .score-pill--mid {
+    background: #fffbeb;
+    color: #92400e;
+  }
+
+  .score-pill--low {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .table-card__empty {
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9aa5b4;
+    font-size: 0.875rem;
+    text-align: center;
+    padding: 16px;
+  }
+
+  .quick-card {
+    background: linear-gradient(160deg, #0a0f1e 0%, #1a2544 100%);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 40px rgba(10, 15, 30, 0.2);
+  }
+
+  .quick-card__eyebrow {
+    margin: 0 0 16px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #f5c518;
+  }
+
+  .quick-card__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .quick-card__item:last-child {
+    border-bottom: none;
+  }
+
+  .quick-card__icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .quick-card__icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .quick-card__text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .quick-card__text strong {
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .quick-card__text small {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.75rem;
+  }
+
+  .quick-card__arrow {
+    margin-left: auto;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 1rem;
+  }
+
+  @media (max-width: 1180px) {
+    .stats-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .subjects-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .bottom-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 880px) {
+    .sidebar {
+      position: static;
+      width: auto;
+      padding: 20px 0 12px;
+    }
+
+    .sidebar__inner {
+      height: auto;
+    }
+
+    .sidebar__nav {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .sidebar__link {
+      justify-content: center;
+      margin-bottom: 0;
+    }
+
+    .sidebar__link--active {
+      padding-left: 12px;
+      border-left: none;
+      box-shadow: inset 0 -2px 0 #f5c518;
+    }
+
+    .sidebar__bottom {
+      padding-top: 18px;
+    }
+
+    .dashboard-main {
+      margin-left: 0;
+      padding: 24px 16px 32px;
+    }
+
+    .welcome-strip {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .streak-card {
+      width: fit-content;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .student-card {
+      align-items: flex-start;
+    }
+
+    .sidebar__nav {
+      grid-template-columns: 1fr;
+    }
+
+    .stats-grid,
+    .subjects-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .section-heading,
+    .table-card__header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .activity-table th,
+    .activity-table td {
+      padding: 12px 16px;
+    }
+
+    .activity-table__test {
+      max-width: 140px;
+    }
+  }
+</style>

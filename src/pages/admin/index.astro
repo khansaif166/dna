@@ -1,0 +1,598 @@
+---
+export const prerender = false;
+
+import { count, desc, eq, gte, isNotNull } from 'drizzle-orm';
+
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { db, profiles, testAttempts, tests } from '../../db';
+import { requireAuth } from '../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const admin = authResult;
+
+const startOfToday = new Date();
+startOfToday.setHours(0, 0, 0, 0);
+
+const [
+  studentCountRow,
+  totalTestsRow,
+  publishedTestsRow,
+  attemptsTodayRow,
+  submittedAttempts,
+  recentAttempts,
+] = await Promise.all([
+  db.select({ value: count() }).from(profiles).where(eq(profiles.role, 'student')),
+  db.select({ value: count() }).from(tests),
+  db.select({ value: count() }).from(tests).where(eq(tests.status, 'published')),
+  db.select({ value: count() }).from(testAttempts).where(gte(testAttempts.startedAt, startOfToday)),
+  db
+    .select({
+      studentId: testAttempts.studentId,
+      score: testAttempts.score,
+      totalQuestions: testAttempts.totalQuestions,
+      submittedAt: testAttempts.submittedAt,
+    })
+    .from(testAttempts)
+    .where(isNotNull(testAttempts.submittedAt)),
+  db
+    .select({
+      id: testAttempts.id,
+      studentId: testAttempts.studentId,
+      score: testAttempts.score,
+      totalQuestions: testAttempts.totalQuestions,
+      submittedAt: testAttempts.submittedAt,
+      studentName: profiles.fullName,
+      testTitle: tests.title,
+    })
+    .from(testAttempts)
+    .innerJoin(profiles, eq(testAttempts.studentId, profiles.id))
+    .innerJoin(tests, eq(testAttempts.testId, tests.id))
+    .where(isNotNull(testAttempts.submittedAt))
+    .orderBy(desc(testAttempts.submittedAt))
+    .limit(8),
+]);
+
+const totalStudents = studentCountRow[0]?.value ?? 0;
+const totalTests = totalTestsRow[0]?.value ?? 0;
+const publishedTests = publishedTestsRow[0]?.value ?? 0;
+const attemptsToday = attemptsTodayRow[0]?.value ?? 0;
+
+function averagePercent(attempts: Array<{ score: number | null; totalQuestions: number | null }>) {
+  if (attempts.length === 0) {
+    return 0;
+  }
+
+  const total = attempts.reduce((sum, attempt) => {
+    const score = attempt.score ?? 0;
+    const totalQuestions = attempt.totalQuestions ?? 0;
+    return totalQuestions > 0 ? sum + (score / totalQuestions) * 100 : sum;
+  }, 0);
+
+  return Math.round(total / attempts.length);
+}
+
+const platformAverageScore = averagePercent(submittedAttempts);
+const todayAttempts = submittedAttempts.filter((attempt) => attempt.submittedAt && attempt.submittedAt >= startOfToday);
+const averageScoreToday = averagePercent(todayAttempts);
+const engagedStudents = new Set(submittedAttempts.map((attempt) => attempt.studentId)).size;
+const engagementPercent = totalStudents > 0 ? Math.round((engagedStudents / totalStudents) * 100) : 0;
+const publishedPercent = totalTests > 0 ? Math.round((publishedTests / totalTests) * 100) : 0;
+
+const statCards = [
+  {
+    label: 'Total Students',
+    value: totalStudents,
+    href: '/admin/students',
+    footerTone: 'stat-card__footer--blue',
+    iconClass: 'stat-card__icon--blue',
+    icon: 'students',
+  },
+  {
+    label: 'Active Tests',
+    value: publishedTests,
+    href: '/admin/tests',
+    footerTone: 'stat-card__footer--yellow',
+    iconClass: 'stat-card__icon--yellow',
+    icon: 'tests',
+  },
+  {
+    label: 'Attempts Today',
+    value: attemptsToday,
+    href: '/admin/students',
+    footerTone: 'stat-card__footer--green',
+    iconClass: 'stat-card__icon--green',
+    icon: 'attempts',
+  },
+  {
+    label: 'Avg Platform Score',
+    value: `${platformAverageScore}%`,
+    href: '/admin/students',
+    footerTone: 'stat-card__footer--orange',
+    iconClass: 'stat-card__icon--orange',
+    icon: 'chart',
+  },
+];
+
+const gradients = [
+  'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+  'linear-gradient(135deg, #8B5CF6, #6366F1)',
+  'linear-gradient(135deg, #10B981, #059669)',
+  'linear-gradient(135deg, #F59E0B, #D97706)',
+];
+
+const relativeTime = (date: Date | null) => {
+  if (!date) {
+    return 'Just now';
+  }
+
+  const diff = Date.now() - date.getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < hour) {
+    const minutes = Math.max(1, Math.round(diff / minute));
+    return `${minutes} min ago`;
+  }
+
+  if (diff < day) {
+    const hours = Math.max(1, Math.round(diff / hour));
+    return `${hours} hr ago`;
+  }
+
+  const days = Math.max(1, Math.round(diff / day));
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+};
+
+const initialsFor = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? 'A';
+  const last = parts[1]?.[0] ?? parts[0]?.[1] ?? '';
+  return `${first}${last}`.toUpperCase();
+};
+---
+
+<AdminLayout
+  title="Admin Dashboard | Dream Neet Academy"
+  pageTitle="Overview"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <section class="stats-grid">
+    {statCards.map((stat) => (
+      <a
+        href={stat.href}
+        class="stat-card"
+        aria-label={`Open ${stat.label}`}
+      >
+        <div class:list={['stat-card__icon', stat.iconClass]}>
+          {
+            stat.icon === 'students' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9.5" cy="7" r="3"></circle>
+                <path d="M20 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 4.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+            ) : stat.icon === 'tests' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <path d="M14 2v6h6"></path>
+                <path d="M8 13h8"></path>
+                <path d="M8 17h5"></path>
+              </svg>
+            ) : stat.icon === 'attempts' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m5 12 4 4L19 6"></path>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 19h16"></path>
+                <path d="M7 16V9"></path>
+                <path d="M12 16V5"></path>
+                <path d="M17 16v-4"></path>
+              </svg>
+            )
+          }
+        </div>
+        <div class="stat-card__value">{stat.value}</div>
+        <div class="stat-card__label">{stat.label}</div>
+        <div class:list={['stat-card__footer', stat.footerTone]}></div>
+      </a>
+    ))}
+  </section>
+
+  <section class="overview-grid">
+    <article class="feed-card">
+      <div class="section-head">
+        <h2>Recent Attempts</h2>
+        <a href="/admin/students">View all</a>
+      </div>
+
+      {recentAttempts.length ? (
+        <div class="attempt-feed">
+          {recentAttempts.map((attempt, index) => {
+            const totalQuestions = attempt.totalQuestions ?? 0;
+            const score = attempt.score ?? 0;
+            const percent = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+            return (
+              <a
+                href={`/admin/students/${attempt.studentId}/attempts/${attempt.id}`}
+                class="attempt-row"
+                aria-label={`Review ${attempt.studentName}'s attempt for ${attempt.testTitle}`}
+              >
+                <div
+                  class="attempt-row__avatar"
+                  style={`background:${gradients[index % gradients.length]};`}
+                >
+                  {initialsFor(attempt.studentName)}
+                </div>
+                <div class="attempt-row__meta">
+                  <div class="attempt-row__name">{attempt.studentName}</div>
+                  <div class="attempt-row__test">{attempt.testTitle}</div>
+                </div>
+                <div class="attempt-row__side">
+                  <span
+                    class:list={[
+                      'score-pill',
+                      percent >= 70 ? 'score-pill--good' : percent >= 40 ? 'score-pill--mid' : 'score-pill--low',
+                    ]}
+                  >
+                    {percent}%
+                  </span>
+                  <span class="attempt-row__time">{relativeTime(attempt.submittedAt)}</span>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      ) : (
+        <div class="empty-state">No completed attempts yet. Activity will appear here once students submit tests.</div>
+      )}
+    </article>
+
+    <aside class="health-card">
+      <h2>Platform Health</h2>
+
+      <div class="health-metric">
+        <div class="health-metric__row">
+          <span>Published Tests</span>
+          <strong>{publishedTests} / {totalTests}</strong>
+        </div>
+        <div class="health-bar">
+          <span class="health-bar__fill health-bar__fill--navy" style={`width:${publishedPercent}%;`}></span>
+        </div>
+      </div>
+
+      <div class="health-metric">
+        <div class="health-metric__row">
+          <span>Student Engagement</span>
+          <strong>{engagementPercent}%</strong>
+        </div>
+        <div class="health-bar">
+          <span class="health-bar__fill health-bar__fill--yellow" style={`width:${engagementPercent}%;`}></span>
+        </div>
+      </div>
+
+      <div class="health-metric">
+        <div class="health-metric__row">
+          <span>Avg Score Today</span>
+          <strong>{averageScoreToday}%</strong>
+        </div>
+        <div class="health-bar">
+          <span class="health-bar__fill health-bar__fill--navy" style={`width:${averageScoreToday}%;`}></span>
+        </div>
+      </div>
+    </aside>
+  </section>
+</AdminLayout>
+
+<style>
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card,
+  .feed-card,
+  .health-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+  }
+
+  .stat-card {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    padding: 20px 24px 18px;
+    text-decoration: none;
+    transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+    border-color: #cbd5e1;
+  }
+
+  .stat-card:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.22);
+    outline-offset: 3px;
+  }
+
+  .stat-card__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stat-card__icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .stat-card__icon--blue {
+    background: #eff6ff;
+    color: #2563eb;
+  }
+
+  .stat-card__icon--yellow {
+    background: #fffbeb;
+    color: #d97706;
+  }
+
+  .stat-card__icon--green {
+    background: #f0fdf4;
+    color: #16a34a;
+  }
+
+  .stat-card__icon--orange {
+    background: #fef3c7;
+    color: #ea580c;
+  }
+
+  .stat-card__value {
+    margin-top: 12px;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #0a0f1e;
+  }
+
+  .stat-card__label {
+    margin-top: 2px;
+    font-size: 0.75rem;
+    color: #9aa5b4;
+    font-weight: 500;
+  }
+
+  .stat-card__footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+  }
+
+  .stat-card__footer--blue {
+    background: #1d4ed8;
+  }
+
+  .stat-card__footer--yellow {
+    background: #d97706;
+  }
+
+  .stat-card__footer--green {
+    background: #059669;
+  }
+
+  .stat-card__footer--orange {
+    background: #c2410c;
+  }
+
+  .overview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
+    gap: 16px;
+  }
+
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 20px;
+    border-bottom: 1px solid #f1f3f9;
+  }
+
+  .section-head h2,
+  .health-card h2 {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .section-head a {
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .attempt-feed {
+    display: grid;
+  }
+
+  .attempt-row {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid #f1f3f9;
+    transition: background 0.15s ease;
+  }
+
+  .attempt-row:last-child {
+    border-bottom: none;
+  }
+
+  .attempt-row:hover {
+    background: #fafbff;
+  }
+
+  .attempt-row__avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .attempt-row__name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #0a0f1e;
+  }
+
+  .attempt-row__test {
+    margin-top: 2px;
+    font-size: 0.8rem;
+    color: #9aa5b4;
+  }
+
+  .attempt-row__side {
+    display: grid;
+    justify-items: end;
+    gap: 6px;
+  }
+
+  .attempt-row__time {
+    font-size: 0.75rem;
+    color: #9aa5b4;
+  }
+
+  .score-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .score-pill--good {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .score-pill--mid {
+    background: #fffbeb;
+    color: #92400e;
+  }
+
+  .score-pill--low {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .health-card {
+    padding: 20px;
+  }
+
+  .health-metric + .health-metric {
+    margin-top: 18px;
+  }
+
+  .health-metric__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+
+  .health-metric__row span {
+    color: #4a5568;
+    font-size: 0.84rem;
+    font-weight: 500;
+  }
+
+  .health-metric__row strong {
+    color: #0a0f1e;
+    font-size: 0.84rem;
+  }
+
+  .health-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: #f1f3f9;
+    overflow: hidden;
+  }
+
+  .health-bar__fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .health-bar__fill--navy {
+    background: linear-gradient(90deg, #0a0f1e, #1a2544);
+  }
+
+  .health-bar__fill--yellow {
+    background: linear-gradient(90deg, #f5c518, #e6b800);
+  }
+
+  .empty-state {
+    padding: 28px 20px;
+    color: #9aa5b4;
+    font-size: 0.875rem;
+  }
+
+  @media (max-width: 1120px) {
+    .stats-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .overview-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .stats-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .attempt-row {
+      grid-template-columns: 32px minmax(0, 1fr);
+    }
+
+    .attempt-row__side {
+      grid-column: 2;
+      justify-items: start;
+    }
+  }
+</style>

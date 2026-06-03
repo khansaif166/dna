@@ -1,0 +1,703 @@
+---
+export const prerender = false;
+
+import { asc, eq } from 'drizzle-orm';
+
+import AdminLayout from '../../../../../layouts/AdminLayout.astro';
+import { attemptAnswers, db, profiles, questions, testAttempts, tests } from '../../../../../db';
+import { requireAuth } from '../../../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const admin = authResult;
+const { studentId, attemptId } = Astro.params;
+
+if (!studentId || !attemptId) {
+  return new Response(null, { status: 404 });
+}
+
+const studentRows = await db.select().from(profiles).where(eq(profiles.id, studentId));
+
+if (!studentRows || studentRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [student] = studentRows;
+
+const attemptRows = await db
+  .select({
+    id: testAttempts.id,
+    studentId: testAttempts.studentId,
+    testId: testAttempts.testId,
+    submittedAt: testAttempts.submittedAt,
+    timeTakenSeconds: testAttempts.timeTakenSeconds,
+    score: testAttempts.score,
+    totalQuestions: testAttempts.totalQuestions,
+    testTitle: tests.title,
+  })
+  .from(testAttempts)
+  .innerJoin(tests, eq(testAttempts.testId, tests.id))
+  .where(eq(testAttempts.id, attemptId));
+
+if (!attemptRows || attemptRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [attempt] = attemptRows;
+
+if (attempt.studentId !== student.id) {
+  return new Response(null, { status: 404 });
+}
+
+if (!attempt.submittedAt) {
+  return Astro.redirect(`/admin/students/${student.id}`);
+}
+
+const reviewRows = await db
+  .select({
+    attemptAnswerId: attemptAnswers.id,
+    attemptedAtSeconds: attemptAnswers.attemptedAtSeconds,
+    chosenOption: attemptAnswers.chosenOption,
+    isCorrect: attemptAnswers.isCorrect,
+    questionId: questions.id,
+    prompt: questions.prompt,
+    questionImageUrl: questions.questionImageUrl,
+    optionA: questions.optionA,
+    optionB: questions.optionB,
+    optionC: questions.optionC,
+    optionD: questions.optionD,
+    correctOption: questions.correctOption,
+    explanation: questions.explanation,
+    order: questions.order,
+  })
+  .from(attemptAnswers)
+  .innerJoin(questions, eq(attemptAnswers.questionId, questions.id))
+  .where(eq(attemptAnswers.attemptId, attempt.id))
+  .orderBy(asc(questions.order));
+
+const score = attempt.score ?? 0;
+const total = attempt.totalQuestions ?? reviewRows.length;
+const percentage = total ? Math.round((score / total) * 100) : 0;
+const accuracy = `${percentage}%`;
+
+function formatSeconds(totalSeconds: number | null) {
+  if (totalSeconds === null) {
+    return '-';
+  }
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
+}
+
+function formatAttemptMoment(totalSeconds: number | null) {
+  if (totalSeconds === null) {
+    return 'Not attempted';
+  }
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}m ${seconds}s`;
+}
+
+const submittedFormatter = new Intl.DateTimeFormat('en-IN', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+const optionLabels = {
+  a: 'A',
+  b: 'B',
+  c: 'C',
+  d: 'D',
+} as const;
+
+const optionKeys = ['a', 'b', 'c', 'd'] as const;
+const circleRadius = 50;
+const circumference = 2 * Math.PI * circleRadius;
+const dashOffset = circumference - (percentage / 100) * circumference;
+
+const scoreRingColor =
+  percentage >= 70 ? 'var(--color-yellow)' : percentage >= 40 ? '#10B981' : '#EF4444';
+
+const reviewCards = reviewRows.map((row) => {
+  const status = row.chosenOption === null ? 'skipped' : row.isCorrect ? 'correct' : 'incorrect';
+
+  return {
+    ...row,
+    status,
+  };
+});
+---
+
+<AdminLayout
+  title={`${attempt.testTitle} Review | Admin | Dream Neet Academy`}
+  pageTitle="Attempt Review"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <a slot="actions" href={`/admin/students/${student.id}`} class="top-action">← Back to {student.fullName}</a>
+  <section class="score-hero">
+    <div class="score-hero__inner">
+      <div class="score-hero__content">
+        <span class="hero-pill">Admin Review</span>
+        <h1 class="heading-xl">{attempt.testTitle}</h1>
+        <p class="score-hero__meta">Submitted by {student.fullName} on {submittedFormatter.format(attempt.submittedAt)}</p>
+      </div>
+
+      <div class="score-hero__score">
+        <div class="score-ring">
+          <svg viewBox="0 0 120 120" class="score-ring__svg" aria-hidden="true">
+            <circle class="score-ring__track" cx="60" cy="60" r={circleRadius}></circle>
+            <circle
+              class="score-ring__progress"
+              cx="60"
+              cy="60"
+              r={circleRadius}
+              style={`stroke: ${scoreRingColor}; stroke-dasharray: ${circumference}; stroke-dashoffset: ${dashOffset};`}
+            ></circle>
+          </svg>
+          <div class="score-ring__center">
+            <strong>{percentage}%</strong>
+          </div>
+        </div>
+        <p class="score-hero__subscore">{score} / {total} correct</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats-strip">
+    <div class="stats-strip__inner">
+      <div class="stat-item">
+        <span>Score</span>
+        <strong>{score} / {total}</strong>
+      </div>
+      <div class="stat-item">
+        <span>Time Taken</span>
+        <strong>{formatSeconds(attempt.timeTakenSeconds)}</strong>
+      </div>
+      <div class="stat-item">
+        <span>Accuracy</span>
+        <strong>{accuracy}</strong>
+      </div>
+    </div>
+  </section>
+
+  <section class="review-section">
+    <div class="filter-bar" data-filter-bar>
+      <button type="button" class="filter-pill is-active" data-filter="all">All</button>
+      <button type="button" class="filter-pill" data-filter="correct">Correct</button>
+      <button type="button" class="filter-pill" data-filter="incorrect">Incorrect</button>
+    </div>
+
+    <div class="review-list">
+      {reviewCards.map((row) => (
+        <article class="card review-card" data-status={row.status}>
+          <div class="review-card__header">
+            <div class="review-card__header-main">
+              <span class="question-badge">Q.{row.order}</span>
+              <span
+                class:list={[
+                  'status-badge',
+                  row.status === 'correct'
+                    ? 'badge-success'
+                    : row.status === 'incorrect'
+                      ? 'badge-incorrect'
+                      : 'badge-pending',
+                ]}
+              >
+                {row.status === 'correct' ? 'Correct' : row.status === 'incorrect' ? 'Incorrect' : 'Skipped'}
+              </span>
+            </div>
+            <span class="attempt-badge">
+              {row.attemptedAtSeconds === null ? 'Not attempted' : `Attempted in ${formatAttemptMoment(row.attemptedAtSeconds)}`}
+            </span>
+          </div>
+
+          {row.questionImageUrl && (
+            <div class="review-card__image-wrap">
+              <img src={row.questionImageUrl} alt={`Question ${row.order}`} class="review-card__image" loading="lazy" />
+            </div>
+          )}
+
+          <p class="review-card__prompt">{row.prompt}</p>
+
+          <div class="options-list">
+            {optionKeys.map((key) => {
+              const optionValue =
+                key === 'a'
+                  ? row.optionA
+                  : key === 'b'
+                    ? row.optionB
+                    : key === 'c'
+                      ? row.optionC
+                      : row.optionD;
+
+              const isChosen = row.chosenOption === key;
+              const isCorrectOption = row.correctOption === key;
+              const optionClass = isCorrectOption
+                ? 'option-row option-row--correct'
+                : isChosen && row.chosenOption !== row.correctOption
+                  ? 'option-row option-row--wrong'
+                  : 'option-row option-row--neutral';
+              const bubbleClass = isCorrectOption
+                ? 'option-bubble option-bubble--correct'
+                : isChosen && row.chosenOption !== row.correctOption
+                  ? 'option-bubble option-bubble--wrong'
+                  : 'option-bubble';
+
+              return (
+                <div class={optionClass}>
+                  <span class={bubbleClass}>{optionLabels[key]}</span>
+                  <span class="option-text">{optionValue}</span>
+                  {isCorrectOption && <span class="option-mark option-mark--correct">✓</span>}
+                  {!isCorrectOption && isChosen && row.chosenOption !== row.correctOption && (
+                    <span class="option-mark option-mark--wrong">✗</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {row.explanation && (
+            <div class="explanation-box">
+              <p class="explanation-box__label">Explanation:</p>
+              <p class="explanation-box__text">{row.explanation}</p>
+            </div>
+          )}
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <script is:inline>
+    const filterBar = document.querySelector('[data-filter-bar]');
+    const reviewCards = Array.from(document.querySelectorAll('[data-status]'));
+
+    if (filterBar) {
+      const buttons = Array.from(filterBar.querySelectorAll('[data-filter]'));
+
+      buttons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const filter = button.getAttribute('data-filter');
+
+          buttons.forEach((item) => item.classList.remove('is-active'));
+          button.classList.add('is-active');
+
+          reviewCards.forEach((card) => {
+            const status = card.getAttribute('data-status');
+            const shouldShow =
+              filter === 'all' || status === filter || (filter === 'incorrect' && status === 'skipped');
+
+            card.style.display = shouldShow ? '' : 'none';
+          });
+        });
+      });
+    }
+  </script>
+</AdminLayout>
+
+<style>
+  .top-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 700;
+    transition: all 0.15s ease;
+  }
+
+  .top-action:hover {
+    border-color: #0a0f1e;
+    background: #0a0f1e;
+    color: #fff;
+  }
+
+  .score-hero {
+    background: var(--color-navy);
+    padding: 40px 16px;
+  }
+
+  .score-hero__inner,
+  .stats-strip__inner {
+    margin: 0 auto;
+    max-width: 64rem;
+  }
+
+  .score-hero__inner {
+    align-items: center;
+    display: flex;
+    gap: 2rem;
+    justify-content: space-between;
+  }
+
+  .hero-pill {
+    align-items: center;
+    background: var(--color-yellow);
+    border-radius: 999px;
+    color: var(--color-navy);
+    display: inline-flex;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 6px 12px;
+  }
+
+  .heading-xl,
+  .heading-md {
+    margin: 0;
+  }
+
+  .heading-xl {
+    color: var(--color-surface);
+    font-size: clamp(2rem, 3vw, 2.8rem);
+    font-weight: 800;
+    margin-top: 0.75rem;
+  }
+
+  .heading-md {
+    color: var(--color-navy);
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .score-hero__meta {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.875rem;
+    margin: 0.5rem 0 0;
+  }
+
+  .score-hero__score {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .score-ring {
+    height: 120px;
+    position: relative;
+    width: 120px;
+  }
+
+  .score-ring__svg {
+    height: 120px;
+    transform: rotate(-90deg);
+    width: 120px;
+  }
+
+  .score-ring__track,
+  .score-ring__progress {
+    cx: 60;
+    cy: 60;
+    fill: none;
+    r: 50;
+    stroke-linecap: round;
+    stroke-width: 6;
+  }
+
+  .score-ring__track {
+    stroke: rgba(255, 255, 255, 0.15);
+  }
+
+  .score-ring__progress {
+    transition: stroke-dashoffset 0.4s ease;
+  }
+
+  .score-ring__center {
+    align-items: center;
+    color: var(--color-surface);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    position: absolute;
+  }
+
+  .score-ring__center strong {
+    font-size: 1.75rem;
+    font-weight: 800;
+  }
+
+  .score-hero__subscore {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+    margin: 0.75rem 0 0;
+  }
+
+  .stats-strip {
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    padding: 20px 16px;
+  }
+
+  .stats-strip__inner {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stat-item span {
+    color: var(--color-text-muted);
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.45rem;
+    text-transform: uppercase;
+  }
+
+  .stat-item strong {
+    color: var(--color-navy);
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .review-section {
+    margin: 0 auto;
+    max-width: 56rem;
+    padding: 32px 16px 3.5rem;
+  }
+
+  .filter-bar {
+    backdrop-filter: blur(8px);
+    background: rgba(248, 249, 255, 0.92);
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding: 0.25rem 0;
+    position: sticky;
+    top: 84px;
+    z-index: 10;
+  }
+
+  .filter-pill {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 9px 16px;
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .filter-pill.is-active {
+    background: var(--color-navy);
+    border-color: var(--color-navy);
+    color: var(--color-surface);
+  }
+
+  .review-card {
+    margin-bottom: 16px;
+  }
+
+  .review-card__header {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .review-card__header-main {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .question-badge {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-navy);
+    font-size: 0.9rem;
+    font-weight: 700;
+    padding: 4px 12px;
+  }
+
+  .status-badge {
+    display: inline-flex;
+  }
+
+  .attempt-badge {
+    align-items: center;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-weight: 700;
+    justify-content: center;
+    padding: 4px 12px;
+  }
+
+  .badge-incorrect {
+    align-items: center;
+    background: #fee2e2;
+    border-radius: 999px;
+    color: #991b1b;
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-weight: 600;
+    justify-content: center;
+    padding: 3px 10px;
+  }
+
+  .review-card__prompt {
+    color: var(--color-text);
+    font-size: 1rem;
+    line-height: 1.6;
+    margin: 14px 0;
+  }
+
+  .review-card__image-wrap {
+    margin: 0 0 16px;
+  }
+
+  .review-card__image {
+    display: block;
+    width: 100%;
+    max-height: 340px;
+    object-fit: contain;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid var(--color-border);
+  }
+
+  .options-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .option-row {
+    align-items: center;
+    border-radius: 10px;
+    display: flex;
+    gap: 12px;
+    margin-bottom: 0;
+    padding: 10px 14px;
+  }
+
+  .option-row--correct {
+    background: #d1fae5;
+    border: 1px solid #a7f3d0;
+  }
+
+  .option-row--wrong {
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+  }
+
+  .option-row--neutral {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+  }
+
+  .option-bubble {
+    align-items: center;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    font-size: 0.8rem;
+    font-weight: 700;
+    height: 30px;
+    justify-content: center;
+    width: 30px;
+  }
+
+  .option-bubble--correct {
+    background: #10b981;
+    border-color: #10b981;
+    color: white;
+  }
+
+  .option-bubble--wrong {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+  }
+
+  .option-text {
+    color: var(--color-text);
+    flex: 1;
+    font-size: 0.95rem;
+  }
+
+  .option-mark {
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .option-mark--correct {
+    color: #047857;
+  }
+
+  .option-mark--wrong {
+    color: #b91c1c;
+  }
+
+  .explanation-box {
+    background: #fff7d6;
+    border: 1px solid #fde68a;
+    border-radius: 12px;
+    margin-top: 14px;
+    padding: 14px 16px;
+  }
+
+  .explanation-box__label {
+    color: #92400e;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin: 0 0 6px;
+  }
+
+  .explanation-box__text {
+    color: #7c2d12;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  @media (max-width: 780px) {
+    .score-hero__inner {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+
+    .stats-strip__inner {
+      grid-template-columns: 1fr;
+    }
+
+    .review-card__header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+</style>

@@ -1,0 +1,23 @@
+name: Weekly DB backup
+on:
+  schedule:
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Export tables
+        run: |
+          for table in subjects topics topic_resources tests questions \
+                       profiles test_attempts attempt_answers; do
+            curl -s "${{ secrets.SUPABASE_URL }}/rest/v1/${table}?select=*" \
+              -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+              > ${table}.json
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backup-${{ github.run_id }}
+          path: '*.json'
+          retention-days: 90

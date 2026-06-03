@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1780125937397,
+      "tag": "0000_striped_silver_surfer",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780125937398,
+      "tag": "0001_add_question_image_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780125937399,
+      "tag": "0002_add_attempted_at_seconds",
+      "breakpoints": true
+    }
+  ]
+}

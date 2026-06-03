@@ -1,0 +1,889 @@
+---
+export const prerender = false;
+
+import { asc, count, desc, eq } from 'drizzle-orm';
+
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { db, questions, subTopics, subjects, tests, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'admin');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const admin = authResult;
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+const statusFilter = Astro.url.searchParams.get('status')?.trim() ?? 'all';
+
+const [allSubjects, allTopics, allSubTopics, allTests] = await Promise.all([
+  db.select().from(subjects).orderBy(asc(subjects.order)),
+  db.select().from(topics).orderBy(asc(topics.order)),
+  db.select().from(subTopics).orderBy(asc(subTopics.topicId), asc(subTopics.order)),
+  db
+    .select({
+      id: tests.id,
+      title: tests.title,
+      testType: tests.testType,
+      durationMinutes: tests.durationMinutes,
+      status: tests.status,
+      createdAt: tests.createdAt,
+      subjectName: subjects.name,
+      topicName: topics.name,
+      subTopicName: subTopics.name,
+      questionCount: count(questions.id),
+    })
+    .from(tests)
+    .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+    .leftJoin(topics, eq(tests.topicId, topics.id))
+    .leftJoin(subTopics, eq(tests.subTopicId, subTopics.id))
+    .leftJoin(questions, eq(questions.testId, tests.id))
+    .groupBy(tests.id, subjects.name, topics.name, subTopics.name)
+    .orderBy(desc(tests.createdAt)),
+]);
+
+const filteredTests = allTests.filter((test) => {
+  const matchesQuery =
+    !query ||
+    test.title.toLowerCase().includes(query.toLowerCase()) ||
+    (test.subjectName ?? '').toLowerCase().includes(query.toLowerCase()) ||
+    (test.topicName ?? '').toLowerCase().includes(query.toLowerCase()) ||
+    (test.subTopicName ?? '').toLowerCase().includes(query.toLowerCase());
+  const matchesStatus = statusFilter === 'all' || test.status === statusFilter;
+  return matchesQuery && matchesStatus;
+});
+
+const filterHref = (status: string) => {
+  const params = new URLSearchParams();
+
+  if (query) {
+    params.set('q', query);
+  }
+
+  if (status !== 'all') {
+    params.set('status', status);
+  }
+
+  const search = params.toString();
+  return search ? `/admin/tests?${search}` : '/admin/tests';
+};
+---
+
+<AdminLayout
+  title="Admin Tests | Dream Neet Academy"
+  pageTitle="Tests"
+  userName={admin.fullName}
+  userEmail={Astro.locals.user?.email ?? admin.fullName}
+>
+  <a slot="actions" href="#create-test" class="top-action">+ Add Test</a>
+
+  <section class="filters-card">
+    <form action="/admin/tests" method="GET" class="filters-form">
+      <label class="search-field">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3.5-3.5"></path>
+        </svg>
+        <input type="search" name="q" value={query} placeholder="Search tests, subjects, or topics" />
+      </label>
+
+      <div class="filter-pills" aria-label="Status filters">
+        <a href={filterHref('all')} class:list={['filter-pill', { 'filter-pill--active': statusFilter === 'all' }]}>All</a>
+        <a
+          href={filterHref('published')}
+          class:list={['filter-pill', { 'filter-pill--active': statusFilter === 'published' }]}
+        >
+          Published
+        </a>
+        <a href={filterHref('draft')} class:list={['filter-pill', { 'filter-pill--active': statusFilter === 'draft' }]}>
+          Draft
+        </a>
+      </div>
+    </form>
+  </section>
+
+  <section class="tests-card">
+    <div class="tests-card__header">
+      <div class="tests-card__header-row tests-card__header-row--labels">
+        <span>Test</span>
+        <span>Details</span>
+        <span>Status</span>
+      </div>
+    </div>
+
+    {filteredTests.length ? (
+      <div class="tests-list">
+        {filteredTests.map((test) => (
+          <article class="test-row">
+            <div class="test-row__title-block">
+              <div class="test-row__title-line">
+                <span class:list={['test-row__dot', { 'test-row__dot--published': test.status === 'published' }]}></span>
+                <a href={`/admin/tests/${test.id}`} class="test-row__title">{test.title}</a>
+              </div>
+              <div class="test-row__meta">
+                <span>{test.subjectName ?? 'General'}</span>
+                <span>·</span>
+                <span>{test.topicName ?? 'No chapter'}</span>
+                {test.subTopicName && (
+                  <>
+                    <span>·</span>
+                    <span>{test.subTopicName}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div class="test-row__chips">
+              <span class="meta-chip">{test.questionCount} questions</span>
+              <span class="meta-chip">{test.durationMinutes} min</span>
+            </div>
+
+            <div class="test-row__actions">
+              <span class:list={['status-badge', test.status === 'published' ? 'status-badge--published' : 'status-badge--draft']}>
+                {test.status}
+              </span>
+              <a href={`/admin/tests/${test.id}`} class="edit-link">Edit</a>
+              <form action={`/api/admin/tests/${test.id}/publish`} method="POST">
+                <input type="hidden" name="test_id" value={test.id} />
+                <button
+                  type="submit"
+                  class="toggle-btn"
+                  aria-label={test.status === 'published' ? 'Unpublish test' : 'Publish test'}
+                >
+                  {test.status === 'published' ? '↺' : '↑'}
+                </button>
+              </form>
+              <button type="button" class="delete-row-btn" data-delete-test-row data-test-id={test.id} data-test-title={test.title}>
+                Delete
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <div class="empty-state">No tests matched this filter. Try another search or create a new test.</div>
+    )}
+  </section>
+
+  <section id="create-test" class="create-card">
+    <div class="create-card__head">
+      <div>
+        <p class="eyebrow">Create New</p>
+        <h2>Add Test</h2>
+      </div>
+    </div>
+
+    <form action="/api/admin/tests" method="POST" class="create-form">
+      <label class="field field--wide">
+        <span>Title</span>
+        <input class="input-field" type="text" name="title" required />
+      </label>
+      <label class="field">
+        <span>Subject</span>
+        <select class="input-field input-select" name="subject_id" data-test-subject-select>
+          <option value="">None</option>
+          {allSubjects.map((subject) => (
+            <option value={subject.id}>{subject.name}</option>
+          ))}
+        </select>
+      </label>
+      <label class="field">
+        <span>Chapter</span>
+        <select class="input-field input-select" name="topic_id" data-test-topic-select>
+          <option value="">None</option>
+          {allTopics.map((topic) => (
+            <option value={topic.id} data-subject-id={topic.subjectId}>
+              {topic.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label class="field field--wide">
+        <span>Sub-topic (optional)</span>
+        <select class="input-field input-select" name="sub_topic_id" data-test-subtopic-select>
+          <option value="">Entire chapter</option>
+          {allTopics.map((topic) => {
+            const topicSubTopics = allSubTopics.filter((subTopic) => subTopic.topicId === topic.id);
+
+            if (!topicSubTopics.length) {
+              return null;
+            }
+
+            return (
+              <optgroup label={topic.name}>
+                {topicSubTopics.map((subTopic) => (
+                  <option value={subTopic.id} data-topic-id={topic.id}>
+                    {subTopic.name}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
+        </select>
+      </label>
+      <label class="field">
+        <span>Duration Minutes</span>
+        <input class="input-field" type="number" name="duration_minutes" min="1" required />
+      </label>
+      <label class="field">
+        <span>Test Type</span>
+        <select class="input-field input-select" name="test_type" required>
+          <option value="topic_practice">Topic Practice</option>
+          <option value="mock_exam">Mock Exam</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Attempt Mode</span>
+        <select class="input-field input-select" name="attempt_mode" required>
+          <option value="multiple">Multiple Attempts</option>
+          <option value="single">Single Attempt</option>
+        </select>
+      </label>
+      <button type="submit" class="submit-btn">Create Test →</button>
+    </form>
+  </section>
+
+  <div class="delete-modal" data-delete-test-list-modal hidden>
+    <div class="delete-modal__backdrop" data-delete-test-list-modal-close></div>
+    <div
+      class="delete-modal__dialog delete-modal__dialog--danger"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-test-list-modal-title"
+      aria-describedby="delete-test-list-modal-description"
+    >
+      <div class="delete-modal__icon delete-modal__icon--danger">!</div>
+      <p class="eyebrow">Delete Test</p>
+      <h2 id="delete-test-list-modal-title">Delete this entire test?</h2>
+      <p class="delete-modal__text" id="delete-test-list-modal-description">
+        You are about to permanently delete <strong data-delete-test-list-modal-title-label>this test</strong>.
+      </p>
+      <p class="delete-modal__subtext">
+        This will remove all questions in the test, imported answer keys, and all student attempt history linked to it. This action cannot be undone.
+      </p>
+      <div class="delete-modal__actions">
+        <button type="button" class="cancel-btn" data-delete-test-list-modal-cancel>Keep Test</button>
+        <button type="button" class="submit-btn delete-modal__confirm" data-delete-test-list-modal-confirm>Delete Test</button>
+      </div>
+    </div>
+  </div>
+</AdminLayout>
+
+<script>
+  const subjectSelect = document.querySelector('[data-test-subject-select]');
+  const topicSelect = document.querySelector('[data-test-topic-select]');
+  const subTopicSelect = document.querySelector('[data-test-subtopic-select]');
+  const deleteTestListModal = document.querySelector('[data-delete-test-list-modal]');
+  const deleteTestListModalTitleLabel = document.querySelector('[data-delete-test-list-modal-title-label]');
+  const deleteTestListModalCancel = document.querySelector('[data-delete-test-list-modal-cancel]');
+  const deleteTestListModalConfirm = document.querySelector('[data-delete-test-list-modal-confirm]');
+  const deleteTestListModalCloseTargets = Array.from(document.querySelectorAll('[data-delete-test-list-modal-close]'));
+  let pendingDeleteButton = null;
+  let pendingDeleteTestId = '';
+
+  const syncTopicOptions = () => {
+    if (!(subjectSelect instanceof HTMLSelectElement) || !(topicSelect instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    const selectedSubjectId = subjectSelect.value;
+
+    Array.from(topicSelect.options).forEach((option, index) => {
+      if (index === 0) {
+        option.hidden = false;
+        option.disabled = false;
+        return;
+      }
+
+      const belongsToSubject = !selectedSubjectId || option.dataset.subjectId === selectedSubjectId;
+      option.hidden = !belongsToSubject;
+      option.disabled = !belongsToSubject;
+
+      if (!belongsToSubject && option.selected) {
+        topicSelect.value = '';
+      }
+    });
+  };
+
+  const syncSubTopicOptions = () => {
+    if (!(topicSelect instanceof HTMLSelectElement) || !(subTopicSelect instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    const selectedTopicId = topicSelect.value;
+
+    Array.from(subTopicSelect.children).forEach((child, index) => {
+      if (!(child instanceof HTMLOptGroupElement)) {
+        if (child instanceof HTMLOptionElement && index === 0) {
+          child.hidden = false;
+          child.disabled = false;
+        }
+        return;
+      }
+
+      let visibleCount = 0;
+
+      Array.from(child.children).forEach((option) => {
+        if (!(option instanceof HTMLOptionElement)) {
+          return;
+        }
+
+        const belongsToTopic = !selectedTopicId || option.dataset.topicId === selectedTopicId;
+        option.hidden = !belongsToTopic;
+        option.disabled = !belongsToTopic;
+
+        if (belongsToTopic) {
+          visibleCount += 1;
+        } else if (option.selected) {
+          subTopicSelect.value = '';
+        }
+      });
+
+      child.disabled = visibleCount === 0;
+      child.hidden = visibleCount === 0;
+    });
+  };
+
+  subjectSelect?.addEventListener('change', () => {
+    syncTopicOptions();
+    syncSubTopicOptions();
+  });
+
+  topicSelect?.addEventListener('change', syncSubTopicOptions);
+
+  syncTopicOptions();
+  syncSubTopicOptions();
+
+  const closeDeleteTestListModal = () => {
+    if (deleteTestListModal instanceof HTMLElement) {
+      deleteTestListModal.hidden = true;
+    }
+
+    if (deleteTestListModalConfirm instanceof HTMLButtonElement) {
+      deleteTestListModalConfirm.disabled = false;
+      deleteTestListModalConfirm.textContent = 'Delete Test';
+    }
+
+    if (pendingDeleteButton instanceof HTMLButtonElement) {
+      pendingDeleteButton.disabled = false;
+      pendingDeleteButton.textContent = 'Delete';
+    }
+
+    pendingDeleteButton = null;
+    pendingDeleteTestId = '';
+  };
+
+  deleteTestListModalCloseTargets.forEach((node) => {
+    node.addEventListener('click', closeDeleteTestListModal);
+  });
+
+  if (deleteTestListModalCancel instanceof HTMLButtonElement) {
+    deleteTestListModalCancel.addEventListener('click', closeDeleteTestListModal);
+  }
+
+  if (deleteTestListModalConfirm instanceof HTMLButtonElement) {
+    deleteTestListModalConfirm.addEventListener('click', async () => {
+      if (!pendingDeleteTestId) {
+        closeDeleteTestListModal();
+        return;
+      }
+
+      deleteTestListModalConfirm.disabled = true;
+      deleteTestListModalConfirm.textContent = 'Deleting...';
+
+      if (pendingDeleteButton instanceof HTMLButtonElement) {
+        pendingDeleteButton.disabled = true;
+        pendingDeleteButton.textContent = 'Deleting...';
+      }
+
+      try {
+        const response = await fetch(`/api/admin/tests/${pendingDeleteTestId}`, {
+          method: 'DELETE',
+        });
+        const payload = await response.json().catch(() => ({ message: 'Unexpected response from the server.' }));
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to delete test.');
+        }
+
+        window.location.reload();
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : 'Failed to delete test.');
+        closeDeleteTestListModal();
+      }
+    });
+  }
+
+  const deleteButtons = Array.from(document.querySelectorAll('[data-delete-test-row]'));
+
+  deleteButtons.forEach((button) => {
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.addEventListener('click', () => {
+      const testId = button.dataset.testId;
+      const testTitle = button.dataset.testTitle ?? 'this test';
+
+      if (!testId || !(deleteTestListModal instanceof HTMLElement)) {
+        return;
+      }
+
+      pendingDeleteButton = button;
+      pendingDeleteTestId = testId;
+
+      if (deleteTestListModalTitleLabel instanceof HTMLElement) {
+        deleteTestListModalTitleLabel.textContent = testTitle;
+      }
+
+      button.disabled = true;
+      deleteTestListModal.hidden = false;
+    });
+  });
+</script>
+
+<style>
+  .top-action,
+  .submit-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    background: #0a0f1e;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 9px 14px;
+  }
+
+  .filters-card,
+  .tests-card,
+  .create-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+  }
+
+  .filters-card {
+    padding: 12px 16px;
+    margin-bottom: 16px;
+  }
+
+  .filters-form {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .search-field {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .search-field svg {
+    width: 18px;
+    height: 18px;
+    stroke: #9aa5b4;
+    stroke-width: 1.8;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  .search-field input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.9rem;
+    color: #0a0f1e;
+  }
+
+  .filter-pills {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filter-pill {
+    padding: 4px 14px;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .filter-pill--active {
+    background: #0a0f1e;
+    color: #fff;
+  }
+
+  .tests-card {
+    overflow: hidden;
+  }
+
+  .tests-card__header {
+    background: #f8f9ff;
+    border-bottom: 1px solid #f1f3f9;
+  }
+
+  .tests-card__header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.8fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 12px 20px;
+  }
+
+  .tests-card__header-row--labels {
+    color: #9aa5b4;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .tests-list {
+    display: grid;
+  }
+
+  .test-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.8fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #f1f3f9;
+    transition: background 0.15s ease;
+  }
+
+  .test-row:hover {
+    background: #fafbff;
+  }
+
+  .test-row:last-child {
+    border-bottom: none;
+  }
+
+  .test-row__title-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .test-row__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #9ca3af;
+    flex-shrink: 0;
+  }
+
+  .test-row__dot--published {
+    background: #10b981;
+  }
+
+  .test-row__title {
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .test-row__meta {
+    margin-top: 6px;
+    color: #9aa5b4;
+    font-size: 0.75rem;
+  }
+
+  .test-row__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .meta-chip {
+    background: #f3f4f6;
+    color: #6b7280;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .test-row__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .delete-row-btn {
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 6px 10px;
+    background: #fff1f2;
+    color: #b91c1c;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .delete-row-btn:disabled {
+    cursor: wait;
+    opacity: 0.75;
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+
+  .status-badge--published {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .status-badge--draft {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .edit-link {
+    color: #0a0f1e;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .toggle-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .empty-state {
+    padding: 28px 20px;
+    color: #9aa5b4;
+    font-size: 0.875rem;
+  }
+
+  .create-card {
+    margin-top: 18px;
+    padding: 20px;
+  }
+
+  .delete-modal[hidden] {
+    display: none;
+  }
+
+  .delete-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+  }
+
+  .delete-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.48);
+    backdrop-filter: blur(4px);
+  }
+
+  .delete-modal__dialog {
+    position: relative;
+    width: min(100%, 440px);
+    padding: 24px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf5 100%);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 32px 80px rgba(15, 23, 42, 0.24);
+  }
+
+  .delete-modal__dialog--danger {
+    background: linear-gradient(180deg, #ffffff 0%, #fff7f7 100%);
+  }
+
+  .delete-modal__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 14px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fee2e2 0%, #fecaca 100%);
+    color: #b91c1c;
+    font-size: 1.15rem;
+    font-weight: 900;
+  }
+
+  .delete-modal__icon--danger {
+    background: linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%);
+    box-shadow: 0 10px 24px rgba(239, 68, 68, 0.18);
+  }
+
+  .delete-modal__dialog h2 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.45rem;
+    line-height: 1.2;
+  }
+
+  .delete-modal__text,
+  .delete-modal__subtext {
+    margin: 12px 0 0;
+    line-height: 1.6;
+  }
+
+  .delete-modal__text {
+    color: #1e293b;
+    font-size: 0.97rem;
+  }
+
+  .delete-modal__subtext {
+    color: #64748b;
+    font-size: 0.88rem;
+  }
+
+  .delete-modal__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .delete-modal__confirm {
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+    color: #fff;
+  }
+
+  .cancel-btn {
+    width: 100%;
+    height: 48px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 0 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    color: #334155;
+    font-size: 0.92rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .create-card__head {
+    margin-bottom: 14px;
+  }
+
+  .eyebrow {
+    margin: 0 0 4px;
+    color: #9aa5b4;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .create-card__head h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .create-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    align-items: end;
+  }
+
+  .field {
+    display: grid;
+    gap: 6px;
+  }
+
+  .field--wide {
+    grid-column: 1 / -1;
+  }
+
+  .field span {
+    color: #4a5568;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .input-field {
+    width: 100%;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    color: #0a0f1e;
+    font-size: 0.9rem;
+  }
+
+  .input-select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, #64748b 50%),
+      linear-gradient(135deg, #64748b 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) calc(50% - 2px),
+      calc(100% - 12px) calc(50% - 2px);
+    background-repeat: no-repeat;
+    background-size: 6px 6px, 6px 6px;
+    padding-right: 38px;
+  }
+
+  @media (max-width: 1080px) {
+    .tests-card__header-row,
+    .test-row {
+      grid-template-columns: 1fr;
+    }
+
+    .test-row__actions {
+      justify-content: flex-start;
+    }
+
+    .create-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 720px) {
+    .filters-form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .filter-pills {
+      flex-wrap: wrap;
+    }
+
+    .create-form {
+      grid-template-columns: 1fr;
+    }
+
+    .delete-modal__actions {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

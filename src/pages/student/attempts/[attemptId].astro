@@ -1,0 +1,961 @@
+---
+export const prerender = false;
+
+import { and, asc, eq, gt } from 'drizzle-orm';
+
+import PlatformLayout from '../../../layouts/PlatformLayout.astro';
+import { attemptAnswers, db, questions, subjects, testAttempts, tests, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+const { attemptId } = Astro.params;
+
+if (!attemptId) {
+  return new Response(null, { status: 404 });
+}
+
+const attemptRows = await db
+  .select({
+    id: testAttempts.id,
+    studentId: testAttempts.studentId,
+    testId: testAttempts.testId,
+    submittedAt: testAttempts.submittedAt,
+    timeTakenSeconds: testAttempts.timeTakenSeconds,
+    score: testAttempts.score,
+    totalQuestions: testAttempts.totalQuestions,
+    testTitle: tests.title,
+    topicId: tests.topicId,
+    subjectId: tests.subjectId,
+    topicName: topics.name,
+    topicOrder: topics.order,
+    topicSubjectId: topics.subjectId,
+    subjectName: subjects.name,
+  })
+  .from(testAttempts)
+  .innerJoin(tests, eq(testAttempts.testId, tests.id))
+  .leftJoin(topics, eq(tests.topicId, topics.id))
+  .leftJoin(subjects, eq(topics.subjectId, subjects.id))
+  .where(eq(testAttempts.id, attemptId));
+
+if (!attemptRows || attemptRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [attempt] = attemptRows;
+
+if (attempt.studentId !== profile.id) {
+  return Astro.redirect('/student');
+}
+
+if (!attempt.submittedAt) {
+  return Astro.redirect(`/student/tests/${attempt.testId}`);
+}
+
+const nextTopicRows =
+  attempt.topicSubjectId && attempt.topicOrder !== null
+    ? await db
+        .select({
+          id: topics.id,
+          name: topics.name,
+        })
+        .from(topics)
+        .where(and(eq(topics.subjectId, attempt.topicSubjectId), gt(topics.order, attempt.topicOrder)))
+        .orderBy(asc(topics.order))
+        .limit(1)
+    : [];
+
+const nextTopic = nextTopicRows[0] ?? null;
+
+const reviewRows = await db
+  .select({
+    attemptAnswerId: attemptAnswers.id,
+    attemptedAtSeconds: attemptAnswers.attemptedAtSeconds,
+    chosenOption: attemptAnswers.chosenOption,
+    isCorrect: attemptAnswers.isCorrect,
+    questionId: questions.id,
+    prompt: questions.prompt,
+    questionImageUrl: questions.questionImageUrl,
+    optionA: questions.optionA,
+    optionB: questions.optionB,
+    optionC: questions.optionC,
+    optionD: questions.optionD,
+    correctOption: questions.correctOption,
+    explanation: questions.explanation,
+    order: questions.order,
+  })
+  .from(attemptAnswers)
+  .innerJoin(questions, eq(attemptAnswers.questionId, questions.id))
+  .where(eq(attemptAnswers.attemptId, attempt.id))
+  .orderBy(asc(questions.order));
+
+const score = attempt.score ?? 0;
+const total = attempt.totalQuestions ?? reviewRows.length;
+const percentage = total ? Math.round((score / total) * 100) : 0;
+
+function formatSeconds(totalSeconds: number | null) {
+  if (totalSeconds === null) {
+    return '-';
+  }
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
+  return `${minutes}m ${seconds}s`;
+}
+
+function formatAttemptMoment(totalSeconds: number | null) {
+  if (totalSeconds === null) {
+    return 'Not attempted';
+  }
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}m ${seconds}s`;
+}
+
+const submittedFormatter = new Intl.DateTimeFormat('en-IN', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+});
+
+const optionLabels = {
+  a: 'A',
+  b: 'B',
+  c: 'C',
+  d: 'D',
+} as const;
+
+const optionKeys = ['a', 'b', 'c', 'd'] as const;
+const ringCircumference = 263.9;
+const ringOffset = ringCircumference * (1 - percentage / 100);
+
+const scoreRingColor = percentage >= 70 ? '#10B981' : percentage >= 40 ? '#F5C518' : '#EF4444';
+
+const reviewCards = reviewRows.map((row) => {
+  const status = row.chosenOption === null ? 'skipped' : row.isCorrect ? 'correct' : 'incorrect';
+
+  return {
+    ...row,
+    status,
+  };
+});
+
+const correctCount = reviewCards.filter((row) => row.status === 'correct').length;
+const incorrectCount = reviewCards.filter((row) => row.status === 'incorrect').length;
+const skippedCount = reviewCards.filter((row) => row.status === 'skipped').length;
+---
+
+<PlatformLayout title={`${attempt.testTitle} Review | Dream Neet Academy`}>
+  <section class="attempt-review">
+    <section class="hero-card">
+      <div class="hero-card__ring-wrap">
+        <div class="score-ring">
+          <svg viewBox="0 0 100 100" class="score-ring__svg" aria-hidden="true">
+            <circle class="score-ring__track" cx="50" cy="50" r="42"></circle>
+            <circle
+              class="score-ring__progress"
+              cx="50"
+              cy="50"
+              r="42"
+              style={`stroke:${scoreRingColor}; stroke-dasharray:${ringCircumference}; stroke-dashoffset:${ringOffset};`}
+            ></circle>
+            <text x="50" y="50" class="score-ring__text">{percentage}%</text>
+          </svg>
+        </div>
+        <p class="hero-card__ring-copy">{score} / {total} correct</p>
+      </div>
+
+      <div class="hero-card__main">
+        <span class="hero-pill">✓ Test Complete</span>
+        <h1>{attempt.testTitle}</h1>
+        <p>Submitted {submittedFormatter.format(attempt.submittedAt)}</p>
+      </div>
+
+      <div class="hero-card__stats">
+        <div class="hero-stat">
+          <strong>{score} / {total}</strong>
+          <span>Score</span>
+        </div>
+        <div class="hero-stat">
+          <strong style={`color:${scoreRingColor};`}>{percentage}%</strong>
+          <span>Accuracy</span>
+        </div>
+        <div class="hero-stat">
+          <strong>{formatSeconds(attempt.timeTakenSeconds)}</strong>
+          <span>Time Taken</span>
+        </div>
+        <div class="hero-stat">
+          <strong>{total}</strong>
+          <span>Questions</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="action-strip">
+      <a
+        href={attempt.topicId ? `/student/topics/${attempt.topicId}` : '/student'}
+        class="action-strip__back"
+      >
+        ← Back to {attempt.topicName ?? 'Dashboard'}
+      </a>
+
+      <div class="action-strip__buttons">
+        <a href={`/student/tests/${attempt.testId}`} class="action-strip__button action-strip__button--ghost">Retake Test</a>
+        <a href="/student/analysis" class="action-strip__button action-strip__button--solid">View Analysis →</a>
+      </div>
+    </section>
+
+    <section class="filter-row">
+      <div class="filter-group" data-filter-bar>
+        <button type="button" class="filter-pill filter-pill--all is-active" data-filter="all">
+          All <span>( {reviewCards.length} )</span>
+        </button>
+        <button type="button" class="filter-pill filter-pill--correct" data-filter="correct">
+          Correct <span>( {correctCount} )</span>
+        </button>
+        <button type="button" class="filter-pill filter-pill--incorrect" data-filter="incorrect">
+          Incorrect <span>( {incorrectCount + skippedCount} )</span>
+        </button>
+      </div>
+
+      <div class="filter-summary">
+        {correctCount} correct · {incorrectCount} incorrect · {skippedCount} skipped
+      </div>
+    </section>
+
+    <section class="review-list">
+      {reviewCards.map((row) => (
+        <article
+          class:list={[
+            'review-card',
+            row.status === 'correct'
+              ? 'review-card--correct'
+              : row.status === 'incorrect'
+                ? 'review-card--incorrect'
+                : 'review-card--skipped',
+          ]}
+          data-status={row.status}
+        >
+          <div class="review-card__header">
+            <div class="review-card__header-main">
+              <span class="question-badge">Q.{row.order}</span>
+              <span
+                class:list={[
+                  'result-badge',
+                  row.status === 'correct'
+                    ? 'result-badge--correct'
+                    : row.status === 'incorrect'
+                      ? 'result-badge--incorrect'
+                      : 'result-badge--skipped',
+                ]}
+              >
+                {row.status === 'correct' ? '✓ Correct' : row.status === 'incorrect' ? '✗ Incorrect' : '— Skipped'}
+              </span>
+            </div>
+            <span class="attempt-badge">
+              {row.attemptedAtSeconds === null ? 'Not attempted' : `Attempted in ${formatAttemptMoment(row.attemptedAtSeconds)}`}
+            </span>
+          </div>
+
+          <div class="review-card__body">
+          {row.questionImageUrl && (
+            <div class="review-card__image-wrap">
+              <img src={row.questionImageUrl} alt={`Question ${row.order}`} class="review-card__image" loading="lazy" />
+            </div>
+          )}
+
+          <p class="review-card__prompt">{row.prompt}</p>
+
+            <div class="options-list">
+              {optionKeys.map((key) => {
+                const optionValue =
+                  key === 'a'
+                    ? row.optionA
+                    : key === 'b'
+                      ? row.optionB
+                      : key === 'c'
+                        ? row.optionC
+                        : row.optionD;
+
+                const isChosen = row.chosenOption === key;
+                const isCorrectOption = row.correctOption === key;
+                const optionClass = isCorrectOption
+                  ? 'option-row option-row--correct'
+                  : isChosen && row.chosenOption !== row.correctOption
+                    ? 'option-row option-row--wrong'
+                    : 'option-row option-row--neutral';
+                const bubbleClass = isCorrectOption
+                  ? 'option-bubble option-bubble--correct'
+                  : isChosen && row.chosenOption !== row.correctOption
+                    ? 'option-bubble option-bubble--wrong'
+                    : 'option-bubble option-bubble--neutral';
+
+                return (
+                  <div class={optionClass}>
+                    <span class={bubbleClass}>{optionLabels[key]}</span>
+                    <span class="option-text">{optionValue}</span>
+                    {isCorrectOption && <span class="option-mark option-mark--correct">✓</span>}
+                    {!isCorrectOption && isChosen && row.chosenOption !== row.correctOption && (
+                      <span class="option-mark option-mark--wrong">✗</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {row.explanation && (
+              <div class="explanation-box">
+                <div class="explanation-box__head">
+                  <span>💡</span>
+                  <span>Explanation</span>
+                </div>
+                <p class="explanation-box__text">{row.explanation}</p>
+              </div>
+            )}
+          </div>
+        </article>
+      ))}
+    </section>
+
+    <section class="bottom-cta">
+      <div>
+        <div class="bottom-cta__title">🎯 Keep the momentum going!</div>
+        <div class="bottom-cta__sub">{attempt.subjectName ?? 'Your practice'} · {attempt.topicName ?? attempt.testTitle}</div>
+      </div>
+
+      <div class="bottom-cta__actions">
+        <a href={`/student/tests/${attempt.testId}`} class="bottom-cta__button bottom-cta__button--ghost">Retake Test</a>
+        <a
+          href={nextTopic ? `/student/topics/${nextTopic.id}` : attempt.topicId ? `/student/topics/${attempt.topicId}` : '/student'}
+          class="bottom-cta__button bottom-cta__button--next"
+        >
+          {nextTopic ? 'Next Topic →' : 'Back to Topic →'}
+        </a>
+      </div>
+    </section>
+
+    <script is:inline>
+      const filterBar = document.querySelector('[data-filter-bar]');
+      const reviewCards = Array.from(document.querySelectorAll('[data-status]'));
+
+      if (filterBar) {
+        const buttons = Array.from(filterBar.querySelectorAll('[data-filter]'));
+
+        buttons.forEach((button) => {
+          button.addEventListener('click', () => {
+            const filter = button.getAttribute('data-filter');
+
+            buttons.forEach((item) => item.classList.remove('is-active'));
+            button.classList.add('is-active');
+
+            reviewCards.forEach((card) => {
+              const status = card.getAttribute('data-status');
+              const shouldShow =
+                filter === 'all' || status === filter || (filter === 'incorrect' && status === 'skipped');
+
+              card.style.display = shouldShow ? '' : 'none';
+            });
+          });
+        });
+      }
+    </script>
+  </section>
+</PlatformLayout>
+
+<style>
+  .attempt-review {
+    padding: 28px 16px 40px;
+  }
+
+  .hero-card,
+  .action-strip,
+  .filter-row,
+  .review-list,
+  .bottom-cta {
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-card {
+    background: linear-gradient(135deg, #0a0f1e 0%, #1a2544 100%);
+    border-radius: 20px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+
+  .hero-card__ring-wrap {
+    width: 100px;
+    flex-shrink: 0;
+  }
+
+  .score-ring {
+    width: 100px;
+    height: 100px;
+    position: relative;
+  }
+
+  .score-ring__svg {
+    width: 100px;
+    height: 100px;
+    transform: rotate(-90deg);
+  }
+
+  .score-ring__track,
+  .score-ring__progress {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+  }
+
+  .score-ring__track {
+    stroke: rgba(255, 255, 255, 0.08);
+  }
+
+  .score-ring__text {
+    fill: white;
+    font-size: 18px;
+    font-weight: 900;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    transform: rotate(90deg);
+    transform-origin: center;
+  }
+
+  .hero-card__ring-copy {
+    margin: 8px 0 0;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+    font-weight: 500;
+  }
+
+  .hero-card__main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hero-pill {
+    background: rgba(245, 197, 24, 0.15);
+    border: 1px solid rgba(245, 197, 24, 0.25);
+    color: #f5c518;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hero-card__main h1 {
+    margin: 10px 0 6px;
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: white;
+  }
+
+  .hero-card__main p {
+    margin: 0;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .hero-card__stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(100px, 1fr));
+    gap: 10px;
+  }
+
+  .hero-stat {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px 14px;
+    min-width: 100px;
+  }
+
+  .hero-stat strong {
+    display: block;
+    font-size: 1rem;
+    font-weight: 800;
+    color: white;
+  }
+
+  .hero-stat span {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .action-strip {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .action-strip__back {
+    font-size: 0.78rem;
+    color: #9aa5b4;
+    font-weight: 600;
+    transition: color 0.15s ease;
+  }
+
+  .action-strip__back:hover {
+    color: #0a0f1e;
+  }
+
+  .action-strip__buttons {
+    display: flex;
+    gap: 10px;
+  }
+
+  .action-strip__button {
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 8px 18px;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+  }
+
+  .action-strip__button--ghost {
+    background: transparent;
+    border: 1.5px solid #e2e8f0;
+    color: #4a5568;
+  }
+
+  .action-strip__button--ghost:hover {
+    border-color: #0a0f1e;
+    color: #0a0f1e;
+  }
+
+  .action-strip__button--solid {
+    background: #0a0f1e;
+    color: white;
+  }
+
+  .action-strip__button--solid:hover {
+    background: #1a2544;
+  }
+
+  .filter-row {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .filter-group {
+    display: inline-flex;
+    gap: 6px;
+    background: white;
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    padding: 4px;
+  }
+
+  .filter-pill {
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
+    background: transparent;
+    color: #9aa5b4;
+  }
+
+  .filter-pill span {
+    font-weight: 500;
+    opacity: 0.8;
+  }
+
+  .filter-pill--all.is-active {
+    background: #0a0f1e;
+    color: white;
+  }
+
+  .filter-pill--correct.is-active {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .filter-pill--incorrect.is-active {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .filter-summary {
+    font-size: 0.78rem;
+    color: #9aa5b4;
+  }
+
+  .review-list {
+    margin-bottom: 20px;
+  }
+
+  .review-card {
+    background: white;
+    border-radius: 16px;
+    border: 1.5px solid #e2e8f0;
+    border-left-width: 4px;
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: box-shadow 0.15s ease;
+  }
+
+  .review-card:hover {
+    box-shadow: 0 4px 16px rgba(10, 15, 30, 0.07);
+  }
+
+  .review-card--correct {
+    border-left-color: #10b981;
+  }
+
+  .review-card--incorrect {
+    border-left-color: #ef4444;
+  }
+
+  .review-card--skipped {
+    border-left-color: #e2e8f0;
+  }
+
+  .review-card__header {
+    padding: 14px 18px;
+    border-bottom: 1px solid #f8f9ff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .review-card__header-main {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .question-badge {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #374151;
+  }
+
+  .result-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 999px;
+  }
+
+  .result-badge--correct {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  .result-badge--incorrect {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .result-badge--skipped {
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .attempt-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .review-card__body {
+    padding: 16px 18px;
+  }
+
+  .review-card__image-wrap {
+    margin: 0 0 16px;
+  }
+
+  .review-card__image {
+    display: block;
+    width: 100%;
+    max-height: 340px;
+    object-fit: contain;
+    border-radius: 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+  }
+
+  .review-card__prompt {
+    margin: 0 0 16px;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    color: #0a0f1e;
+    font-weight: 500;
+  }
+
+  .options-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .option-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin-bottom: 0;
+    border: 1.5px solid transparent;
+    transition: all 0.1s ease;
+  }
+
+  .option-row--correct {
+    background: #f0fdf4;
+    border-color: #a7f3d0;
+  }
+
+  .option-row--wrong {
+    background: #fef2f2;
+    border-color: #fecaca;
+  }
+
+  .option-row--neutral {
+    background: #f8f9ff;
+    opacity: 0.55;
+  }
+
+  .option-bubble {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-weight: 800;
+    font-size: 0.8rem;
+  }
+
+  .option-bubble--correct {
+    background: #10b981;
+    color: white;
+  }
+
+  .option-bubble--wrong {
+    background: #ef4444;
+    color: white;
+  }
+
+  .option-bubble--neutral {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #9ca3af;
+  }
+
+  .option-text {
+    flex: 1;
+    color: #6b7280;
+    line-height: 1.5;
+  }
+
+  .option-row--correct .option-text {
+    font-weight: 600;
+    color: #065f46;
+  }
+
+  .option-row--wrong .option-text {
+    font-weight: 500;
+    color: #991b1b;
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+
+  .option-mark {
+    margin-left: auto;
+    font-weight: 800;
+  }
+
+  .option-mark--correct {
+    color: #10b981;
+  }
+
+  .option-mark--wrong {
+    color: #ef4444;
+  }
+
+  .explanation-box {
+    margin-top: 12px;
+    background: #fffbeb;
+    border: 1px solid rgba(245, 197, 24, 0.25);
+    border-left: 4px solid #f5c518;
+    border-radius: 0 10px 10px 0;
+    padding: 12px 16px;
+  }
+
+  .explanation-box__head {
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #92400e;
+  }
+
+  .explanation-box__text {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #4a5568;
+  }
+
+  .bottom-cta {
+    margin-bottom: 40px;
+    background: linear-gradient(135deg, #0a0f1e, #1a2544);
+    border-radius: 16px;
+    padding: 24px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .bottom-cta__title {
+    color: white;
+    font-weight: 700;
+    font-size: 0.95rem;
+  }
+
+  .bottom-cta__sub {
+    margin-top: 3px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.78rem;
+  }
+
+  .bottom-cta__actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .bottom-cta__button {
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+
+  .bottom-cta__button--ghost {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: white;
+  }
+
+  .bottom-cta__button--ghost:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .bottom-cta__button--next {
+    background: #f5c518;
+    color: #0a0f1e;
+    font-weight: 800;
+  }
+
+  .bottom-cta__button--next:hover {
+    background: #e6b800;
+  }
+
+  @media (max-width: 900px) {
+    .hero-card {
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 24px;
+    }
+
+    .hero-card__stats {
+      width: 100%;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .action-strip,
+    .filter-row,
+    .bottom-cta {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .attempt-review {
+      padding: 24px 12px 32px;
+    }
+
+    .hero-card__stats {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-group,
+    .action-strip__buttons,
+    .bottom-cta__actions {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .action-strip__button,
+    .bottom-cta__button {
+      width: 100%;
+      text-align: center;
+      justify-content: center;
+      display: inline-flex;
+    }
+
+    .review-card__header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>

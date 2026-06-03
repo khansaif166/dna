@@ -1,0 +1,963 @@
+---
+export const prerender = false;
+
+import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+
+import PlatformLayout from '../../../layouts/PlatformLayout.astro';
+import { db, subTopics, subjects, testAttempts, tests, topicResources, topics } from '../../../db';
+import { requireAuth } from '../../../lib/auth';
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+const { subjectId } = Astro.params;
+
+if (!subjectId) {
+  return new Response(null, { status: 404 });
+}
+
+const subjectRows = await db.select().from(subjects).where(eq(subjects.id, subjectId));
+
+if (!subjectRows || subjectRows.length === 0) {
+  return new Response(null, { status: 404 });
+}
+
+const [subject] = subjectRows;
+
+const subjectTopics = await db
+  .select()
+  .from(topics)
+  .where(eq(topics.subjectId, subject.id))
+  .orderBy(asc(topics.order));
+
+const topicIds = subjectTopics.map((topic) => topic.id);
+
+const [testCountRows, resourceCountRows, subTopicCountRows, practicedTopicRows] = topicIds.length
+  ? await Promise.all([
+      db
+        .select({
+          topicId: tests.topicId,
+          testCount: sql<number>`count(*)::int`,
+        })
+        .from(tests)
+        .where(and(inArray(tests.topicId, topicIds), eq(tests.status, 'published')))
+        .groupBy(tests.topicId),
+      db
+        .select({
+          topicId: topicResources.topicId,
+          resourceCount: sql<number>`count(*)::int`,
+        })
+        .from(topicResources)
+        .where(inArray(topicResources.topicId, topicIds))
+        .groupBy(topicResources.topicId),
+      db
+        .select({
+          topicId: subTopics.topicId,
+          subTopicCount: sql<number>`count(*)::int`,
+        })
+        .from(subTopics)
+        .where(inArray(subTopics.topicId, topicIds))
+        .groupBy(subTopics.topicId),
+      db
+        .selectDistinct({
+          topicId: tests.topicId,
+        })
+        .from(testAttempts)
+        .innerJoin(tests, eq(testAttempts.testId, tests.id))
+        .where(
+          and(
+            eq(testAttempts.studentId, profile.id),
+            inArray(tests.topicId, topicIds),
+            isNotNull(testAttempts.submittedAt)
+          )
+        ),
+    ])
+  : [[], [], [], []];
+
+const testCounts = new Map(
+  testCountRows
+    .filter((row): row is { topicId: string; testCount: number } => row.topicId !== null)
+    .map((row) => [row.topicId, row.testCount])
+);
+
+const resourceCounts = new Map(resourceCountRows.map((row) => [row.topicId, row.resourceCount]));
+const subTopicCounts = new Map(subTopicCountRows.map((row) => [row.topicId, row.subTopicCount]));
+const practicedTopicIds = new Set(
+  practicedTopicRows
+    .map((row) => row.topicId)
+    .filter((topicId): topicId is string => Boolean(topicId))
+);
+
+const totalTestsAvailable = Array.from(testCounts.values()).reduce((sum, count) => sum + count, 0);
+
+const topicCards = subjectTopics.map((topic, index) => ({
+  ...topic,
+  displayOrder: String(index + 1).padStart(2, '0'),
+  subTopicCount: subTopicCounts.get(topic.id) ?? 0,
+  videoCount: resourceCounts.get(topic.id) ?? 0,
+  testCount: testCounts.get(topic.id) ?? 0,
+  practiced: practicedTopicIds.has(topic.id),
+}));
+
+const subjectType = subject.name.toLowerCase().includes('physics')
+  ? 'physics'
+  : subject.name.toLowerCase().includes('chemistry')
+    ? 'chemistry'
+    : 'biology';
+
+const subjectTheme = {
+  physics: {
+    gradient: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+    color: '#3B82F6',
+    colorDark: '#1D4ED8',
+    bgLight: '#EFF6FF',
+    bgMid: '#DBEAFE',
+    textColor: '#1D4ED8',
+    border: '#BFDBFE',
+    shadowRgb: '59, 130, 246',
+    tip: 'Focus on understanding concepts before memorizing formulas. Practice numerical problems daily and prioritize chapters like Mechanics, Optics, and Modern Physics for NEET.',
+  },
+  chemistry: {
+    gradient: 'linear-gradient(135deg, #10B981, #059669)',
+    color: '#10B981',
+    colorDark: '#059669',
+    bgLight: '#F0FDF4',
+    bgMid: '#DCFCE7',
+    textColor: '#166534',
+    border: '#BBF7D0',
+    shadowRgb: '16, 185, 129',
+    tip: 'Divide your time equally between Physical, Organic, and Inorganic Chemistry. NCERT is your bible for Inorganic — read it multiple times.',
+  },
+  biology: {
+    gradient: 'linear-gradient(135deg, #F59E0B, #D97706)',
+    color: '#F59E0B',
+    colorDark: '#D97706',
+    bgLight: '#FFFBEB',
+    bgMid: '#FEF3C7',
+    textColor: '#92400E',
+    border: '#FDE68A',
+    shadowRgb: '245, 158, 11',
+    tip: 'Biology carries the highest weightage in NEET. Focus on NCERT diagrams and definitions. Botany and Zoology both need equal attention.',
+  },
+}[subjectType];
+
+const practicedTopicsCount = topicCards.filter((topic) => topic.practiced).length;
+const progressPercent = topicCards.length ? Math.round((practicedTopicsCount / topicCards.length) * 100) : 0;
+const ringRadius = 26;
+const ringCircumference = 2 * Math.PI * ringRadius;
+const ringOffset = ringCircumference * (1 - progressPercent / 100);
+
+function pluralize(count: number, singular: string, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+---
+
+<PlatformLayout title={`${subject.name} | Dream Neet Academy`}>
+  <section class="subject-page">
+    <header class="subject-header">
+      <div class="subject-breadcrumbs">
+        <a href="/student" class="subject-breadcrumbs__back">← Back</a>
+        <span class="subject-breadcrumbs__sep">/</span>
+        <span>Subjects</span>
+        <span class="subject-breadcrumbs__sep">/</span>
+        <span class="subject-breadcrumbs__current">{subject.name}</span>
+      </div>
+
+      <div class="subject-hero">
+        <div class="subject-identity">
+          <div
+            class="subject-identity__icon"
+            style={`background:${subjectTheme.gradient}; box-shadow:0 16px 32px rgba(${subjectTheme.shadowRgb}, 0.28);`}
+          >
+            {subjectType === 'physics' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="1.8"></circle>
+                <path d="M4 12c2.1-3.7 5.1-5.7 8-5.7s5.9 2 8 5.7c-2.1 3.7-5.1 5.7-8 5.7S6.1 15.7 4 12z"></path>
+                <path d="M7.2 5.6c4.2.2 7.4 1.8 8.8 4.4 1.4 2.6.9 6-1.2 9.4-4.2-.2-7.4-1.8-8.8-4.4-1.4-2.6-.9-6 1.2-9.4z"></path>
+                <path d="M7.2 18.4c-.2-4.2 1.3-7.5 3.9-8.9 2.6-1.4 6-1 9.4 1-0.2 4.2-1.7 7.5-4.3 8.9-2.6 1.4-6 1-9-1z"></path>
+              </svg>
+            ) : subjectType === 'chemistry' ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 3v5.2l-4.7 7.8A3 3 0 0 0 7.9 21h8.2a3 3 0 0 0 2.6-5l-4.7-7.8V3"></path>
+                <path d="M9 8h6"></path>
+                <path d="M8.4 14.5h7.2"></path>
+                <path d="M9.5 17c.7-.7 1.4-1 2.5-1s1.8.3 2.5 1"></path>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 4.5c-1.5 1.7-2.1 4-.9 5.8l5 7c1.2 1.7.7 4-1 5.2"></path>
+                <path d="M16 4.5c1.5 1.7 2.1 4 .9 5.8l-5 7c-1.2 1.7-.7 4 1 5.2"></path>
+                <path d="M8 6.5h8"></path>
+                <path d="M6.8 10.5h10.4"></path>
+                <path d="M7.8 14.5h8.4"></path>
+                <path d="M10 2.8c.5.8 1.2 1.2 2 1.2s1.5-.4 2-1.2"></path>
+                <circle cx="9" cy="8.3" r="0.7" fill="currentColor" stroke="none"></circle>
+                <circle cx="15" cy="12.2" r="0.7" fill="currentColor" stroke="none"></circle>
+                <circle cx="10.2" cy="16.1" r="0.7" fill="currentColor" stroke="none"></circle>
+              </svg>
+            )}
+          </div>
+
+          <div class="subject-identity__text">
+            <div class="subject-identity__eyebrow" style={`color:${subjectTheme.colorDark};`}>
+              NEET Subject Track
+            </div>
+            <h1>{subject.name}</h1>
+            <p class="subject-identity__summary">
+              Build momentum topic by topic with structured practice, revision, and test readiness.
+            </p>
+            <div class="subject-identity__meta">
+              <span class="subject-stat">{pluralize(topicCards.length, 'topic')}</span>
+              <span class="subject-stat">{pluralize(totalTestsAvailable, 'test')}</span>
+              <span class="subject-stat subject-stat--accent" style={`background:${subjectTheme.bgLight}; color:${subjectTheme.colorDark}; border-color:${subjectTheme.border};`}>
+                {practicedTopicsCount} practiced
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="subject-progress">
+          <div class="subject-progress__ring-wrap">
+            <svg viewBox="0 0 64 64" class="subject-progress__ring" aria-hidden="true">
+              <circle cx="32" cy="32" r={ringRadius} class="subject-progress__ring-base"></circle>
+              <circle
+                cx="32"
+                cy="32"
+                r={ringRadius}
+                class="subject-progress__ring-fill"
+                style={`stroke:${subjectTheme.color}; stroke-dasharray:${ringCircumference}; stroke-dashoffset:${ringOffset};`}
+              ></circle>
+              <text x="32" y="35" text-anchor="middle" class="subject-progress__ring-text">{progressPercent}%</text>
+            </svg>
+          </div>
+
+          <div class="subject-progress__content">
+            <div class="subject-progress__label">Overall Progress</div>
+            <div class="subject-progress__value">{practicedTopicsCount} of {topicCards.length} topics started</div>
+            <div class="subject-progress__bar">
+              <span
+                class="subject-progress__bar-fill"
+                style={`width:${progressPercent}%; background:${subjectTheme.gradient};`}
+              ></span>
+            </div>
+            <div class="subject-progress__sub">Keep going to unlock stronger retention before full-length tests.</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    {topicCards.length ? (
+      <>
+        <section class="topics-section">
+          <div class="topics-section__head">
+            <h2>Topics</h2>
+            <span>Ordered by curriculum</span>
+          </div>
+
+          <div class="topic-search" data-topic-search-wrap>
+            <span class="topic-search__icon" aria-hidden="true">🔎</span>
+            <input
+              type="search"
+              class="topic-search__input"
+              placeholder={`Search chapters in ${subject.name}...`}
+              aria-label={`Search chapters in ${subject.name}`}
+              data-topic-search
+              oninput="const q=this.value.trim().toLowerCase();const section=this.closest('.topics-section');if(!section)return;const cards=section.querySelectorAll('[data-topic-card]');let visible=0;cards.forEach((card)=>{const name=(card.dataset.topicName||'').toLowerCase();const matches=!q||name.includes(q);card.style.display=matches?'block':'none';if(matches){visible+=1;card.classList.remove('topic-card--search-pop');requestAnimationFrame(()=>card.classList.add('topic-card--search-pop'));}else{card.classList.remove('topic-card--search-pop');}});const empty=section.querySelector('[data-topic-search-empty]');if(empty)empty.hidden=visible>0;"
+              onsearch="this.dispatchEvent(new Event('input',{bubbles:true}))"
+            />
+          </div>
+
+          <div class="topics-grid" data-topics-grid>
+            {topicCards.map((topic) => (
+              <a
+                href={`/student/topics/${topic.id}`}
+                class="topic-card"
+                data-topic-card
+                data-topic-name={topic.name}
+                style={`--subject-color:${subjectTheme.color}; --subject-color-dark:${subjectTheme.colorDark}; --subject-bg-light:${subjectTheme.bgLight}; --subject-text:${subjectTheme.textColor}; --subject-shadow-rgb:${subjectTheme.shadowRgb};`}
+              >
+                <div class="topic-card__top">
+                  <div class="topic-card__main">
+                    <span class="topic-card__number">TOPIC {topic.displayOrder}</span>
+                    <h3 class="topic-card__title">{topic.name}</h3>
+
+                    <div class="topic-card__pills">
+                      <span
+                        class="topic-card__pill"
+                        style={topic.subTopicCount > 0 ? 'background:#F8FAFC; color:#475569;' : undefined}
+                      >
+                        ◎ {pluralize(topic.subTopicCount, 'sub-topic')}
+                      </span>
+                      <span
+                        class="topic-card__pill"
+                        style={topic.videoCount > 0 ? `background:${subjectTheme.bgLight}; color:${subjectTheme.textColor};` : undefined}
+                      >
+                        ▶ {pluralize(topic.videoCount, 'video')}
+                      </span>
+                      <span
+                        class="topic-card__pill"
+                        style={topic.testCount > 0 ? 'background:#F0FDF4; color:#166534;' : undefined}
+                      >
+                        📝 {pluralize(topic.testCount, 'test')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class:list={['topic-card__status', { 'topic-card__status--done': topic.practiced }]}>
+                    {topic.practiced ? '✓' : '→'}
+                  </div>
+                </div>
+
+                <div class="topic-card__bottom">
+                  <span class:list={['topic-card__practice', { 'topic-card__practice--done': topic.practiced }]}>
+                    {topic.practiced ? '✓ Practiced' : 'Not started yet'}
+                  </span>
+
+                  {topic.practiced ? (
+                    <span class="topic-card__cta-link" style={`color:${subjectTheme.colorDark};`}>Continue →</span>
+                  ) : (
+                    <span class="topic-card__cta-pill" style={`background:${subjectTheme.color};`}>Start →</span>
+                  )}
+                </div>
+              </a>
+            ))}
+          </div>
+
+          <div class="topic-search-empty" data-topic-search-empty hidden>
+            No chapters matched your search in {subject.name}.
+          </div>
+        </section>
+
+        <section
+          class="subject-tip"
+          style={`background:linear-gradient(135deg, ${subjectTheme.bgLight}, ${subjectTheme.bgMid}); border-color:${subjectTheme.border};`}
+        >
+          <div class="subject-tip__icon">💡</div>
+          <div>
+            <h3>Study Tip for {subject.name}</h3>
+            <p>{subjectTheme.tip}</p>
+          </div>
+        </section>
+      </>
+    ) : (
+      <section class="subject-empty">
+        <div
+          class="subject-empty__icon"
+          style={`background:${subjectTheme.gradient}; box-shadow:0 8px 20px rgba(${subjectTheme.shadowRgb}, 0.28);`}
+        >
+          {subjectType === 'physics' ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="1.8"></circle>
+              <path d="M4 12c2.1-3.7 5.1-5.7 8-5.7s5.9 2 8 5.7c-2.1 3.7-5.1 5.7-8 5.7S6.1 15.7 4 12z"></path>
+              <path d="M7.2 5.6c4.2.2 7.4 1.8 8.8 4.4 1.4 2.6.9 6-1.2 9.4-4.2-.2-7.4-1.8-8.8-4.4-1.4-2.6-.9-6 1.2-9.4z"></path>
+              <path d="M7.2 18.4c-.2-4.2 1.3-7.5 3.9-8.9 2.6-1.4 6-1 9.4 1-0.2 4.2-1.7 7.5-4.3 8.9-2.6 1.4-6 1-9-1z"></path>
+            </svg>
+          ) : subjectType === 'chemistry' ? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M10 3v5.2l-4.7 7.8A3 3 0 0 0 7.9 21h8.2a3 3 0 0 0 2.6-5l-4.7-7.8V3"></path>
+              <path d="M9 8h6"></path>
+              <path d="M8.4 14.5h7.2"></path>
+              <path d="M9.5 17c.7-.7 1.4-1 2.5-1s1.8.3 2.5 1"></path>
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 4.5c-1.5 1.7-2.1 4-.9 5.8l5 7c1.2 1.7.7 4-1 5.2"></path>
+              <path d="M16 4.5c1.5 1.7 2.1 4 .9 5.8l-5 7c-1.2 1.7-.7 4 1 5.2"></path>
+              <path d="M8 6.5h8"></path>
+              <path d="M6.8 10.5h10.4"></path>
+              <path d="M7.8 14.5h8.4"></path>
+              <path d="M10 2.8c.5.8 1.2 1.2 2 1.2s1.5-.4 2-1.2"></path>
+              <circle cx="9" cy="8.3" r="0.7" fill="currentColor" stroke="none"></circle>
+              <circle cx="15" cy="12.2" r="0.7" fill="currentColor" stroke="none"></circle>
+              <circle cx="10.2" cy="16.1" r="0.7" fill="currentColor" stroke="none"></circle>
+            </svg>
+          )}
+        </div>
+        <h2>No topics yet</h2>
+        <p>Topics for {subject.name} haven't been added yet.</p>
+        <p>Check back soon or contact your instructor.</p>
+      </section>
+    )}
+  </section>
+</PlatformLayout>
+
+<style>
+  .subject-page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 24px 48px;
+  }
+
+  .subject-header {
+    margin-bottom: 28px;
+  }
+
+  .subject-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.7fr);
+    gap: 24px;
+    align-items: stretch;
+    padding: 24px;
+    border: 1px solid #e2e8f0;
+    border-radius: 28px;
+    background:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.82) 44%, rgba(248, 250, 252, 0.96) 100%);
+    box-shadow: 0 18px 40px rgba(10, 15, 30, 0.07);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .subject-hero::after {
+    content: '';
+    position: absolute;
+    inset: auto -80px -120px auto;
+    width: 240px;
+    height: 240px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    filter: blur(10px);
+    pointer-events: none;
+  }
+
+  .subject-breadcrumbs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+    font-size: 0.8rem;
+    color: #9aa5b4;
+    font-weight: 600;
+  }
+
+  .subject-breadcrumbs__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+    transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .subject-breadcrumbs__back:hover {
+    color: #0a0f1e;
+    border-color: #cbd5e1;
+    transform: translateX(-1px);
+  }
+
+  .subject-breadcrumbs__sep {
+    color: #cbd5e1;
+  }
+
+  .subject-breadcrumbs__current {
+    color: #0a0f1e;
+    font-weight: 700;
+  }
+
+  .subject-identity {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .subject-identity__icon {
+    width: 84px;
+    height: 84px;
+    border-radius: 26px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 2rem;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .subject-identity__icon svg,
+  .subject-empty__icon svg {
+    width: 42px;
+    height: 42px;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .subject-identity__eyebrow {
+    margin-bottom: 8px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .subject-identity__text h1 {
+    margin: 0;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    line-height: 0.95;
+    font-weight: 900;
+    color: #0a0f1e;
+  }
+
+  .subject-identity__summary {
+    margin: 10px 0 0;
+    max-width: 580px;
+    font-size: 0.98rem;
+    line-height: 1.65;
+    color: #64748b;
+  }
+
+  .subject-identity__meta {
+    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .subject-stat {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #e2e8f0;
+    color: #475569;
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+
+  .subject-stat--accent {
+    border-width: 1px;
+  }
+
+  .subject-progress {
+    position: relative;
+    z-index: 1;
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(10px);
+    border-radius: 24px;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    display: grid;
+    gap: 16px;
+    align-content: start;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .subject-progress__ring-wrap {
+    width: 72px;
+    height: 72px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, #fff, #f8fafc);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 10px 22px rgba(10, 15, 30, 0.07);
+  }
+
+  .subject-progress__ring {
+    width: 64px;
+    height: 64px;
+    transform: rotate(-90deg);
+  }
+
+  .subject-progress__ring-base,
+  .subject-progress__ring-fill {
+    fill: none;
+    stroke-width: 6;
+  }
+
+  .subject-progress__ring-base {
+    stroke: #f1f3f9;
+  }
+
+  .subject-progress__ring-fill {
+    stroke-linecap: round;
+  }
+
+  .subject-progress__ring-text {
+    fill: #0a0f1e;
+    font-size: 0.9rem;
+    font-weight: 800;
+    transform: rotate(90deg);
+    transform-origin: center;
+  }
+
+  .subject-progress__label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #94a3b8;
+  }
+
+  .subject-progress__value {
+    margin-top: 4px;
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .subject-progress__bar {
+    margin-top: 14px;
+    height: 10px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+  }
+
+  .subject-progress__bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .subject-progress__sub {
+    margin-top: 10px;
+    font-size: 0.8rem;
+    line-height: 1.55;
+    color: #64748b;
+  }
+
+  .topics-section__head {
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topics-section__head h2 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #0a0f1e;
+  }
+
+  .topics-section__head span {
+    font-size: 0.75rem;
+    color: #9aa5b4;
+  }
+
+  .topic-search {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 8px 24px rgba(10, 15, 30, 0.04);
+  }
+
+  .topic-search__icon {
+    flex-shrink: 0;
+    font-size: 0.95rem;
+    color: #94a3b8;
+  }
+
+  .topic-search__input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: #0a0f1e;
+    font-size: 0.92rem;
+    font-weight: 500;
+  }
+
+  .topic-search__input::placeholder {
+    color: #9aa5b4;
+  }
+
+  .topics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .topic-search-empty {
+    margin-top: 14px;
+    padding: 18px 20px;
+    border-radius: 16px;
+    border: 1px dashed #cbd5e1;
+    background: #fff;
+    color: #64748b;
+    font-size: 0.88rem;
+    text-align: center;
+  }
+
+  .topic-card {
+    background: #fff;
+    border-radius: 18px;
+    border: 1.5px solid #e2e8f0;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    transition: opacity 0.18s ease, transform 0.18s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    text-decoration: none;
+    display: block;
+    color: inherit;
+    will-change: transform, opacity;
+  }
+
+  .topic-card--search-pop {
+    animation: topicSearchPop 0.24s ease;
+  }
+
+  .topic-card:hover {
+    border-color: var(--subject-color);
+    box-shadow: 0 8px 28px rgba(var(--subject-shadow-rgb), 0.12);
+    transform: translateY(-3px);
+  }
+
+  .topic-card__top {
+    padding: 20px 20px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .topic-card__main {
+    min-width: 0;
+  }
+
+  .topic-card__number {
+    display: inline-flex;
+    align-items: center;
+    background: #f8f9ff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #9aa5b4;
+    letter-spacing: 0.06em;
+    margin-bottom: 10px;
+  }
+
+  .topic-card__title {
+    margin: 0 0 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .topic-card__pills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .topic-card__pill {
+    background: #f9fafb;
+    color: #9ca3af;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+
+  .topic-card__status {
+    width: 32px;
+    height: 32px;
+    background: #f3f4f6;
+    border: 2px solid #e5e7eb;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 0.8rem;
+    color: #9ca3af;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .topic-card__status--done {
+    background: #d1fae5;
+    border-color: #a7f3d0;
+    color: #065f46;
+  }
+
+  .topic-card__bottom {
+    border-top: 1px solid #f1f3f9;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topic-card__practice {
+    font-size: 0.75rem;
+    color: #9aa5b4;
+  }
+
+  .topic-card__practice--done {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #10b981;
+  }
+
+  .topic-card__cta-link {
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+
+  .topic-card__cta-pill {
+    background: var(--subject-color);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 5px 14px;
+    border-radius: 999px;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @keyframes topicSearchPop {
+    0% {
+      opacity: 0;
+      transform: translateY(8px) scale(0.985);
+    }
+
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .subject-empty {
+    text-align: center;
+    margin-top: 60px;
+  }
+
+  .subject-empty__icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 24px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto;
+    color: #fff;
+    font-size: 2rem;
+    font-weight: 800;
+  }
+
+  .subject-empty h2 {
+    margin: 20px 0 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0a0f1e;
+  }
+
+  .subject-empty p {
+    margin: 6px 0 0;
+    font-size: 0.875rem;
+    color: #9aa5b4;
+  }
+
+  .subject-tip {
+    margin-top: 24px;
+    border-radius: 16px;
+    padding: 20px 24px;
+    border: 1px solid;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .subject-tip__icon {
+    font-size: 1.2rem;
+    margin-top: 2px;
+  }
+
+  .subject-tip h3 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 0.875rem;
+    color: #0a0f1e;
+  }
+
+  .subject-tip p {
+    margin: 4px 0 0;
+    font-size: 0.82rem;
+    color: #4a5568;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 900px) {
+    .subject-hero {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .subject-page {
+      padding: 24px 16px 40px;
+    }
+
+    .subject-hero {
+      padding: 18px;
+      border-radius: 22px;
+    }
+
+    .subject-identity {
+      gap: 14px;
+    }
+
+    .subject-identity__icon {
+      width: 68px;
+      height: 68px;
+      border-radius: 20px;
+    }
+
+    .subject-identity__icon svg,
+    .subject-empty__icon svg {
+      width: 34px;
+      height: 34px;
+    }
+
+    .subject-identity__summary {
+      font-size: 0.9rem;
+    }
+
+    .subject-progress {
+      padding: 16px;
+    }
+
+    .topics-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .topics-section__head,
+    .subject-tip,
+    .topic-card__bottom {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .topic-card__cta-link,
+    .topic-card__cta-pill {
+      align-self: flex-start;
+    }
+  }
+</style>
