@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from 'astro';
 
 import { authMiddleware } from './lib/auth-middleware';
-import { setRuntimeEnv } from './lib/serverEnv';
+import { syncRuntimeEnv } from './lib/serverEnv';
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const rateLimits = new Map<string, { count: number; resetAt: number }>();
@@ -10,18 +10,6 @@ const routeLimits = new Map<string, number>([
   ['/api/auth/signup', 5],
   ['/api/attempts/submit', 5],
 ]);
-
-function syncRuntimeEnvToProcessEnv(runtimeEnv: Record<string, unknown> | undefined) {
-  if (!runtimeEnv) {
-    return;
-  }
-
-  for (const [key, value] of Object.entries(runtimeEnv)) {
-    if (typeof value === 'string' && process.env[key] !== value) {
-      process.env[key] = value;
-    }
-  }
-}
 
 function checkRateLimit(pathname: string, ip: string | null) {
   const limit = routeLimits.get(pathname);
@@ -53,11 +41,7 @@ function checkRateLimit(pathname: string, ip: string | null) {
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
   try {
-    setRuntimeEnv(
-      context.locals.runtime?.env as Record<string, unknown> | undefined
-    );
-
-    syncRuntimeEnvToProcessEnv(
+    syncRuntimeEnv(
       context.locals.runtime?.env as Record<string, unknown> | undefined
     );
 

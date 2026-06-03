@@ -29,6 +29,20 @@ export function setRuntimeEnv(runtimeEnv: Record<string, unknown> | undefined) {
   globalThis.__DNA_RUNTIME_ENV__ = nextEnv;
 }
 
+export function syncRuntimeEnv(runtimeEnv: Record<string, unknown> | undefined) {
+  if (!runtimeEnv) {
+    return;
+  }
+
+  setRuntimeEnv(runtimeEnv);
+
+  for (const [key, value] of Object.entries(runtimeEnv)) {
+    if (typeof value === 'string' && process.env[key] !== value) {
+      process.env[key] = value;
+    }
+  }
+}
+
 export function getServerEnv(name: string) {
   return getRuntimeEnv()?.[name] ?? process.env[name] ?? getBuildEnv()[name];
 }
