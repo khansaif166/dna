@@ -13,14 +13,24 @@ const loginSchema = z.object({
 });
 
 function redirect(request: Request, pathname: string) {
-  return Response.redirect(new URL(pathname, request.url), 302);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: new URL(pathname, request.url).toString(),
+    },
+  });
 }
 
 function redirectWithDebug(request: Request, code: string, detail: string) {
   const url = new URL('/login', request.url);
   url.searchParams.set('error', code);
   url.searchParams.set('detail', detail.slice(0, 400));
-  return Response.redirect(url, 302);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: url.toString(),
+    },
+  });
 }
 
 export const POST: APIRoute = async ({ request, cookies }) => {

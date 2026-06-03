@@ -5,7 +5,12 @@ import { getAnonSupabase } from '../../lib/supabase';
 export const prerender = false;
 
 function redirect(request: Request, pathname: string) {
-  return Response.redirect(new URL(pathname, request.url), 302);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: new URL(pathname, request.url).toString(),
+    },
+  });
 }
 
 export const GET: APIRoute = async ({ request, url, cookies }) => {
