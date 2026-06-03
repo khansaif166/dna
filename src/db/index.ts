@@ -4,13 +4,29 @@ import postgres from 'postgres';
 import * as schema from './schema';
 import { requireServerEnv } from '../lib/serverEnv';
 
-const connectionString = requireServerEnv('DATABASE_URL');
+type Database = ReturnType<typeof drizzle<typeof schema>>;
 
-const client = postgres(connectionString, {
-  prepare: false,
-  connect_timeout: 10,
+let database: Database | null = null;
+
+function getDb(): Database {
+  if (database) {
+    return database;
+  }
+
+  const connectionString = requireServerEnv('DATABASE_URL');
+  const client = postgres(connectionString, {
+    prepare: false,
+    connect_timeout: 10,
+  });
+
+  database = drizzle(client, { schema });
+  return database;
+}
+
+export const db = new Proxy({} as Database, {
+  get(_target, property, receiver) {
+    return Reflect.get(getDb(), property, receiver);
+  },
 });
-
-export const db = drizzle(client, { schema });
 
 export * from './schema';
