@@ -18,5 +18,14 @@ export default defineConfig({
   integrations: [icon(), react()],
   vite: {
     plugins: [tailwindcss()],
+    ssr: {
+      external: ['postgres'],
+    },
+    resolve: {
+      alias: {
+        'node:events': 'events',
+        'node:buffer': 'buffer',
+      },
+    },
   },
 });
