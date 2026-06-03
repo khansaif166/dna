@@ -7,7 +7,7 @@ import icon from 'astro-icon';
 const isBuild = process.argv.includes('build');
 const adapter = isBuild
   ? (await import('@astrojs/cloudflare')).default({
-      imageService: 'cloudflare',
+      imageService: 'compile',
     })
   : undefined;
 
