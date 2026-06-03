@@ -10,6 +10,18 @@ const routeLimits = new Map<string, number>([
   ['/api/attempts/submit', 5],
 ]);
 
+function syncRuntimeEnvToProcessEnv(runtimeEnv: Record<string, unknown> | undefined) {
+  if (!runtimeEnv) {
+    return;
+  }
+
+  for (const [key, value] of Object.entries(runtimeEnv)) {
+    if (typeof value === 'string' && process.env[key] !== value) {
+      process.env[key] = value;
+    }
+  }
+}
+
 function checkRateLimit(pathname: string, ip: string | null) {
   const limit = routeLimits.get(pathname);
 
@@ -39,6 +51,10 @@ function checkRateLimit(pathname: string, ip: string | null) {
 }
 
 export const onRequest: MiddlewareHandler = (context, next) => {
+  syncRuntimeEnvToProcessEnv(
+    context.locals.runtime?.env as Record<string, unknown> | undefined
+  );
+
   const pathname = context.url.pathname;
   const ip = context.request.headers.get('cf-connecting-ip');
   const limitedResponse = checkRateLimit(pathname, ip);

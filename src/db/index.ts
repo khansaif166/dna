@@ -2,12 +2,9 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import * as schema from './schema';
+import { requireServerEnv } from '../lib/serverEnv';
 
-const connectionString = import.meta.env.DATABASE_URL ?? process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error('DATABASE_URL is required to initialize the database client.');
-}
+const connectionString = requireServerEnv('DATABASE_URL');
 
 const client = postgres(connectionString, {
   prepare: false,
