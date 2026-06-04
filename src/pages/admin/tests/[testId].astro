@@ -1797,6 +1797,8 @@ Explanation: optional</pre>
         targetList.appendChild(newCard);
         initializeQuestionCard(newCard);
         syncQuestionNumbers();
+        activeMobilePanel = 'questions';
+        syncMobileEditorPanels();
         resetQuestionForm();
         clearFormStatus();
         showFormFlash('Question added successfully');
@@ -1977,10 +1979,10 @@ Explanation: optional</pre>
     top: 0;
     z-index: 20;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 16px;
     justify-content: space-between;
-    padding: 12px 24px;
+    padding: 14px 24px;
     background: #fff;
     border-bottom: 1px solid #e2e8f0;
   }
@@ -1994,6 +1996,7 @@ Explanation: optional</pre>
   .meta-bar__identity {
     display: grid;
     gap: 4px;
+    flex: 1 1 280px;
   }
 
   .meta-bar__breadcrumb {
@@ -2025,6 +2028,7 @@ Explanation: optional</pre>
     flex-wrap: wrap;
     gap: 8px;
     justify-content: center;
+    flex: 1 1 280px;
   }
 
   .meta-pill {
@@ -2070,9 +2074,31 @@ Explanation: optional</pre>
     gap: 10px;
     justify-content: flex-end;
     flex-wrap: wrap;
+    flex: 1 1 280px;
   }
 
-  .back-link,
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    color: #4a5568;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  }
+
+  .back-link:hover {
+    color: #0a0f1e;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+  }
+
   .delete-test-link {
     color: #9aa5b4;
     font-size: 0.875rem;
@@ -2112,19 +2138,21 @@ Explanation: optional</pre>
 
   .publish-btn {
     border: none;
-    border-radius: 8px;
-    padding: 8px 20px;
+    min-height: 40px;
+    border-radius: 10px;
+    padding: 0 18px;
     background: #f5c518;
     color: #0a0f1e;
-    font-size: 0.875rem;
+    font-size: 0.82rem;
     font-weight: 800;
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, transform 0.15s ease;
   }
 
   .publish-btn:hover,
   .submit-btn:hover {
     background: #e6b800;
+    transform: translateY(-1px);
   }
 
   .publish-btn--published {
@@ -2138,9 +2166,9 @@ Explanation: optional</pre>
   }
 
   .panel-toggle-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
     background: #f3f4f6;
     border: 1px solid #e2e8f0;
     color: #6b7280;
@@ -2223,7 +2251,7 @@ Explanation: optional</pre>
 
   .question-list {
     display: grid;
-    gap: 10px;
+    gap: 12px;
   }
 
   .question-card {
@@ -2278,6 +2306,7 @@ Explanation: optional</pre>
     display: flex;
     align-items: flex-start;
     gap: 12px;
+    justify-content: space-between;
   }
 
   .question-badge {
@@ -2883,7 +2912,7 @@ Explanation: optional</pre>
   }
 
   .form-submit-wrap {
-    margin-top: 14px;
+    margin-top: 6px;
   }
 
   .form-inline-error {
@@ -2998,7 +3027,7 @@ Explanation: optional</pre>
   }
 
   .add-question-card .question-form {
-    gap: 0;
+    gap: 12px;
   }
 
   .form-flash[hidden] {
@@ -3532,6 +3561,10 @@ Explanation: optional</pre>
 
     .question-card__actions {
       opacity: 1;
+    }
+
+    .meta-bar__actions {
+      width: 100%;
     }
 
     .question-options,

@@ -633,6 +633,7 @@ const filterHref = (status: string) => {
     display: flex;
     align-items: center;
     gap: 10px;
+    min-width: 0;
   }
 
   .test-row__dot {
@@ -651,12 +652,14 @@ const filterHref = (status: string) => {
     color: #0a0f1e;
     font-size: 0.9rem;
     font-weight: 600;
+    line-height: 1.35;
   }
 
   .test-row__meta {
     margin-top: 6px;
     color: #9aa5b4;
     font-size: 0.75rem;
+    line-height: 1.5;
   }
 
   .test-row__chips {
@@ -677,6 +680,8 @@ const filterHref = (status: string) => {
   .test-row__actions {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
     gap: 10px;
   }
 
@@ -876,6 +881,7 @@ const filterHref = (status: string) => {
   .field {
     display: grid;
     gap: 6px;
+    min-width: 0;
   }
 
   .field--wide {
@@ -938,6 +944,10 @@ const filterHref = (status: string) => {
 
     .create-form {
       grid-template-columns: 1fr;
+    }
+
+    .field--wide {
+      grid-column: auto;
     }
 
     .delete-modal__actions {

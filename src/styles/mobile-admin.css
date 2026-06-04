@@ -103,6 +103,17 @@
     padding: 16px !important;
   }
 
+  .filters-card,
+  .create-card,
+  .tests-card,
+  .question-card,
+  .editor-card,
+  .summary-card,
+  .attempts-card,
+  .panel-card {
+    border-radius: 14px !important;
+  }
+
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px !important;
@@ -117,7 +128,11 @@
   .feed-card,
   .health-card,
   .workspace__forms,
+  .workspace__data,
   .workspace__list,
+  .data-card,
+  .chapters-section,
+  .page-grid > *,
   .summary-card,
   .attempts-card {
     width: 100% !important;
@@ -140,6 +155,47 @@
   .filters-form,
   .create-form {
     display: block !important;
+  }
+
+  .section-heading,
+  .section-toolbar,
+  .attempts-card__header,
+  .subject-card__head,
+  .question-card__head,
+  .editor-card__title-row,
+  .editor-card__header,
+  .page-header {
+    display: block !important;
+  }
+
+  .section-heading > *,
+  .section-toolbar > *,
+  .attempts-card__header > *,
+  .subject-card__head > *,
+  .question-card__head > *,
+  .editor-card__title-row > * {
+    margin-top: 8px;
+  }
+
+  .section-heading > *:first-child,
+  .section-toolbar > *:first-child,
+  .attempts-card__header > *:first-child,
+  .subject-card__head > *:first-child,
+  .question-card__head > *:first-child,
+  .editor-card__title-row > *:first-child {
+    margin-top: 0;
+  }
+
+  .create-form > *,
+  .editor-card__body > *,
+  .question-form > * {
+    margin-top: 12px;
+  }
+
+  .create-form > *:first-child,
+  .editor-card__body > *:first-child,
+  .question-form > *:first-child {
+    margin-top: 0;
   }
 
   .filter-pills {
@@ -170,6 +226,15 @@
     border-radius: 12px !important;
   }
 
+  .test-row__title {
+    display: block;
+    line-height: 1.4;
+  }
+
+  .test-row__meta {
+    line-height: 1.5;
+  }
+
   .test-row__chips,
   .test-row__actions {
     margin-top: 10px;
@@ -187,10 +252,22 @@
     display: block !important;
   }
 
+  .student-card__actions form {
+    margin-top: 10px;
+  }
+
   .student-card__link,
   .ghost-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .question-tag,
+  .subject-card__count,
+  .count-badge,
+  .warning-badge {
+    display: inline-flex;
+    max-width: 100%;
   }
 
   .profile-hero {
@@ -240,13 +317,41 @@
     padding: 14px 16px !important;
   }
 
+  .meta-bar__identity,
+  .meta-bar__stats,
+  .meta-bar__actions {
+    width: 100%;
+  }
+
   .meta-bar__stats {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
   }
 
+  .meta-bar__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start !important;
+  }
+
+  .back-link,
+  .publish-btn,
+  .delete-test-link {
+    min-height: 40px;
+    padding: 0 14px !important;
+    border-radius: 10px !important;
+  }
+
+  .panel-toggle-btn {
+    display: none !important;
+  }
+
   .mobile-editor-tabs {
+    position: sticky;
+    top: 65px;
+    z-index: 95;
     display: flex;
     background: #fff;
     border-bottom: 1px solid #e2e8f0;
@@ -272,9 +377,32 @@
     display: block !important;
   }
 
+  .editor-card__tabs,
+  .filter-pills,
+  .question-filter-pills {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .editor-card__tabs::-webkit-scrollbar,
+  .filter-pills::-webkit-scrollbar,
+  .question-filter-pills::-webkit-scrollbar {
+    display: none;
+  }
+
+  .editor-tab {
+    flex: 0 0 auto !important;
+    white-space: nowrap;
+  }
+
+  .questions-zone {
+    padding: 16px !important;
+  }
+
   .right-panel {
     width: 100% !important;
     position: static !important;
+    padding: 16px !important;
   }
 
   .question-options,
@@ -282,9 +410,26 @@
     grid-template-columns: 1fr !important;
   }
 
+  .search-filter-bar {
+    display: grid !important;
+    gap: 10px !important;
+  }
+
+  .search-filter-bar__separator {
+    display: none !important;
+  }
+
+  .question-card__header {
+    display: grid !important;
+    gap: 10px !important;
+  }
+
   .question-card__actions {
     opacity: 1 !important;
     visibility: visible !important;
+    display: flex !important;
+    justify-content: flex-start;
+    gap: 8px;
   }
 
   .answer-group--create {
@@ -296,11 +441,131 @@
     display: none !important;
   }
 
+  .option-row {
+    align-items: stretch !important;
+  }
+
+  .option-row__badge {
+    width: 32px !important;
+    height: 48px !important;
+    border-radius: 10px !important;
+  }
+
+  .option-row__input {
+    min-height: 48px !important;
+    height: auto !important;
+  }
+
+  .order-row {
+    align-items: center !important;
+    flex-wrap: wrap !important;
+  }
+
+  .order-row__input {
+    width: 88px !important;
+  }
+
   .submit-btn--create {
     position: sticky;
     bottom: 16px;
     z-index: 10;
     box-shadow: 0 4px 20px rgba(245, 197, 24, 0.3);
+  }
+
+  .accordion-header {
+    display: grid !important;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 10px !important;
+  }
+
+  .accordion-header__title {
+    min-width: 0;
+  }
+
+  .accordion-header__side {
+    grid-column: 1 / -1;
+    justify-content: flex-start !important;
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding-top: 4px;
+  }
+
+  .chapter-row,
+  .subject-row,
+  .topic-entry,
+  .resource-form {
+    display: block !important;
+  }
+
+  .chapter-row > *,
+  .subject-row > *,
+  .topic-entry > *,
+  .resource-form > * {
+    margin-top: 10px;
+  }
+
+  .chapter-row > *:first-child,
+  .subject-row > *:first-child,
+  .topic-entry > *:first-child,
+  .resource-form > *:first-child {
+    margin-top: 0;
+  }
+
+  .chapter-row__order {
+    display: inline-flex !important;
+    margin-right: 10px;
+  }
+
+  .chapter-action {
+    display: inline-flex !important;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .subject-row__side {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .page-grid {
+    display: block !important;
+  }
+
+  .form-card {
+    max-width: none !important;
+    margin-bottom: 12px;
+  }
+
+  .stack-form,
+  .resource-form {
+    gap: 12px !important;
+  }
+
+  .topic-entry {
+    padding: 14px !important;
+  }
+
+  .topic-entry__meta p {
+    margin-bottom: 0 !important;
+  }
+
+  .attempts-table-wrap {
+    overflow: visible !important;
+  }
+
+  .attempts-table tr {
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  }
+
+  .attempts-table td:first-child {
+    margin-top: 0;
+  }
+
+  .review-button {
+    display: inline-flex;
+    justify-content: center;
+    width: 100%;
   }
 }
 
