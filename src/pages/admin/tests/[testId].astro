@@ -44,7 +44,21 @@ if (!testRows || testRows.length === 0) {
 }
 
 const [test] = testRows;
-const testQuestions = await db.select().from(questions).where(eq(questions.testId, test.id)).orderBy(asc(questions.order));
+const rawTestQuestions = await db
+  .select()
+  .from(questions)
+  .where(eq(questions.testId, test.id))
+  .orderBy(asc(questions.order));
+const testQuestions = rawTestQuestions.map((question) => ({
+  ...question,
+  prompt: question.prompt ?? '',
+  optionA: question.optionA ?? '',
+  optionB: question.optionB ?? '',
+  optionC: question.optionC ?? '',
+  optionD: question.optionD ?? '',
+  explanation: question.explanation ?? '',
+  questionImageUrl: question.questionImageUrl ?? '',
+}));
 const nextOrder = (testQuestions.at(-1)?.order ?? 0) + 1;
 const questionCount = testQuestions.length;
 const testTypeLabel = test.testType === 'mock_exam' ? 'Mock Exam' : 'Practice';
