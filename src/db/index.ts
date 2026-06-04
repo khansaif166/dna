@@ -22,6 +22,27 @@ function shouldRequireSsl(connectionString: string) {
   }
 }
 
+function validateConnectionString(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    const isSupabaseHost = url.hostname.endsWith('.supabase.co') || url.hostname.includes('.pooler.supabase.com');
+    const isLocalHost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    const port = url.port || '5432';
+
+    if (!isLocalHost && isSupabaseHost && port !== '6543') {
+      throw new Error(
+        'DATABASE_URL must use the Supabase transaction pooler connection string on port 6543 for Cloudflare Pages/serverless runtimes.'
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+
+    throw new Error('DATABASE_URL is invalid.');
+  }
+}
+
 function closeClient() {
   if (!client) {
     return;
@@ -43,6 +64,7 @@ function getDb(): Database {
   closeClient();
 
   const connectionString = requireServerEnv('DATABASE_URL');
+  validateConnectionString(connectionString);
   client = postgres(connectionString, {
     prepare: false,
     connect_timeout: 10,
