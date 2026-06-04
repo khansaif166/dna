@@ -7,6 +7,7 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, questions, subjects, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 import { getUuidParam } from '../../../lib/routeParams';
+import { withRetry } from '../../../lib/withRetry';
 import { withTimeout } from '../../../lib/withTimeout';
 
 console.log('[admin-test-detail] request started', Astro.url.pathname);
@@ -40,24 +41,28 @@ try {
 
   console.log('[admin-test-detail] loading test', testId);
 
-  const testRows = await withTimeout(
-    db
-      .select({
-        id: tests.id,
-        title: tests.title,
-        status: tests.status,
-        testType: tests.testType,
-        attemptMode: tests.attemptMode,
-        durationMinutes: tests.durationMinutes,
-        publishedAt: tests.publishedAt,
-        createdAt: tests.createdAt,
-        subjectName: subjects.name,
-        topicName: topics.name,
-      })
-      .from(tests)
-      .leftJoin(subjects, eq(tests.subjectId, subjects.id))
-      .leftJoin(topics, eq(tests.topicId, topics.id))
-      .where(eq(tests.id, testId)),
+  const testRows = await withRetry(
+    () =>
+      withTimeout(
+        db
+          .select({
+            id: tests.id,
+            title: tests.title,
+            status: tests.status,
+            testType: tests.testType,
+            attemptMode: tests.attemptMode,
+            durationMinutes: tests.durationMinutes,
+            publishedAt: tests.publishedAt,
+            createdAt: tests.createdAt,
+            subjectName: subjects.name,
+            topicName: topics.name,
+          })
+          .from(tests)
+          .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+          .leftJoin(topics, eq(tests.topicId, topics.id))
+          .where(eq(tests.id, testId)),
+        'admin test detail test query'
+      ),
     'admin test detail test query'
   );
 
@@ -68,12 +73,16 @@ try {
 
   [test] = testRows;
 
-  const rawTestQuestions = await withTimeout(
-    db
-      .select()
-      .from(questions)
-      .where(eq(questions.testId, test.id))
-      .orderBy(asc(questions.order)),
+  const rawTestQuestions = await withRetry(
+    () =>
+      withTimeout(
+        db
+          .select()
+          .from(questions)
+          .where(eq(questions.testId, test.id))
+          .orderBy(asc(questions.order)),
+        'admin test detail questions query'
+      ),
     'admin test detail questions query'
   );
 

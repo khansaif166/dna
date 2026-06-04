@@ -6,6 +6,7 @@ import { asc, count, desc, eq } from 'drizzle-orm';
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, questions, subTopics, subjects, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
+import { withRetry } from '../../../lib/withRetry';
 import { withTimeout } from '../../../lib/withTimeout';
 
 console.log('[admin-tests-index] request started', Astro.url.pathname);
@@ -26,32 +27,36 @@ try {
 
   admin = authResult;
 
-  [allSubjects, allTopics, allSubTopics, allTests] = await withTimeout(
-    Promise.all([
-      db.select().from(subjects).orderBy(asc(subjects.order)),
-      db.select().from(topics).orderBy(asc(topics.order)),
-      db.select().from(subTopics).orderBy(asc(subTopics.topicId), asc(subTopics.order)),
-      db
-        .select({
-          id: tests.id,
-          title: tests.title,
-          testType: tests.testType,
-          durationMinutes: tests.durationMinutes,
-          status: tests.status,
-          createdAt: tests.createdAt,
-          subjectName: subjects.name,
-          topicName: topics.name,
-          subTopicName: subTopics.name,
-          questionCount: count(questions.id),
-        })
-        .from(tests)
-        .leftJoin(subjects, eq(tests.subjectId, subjects.id))
-        .leftJoin(topics, eq(tests.topicId, topics.id))
-        .leftJoin(subTopics, eq(tests.subTopicId, subTopics.id))
-        .leftJoin(questions, eq(questions.testId, tests.id))
-        .groupBy(tests.id, subjects.name, topics.name, subTopics.name)
-        .orderBy(desc(tests.createdAt)),
-    ]),
+  [allSubjects, allTopics, allSubTopics, allTests] = await withRetry(
+    () =>
+      withTimeout(
+        Promise.all([
+          db.select().from(subjects).orderBy(asc(subjects.order)),
+          db.select().from(topics).orderBy(asc(topics.order)),
+          db.select().from(subTopics).orderBy(asc(subTopics.topicId), asc(subTopics.order)),
+          db
+            .select({
+              id: tests.id,
+              title: tests.title,
+              testType: tests.testType,
+              durationMinutes: tests.durationMinutes,
+              status: tests.status,
+              createdAt: tests.createdAt,
+              subjectName: subjects.name,
+              topicName: topics.name,
+              subTopicName: subTopics.name,
+              questionCount: count(questions.id),
+            })
+            .from(tests)
+            .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+            .leftJoin(topics, eq(tests.topicId, topics.id))
+            .leftJoin(subTopics, eq(tests.subTopicId, subTopics.id))
+            .leftJoin(questions, eq(questions.testId, tests.id))
+            .groupBy(tests.id, subjects.name, topics.name, subTopics.name)
+            .orderBy(desc(tests.createdAt)),
+        ]),
+        'admin tests index queries'
+      ),
     'admin tests index queries'
   );
 
