@@ -160,6 +160,8 @@ const reviewCards = reviewRows.map((row) => {
 const correctCount = reviewCards.filter((row) => row.status === 'correct').length;
 const incorrectCount = reviewCards.filter((row) => row.status === 'incorrect').length;
 const skippedCount = reviewCards.filter((row) => row.status === 'skipped').length;
+const userAgent = Astro.request.headers.get('user-agent') ?? '';
+const isMobile = /iPhone|iPad|iPod|Android|Mobile/i.test(userAgent);
 ---
 
 <PlatformLayout title={`${attempt.testTitle} Review | Dream Neet Academy`} activeMobileNav="dashboard">
@@ -226,7 +228,11 @@ const skippedCount = reviewCards.filter((row) => row.status === 'skipped').lengt
       </a>
 
       <div class="action-strip__buttons">
-        <a href={`/student/tests/${attempt.testId}`} class="action-strip__button action-strip__button--ghost">Retake Test</a>
+        {isMobile ? (
+          <div class="action-strip__mobile-note">💻 Open on desktop to retake this test</div>
+        ) : (
+          <a href={`/student/tests/${attempt.testId}`} class="action-strip__button action-strip__button--ghost">Retake Test</a>
+        )}
         <a href="/student/analysis" class="action-strip__button action-strip__button--solid">View Analysis →</a>
       </div>
     </section>
@@ -350,7 +356,11 @@ const skippedCount = reviewCards.filter((row) => row.status === 'skipped').lengt
       </div>
 
       <div class="bottom-cta__actions">
-        <a href={`/student/tests/${attempt.testId}`} class="bottom-cta__button bottom-cta__button--ghost">Retake Test</a>
+        {isMobile ? (
+          <div class="bottom-cta__mobile-note">💻 Open on desktop to retake this test</div>
+        ) : (
+          <a href={`/student/tests/${attempt.testId}`} class="bottom-cta__button bottom-cta__button--ghost">Retake Test</a>
+        )}
         <a
           href={nextTopic ? `/student/topics/${nextTopic.id}` : attempt.topicId ? `/student/topics/${attempt.topicId}` : '/student'}
           class="bottom-cta__button bottom-cta__button--next"
@@ -544,6 +554,17 @@ const skippedCount = reviewCards.filter((row) => row.status === 'skipped').lengt
   .action-strip__buttons {
     display: flex;
     gap: 10px;
+  }
+
+  .action-strip__mobile-note,
+  .bottom-cta__mobile-note {
+    padding: 10px 14px;
+    border: 1px solid #fde68a;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: 0.78rem;
+    font-weight: 500;
   }
 
   .action-strip__button {

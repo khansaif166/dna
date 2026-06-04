@@ -190,6 +190,26 @@ function subjectPill(subjectName: string) {
       </div>
 
       <AnalyticsChart client:load data={chartData} />
+      <div class="mobile-subject-breakdown">
+        {subjectAccuracy.length ? (
+          subjectAccuracy.map((row) => {
+            const colors = subjectPill(row.subjectName);
+            return (
+              <div class="mobile-subject-breakdown__row">
+                <div class="mobile-subject-breakdown__top">
+                  <span>{row.subjectName}</span>
+                  <strong style={`color:${thresholdColor(row.percent)};`}>{row.percent}%</strong>
+                </div>
+                <div class="mobile-subject-breakdown__bar">
+                  <span style={`width:${row.percent}%; background:${colors.fill};`}></span>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div class="empty-inline">Take a few tests to unlock your subject breakdown.</div>
+        )}
+      </div>
 
       <div class="chart-legend">
         <span class="legend-chip"><i class="legend-dot legend-dot--green"></i>Strong (≥70%)</span>
@@ -309,6 +329,38 @@ function subjectPill(subjectName: string) {
     </div>
 
     {recentAttempts.length ? (
+      <>
+      <div class="mobile-attempt-cards">
+        {recentAttempts.map((attempt) => {
+          const colors = subjectPill(attempt.subjectName);
+          return (
+            <article class="mobile-attempt-card">
+              <div class="mobile-attempt-card__top">
+                <div class="mobile-attempt-card__title">{attempt.testTitle}</div>
+                <span
+                  class:list={[
+                    'accuracy-pill',
+                    attempt.percent >= 70
+                      ? 'accuracy-pill--good'
+                      : attempt.percent >= 40
+                        ? 'accuracy-pill--mid'
+                        : 'accuracy-pill--low',
+                  ]}
+                >
+                  {attempt.percent}%
+                </span>
+              </div>
+              <div class="mobile-attempt-card__bottom">
+                <span class="subject-pill" style={`background:${colors.bg}; color:${colors.text};`}>
+                  {attempt.subjectName}
+                </span>
+                <span class="date-cell">{relativeDate(attempt.submittedAt)}</span>
+                <a href={`/student/attempts/${attempt.attemptId}`} class="review-link">Review →</a>
+              </div>
+            </article>
+          );
+        })}
+      </div>
       <div class="table-wrap">
         <table class="attempt-table">
           <thead>
@@ -359,6 +411,7 @@ function subjectPill(subjectName: string) {
           </tbody>
         </table>
       </div>
+      </>
     ) : (
       <div class="table-empty">
         <div class="table-empty__icon">📝</div>
@@ -673,6 +726,72 @@ function subjectPill(subjectName: string) {
   .empty-inline {
     color: #9aa5b4;
     font-size: 0.82rem;
+  }
+
+  .mobile-subject-breakdown,
+  .mobile-attempt-cards {
+    display: none;
+  }
+
+  .mobile-subject-breakdown__row + .mobile-subject-breakdown__row {
+    margin-top: 12px;
+  }
+
+  .mobile-subject-breakdown__top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+    color: #0a0f1e;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .mobile-subject-breakdown__bar {
+    height: 8px;
+    border-radius: 999px;
+    background: #f1f3f9;
+    overflow: hidden;
+  }
+
+  .mobile-subject-breakdown__bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+  }
+
+  .mobile-attempt-card {
+    padding: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+  }
+
+  .mobile-attempt-card + .mobile-attempt-card {
+    margin-top: 8px;
+  }
+
+  .mobile-attempt-card__top,
+  .mobile-attempt-card__bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .mobile-attempt-card__top {
+    margin-bottom: 10px;
+  }
+
+  .mobile-attempt-card__title {
+    min-width: 0;
+    color: #0a0f1e;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .mobile-attempt-card__bottom {
+    flex-wrap: wrap;
   }
 
   .topics-grid {
@@ -996,6 +1115,16 @@ function subjectPill(subjectName: string) {
 
     .stats-grid {
       grid-template-columns: 1fr;
+    }
+
+    .mobile-subject-breakdown,
+    .mobile-attempt-cards {
+      display: block;
+    }
+
+    .table-wrap,
+    .chart-legend {
+      display: none;
     }
 
     .table-card__head {
