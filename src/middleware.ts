@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'astro';
 
+import { closeDb } from './db';
 import { authMiddleware } from './lib/auth-middleware';
 import { syncRuntimeEnv } from './lib/serverEnv';
 
@@ -53,7 +54,11 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       return limitedResponse;
     }
 
-    return await authMiddleware(context, next);
+    try {
+      return await authMiddleware(context, next);
+    } finally {
+      await closeDb();
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown middleware error';
     const stack = error instanceof Error ? error.stack ?? '' : '';
