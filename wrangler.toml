@@ -1,7 +1,11 @@
 name = "dream-neet"
-compatibility_date = "2024-09-23"
+compatibility_date = "2026-06-03"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./dist"
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "704516cf237e47a389f7acb469e2cc16"
 
 [vars]
 SITE = "https://www.dreamneetacademy.com"

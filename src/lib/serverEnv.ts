@@ -1,12 +1,13 @@
-type EnvMap = Record<string, string | undefined>;
+type RuntimeEnvMap = Record<string, unknown>;
+type BuildEnvMap = Record<string, string | undefined>;
 
 declare global {
   // Shared across the current worker instance so request middleware can expose runtime bindings.
-  var __DNA_RUNTIME_ENV__: EnvMap | undefined;
+  var __DNA_RUNTIME_ENV__: RuntimeEnvMap | undefined;
 }
 
 function getBuildEnv() {
-  return import.meta.env as EnvMap;
+  return import.meta.env as BuildEnvMap;
 }
 
 function getRuntimeEnv() {
@@ -21,9 +22,7 @@ export function setRuntimeEnv(runtimeEnv: Record<string, unknown> | undefined) {
   const nextEnv = { ...(getRuntimeEnv() ?? {}) };
 
   for (const [key, value] of Object.entries(runtimeEnv)) {
-    if (typeof value === 'string') {
-      nextEnv[key] = value;
-    }
+    nextEnv[key] = value;
   }
 
   globalThis.__DNA_RUNTIME_ENV__ = nextEnv;
@@ -44,7 +43,12 @@ export function syncRuntimeEnv(runtimeEnv: Record<string, unknown> | undefined) 
 }
 
 export function getServerEnv(name: string) {
-  return getRuntimeEnv()?.[name] ?? process.env[name] ?? getBuildEnv()[name];
+  const runtimeValue = getRuntimeEnv()?.[name];
+  return typeof runtimeValue === 'string' ? runtimeValue : process.env[name] ?? getBuildEnv()[name];
+}
+
+export function getServerBinding<T = unknown>(name: string): T | undefined {
+  return getRuntimeEnv()?.[name] as T | undefined;
 }
 
 export function requireServerEnv(name: string) {

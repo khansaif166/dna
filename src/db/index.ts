@@ -2,24 +2,40 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 
 import * as schema from './schema';
-import { requireServerEnv } from '../lib/serverEnv';
+import { getServerBinding, requireServerEnv } from '../lib/serverEnv';
 
 type Database = ReturnType<typeof drizzle<typeof schema>>;
+type HyperdriveBinding = {
+  connectionString?: string;
+};
 
 let database: Database | null = null;
+let currentConnectionString: string | null = null;
 
-function getDb(): Database {
-  if (database) {
+function getDatabaseUrl(hyperdrive?: HyperdriveBinding) {
+  const runtimeHyperdrive = hyperdrive ?? getServerBinding<HyperdriveBinding>('HYPERDRIVE');
+
+  if (runtimeHyperdrive?.connectionString) {
+    return runtimeHyperdrive.connectionString;
+  }
+
+  return requireServerEnv('DATABASE_URL');
+}
+
+export function getDb(hyperdrive?: HyperdriveBinding): Database {
+  const connectionString = getDatabaseUrl(hyperdrive);
+
+  if (database && currentConnectionString === connectionString) {
     return database;
   }
 
-  const connectionString = requireServerEnv('DATABASE_URL');
   const client = postgres(connectionString, {
     prepare: false,
     connect_timeout: 10,
   });
 
   database = drizzle(client, { schema });
+  currentConnectionString = connectionString;
   return database;
 }
 

@@ -9,9 +9,15 @@ interface ImportMeta {
 }
 
 declare namespace App {
+  interface HyperdriveBinding {
+    connectionString: string;
+  }
+
   interface Locals {
     runtime?: {
-      env?: Record<string, unknown>;
+      env?: Record<string, unknown> & {
+        HYPERDRIVE?: HyperdriveBinding;
+      };
     };
     user: import('@supabase/supabase-js').User | null;
     profile: { id: string; fullName: string; role: 'student' | 'admin'; isActive: boolean } | null;
