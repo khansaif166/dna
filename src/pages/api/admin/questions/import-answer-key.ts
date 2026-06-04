@@ -1,10 +1,10 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
-import { PDFParse } from 'pdf-parse';
 import { z } from 'zod';
 
 import { db, questions } from '../../../../db';
 import { hasValidOrigin } from '../../../../lib/csrf';
+import { loadPdfParse } from '../../../../lib/pdfRuntime';
 import { parseAnswerKeyEntriesFromText } from '../../../../lib/questionPdf';
 import { requireAdminApi } from '../../../../lib/requireAdminApi';
 
@@ -35,6 +35,7 @@ async function readAnswerKeyText(file: File | undefined, answerKeyText: string |
   }
 
   if (file.name.toLowerCase().endsWith('.pdf')) {
+    const { PDFParse } = await loadPdfParse();
     const parser = new PDFParse({ data: new Uint8Array(await file.arrayBuffer()) });
 
     try {

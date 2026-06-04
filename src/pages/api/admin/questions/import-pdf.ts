@@ -1,8 +1,6 @@
 import type { APIRoute } from 'astro';
 import { desc, eq } from 'drizzle-orm';
 import type { EmbeddedImage, PageImages } from 'pdf-parse';
-import { PDFParse } from 'pdf-parse';
-import { OPS, Util } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 
@@ -13,6 +11,7 @@ import {
   QUESTION_IMAGE_BUCKET,
   sanitizeQuestionImageFileName,
 } from '../../../../lib/questionImages';
+import { loadPdfJs, loadPdfParse } from '../../../../lib/pdfRuntime';
 import { parseQuestionsFromPdfText } from '../../../../lib/questionPdf';
 import { requireAdminApi } from '../../../../lib/requireAdminApi';
 
@@ -72,6 +71,9 @@ type LoadedPdfDocument = {
     }>;
   }>;
 };
+
+type PDFParseInstance = InstanceType<Awaited<ReturnType<typeof loadPdfParse>>['PDFParse']>;
+type PdfJsRuntime = Awaited<ReturnType<typeof loadPdfJs>>;
 
 function json(message: string, status: number, extra: Record<string, unknown> = {}) {
   return new Response(JSON.stringify({ message, ...extra }), {
@@ -264,12 +266,12 @@ async function extractQuestionBlocks(document: LoadedPdfDocument) {
   return questionBlocks;
 }
 
-function getImageBounds(transformMatrix: number[]) {
+function getImageBounds(transformMatrix: number[], util: PdfJsRuntime['Util']) {
   const corners = [
-    Util.applyTransform([0, 0], transformMatrix),
-    Util.applyTransform([1, 0], transformMatrix),
-    Util.applyTransform([0, 1], transformMatrix),
-    Util.applyTransform([1, 1], transformMatrix),
+    util.applyTransform([0, 0], transformMatrix),
+    util.applyTransform([1, 0], transformMatrix),
+    util.applyTransform([0, 1], transformMatrix),
+    util.applyTransform([1, 1], transformMatrix),
   ];
   const xs = corners.map(([x]) => x);
   const ys = corners.map(([, y]) => y);
@@ -291,7 +293,12 @@ function getImageBounds(transformMatrix: number[]) {
   };
 }
 
-async function extractPdfImagesByPage(parser: PDFParse, document: LoadedPdfDocument, totalPages: number) {
+async function extractPdfImagesByPage(
+  parser: PDFParseInstance,
+  document: LoadedPdfDocument,
+  totalPages: number,
+  pdfjs: Pick<PdfJsRuntime, 'OPS' | 'Util'>
+) {
   const pages: PageImages[] = [];
   const skippedImagePages: Array<{ pageNumber: number; reason: string }> = [];
   const positionedImages: PositionedEmbeddedImage[] = [];
@@ -310,22 +317,22 @@ async function extractPdfImagesByPage(parser: PDFParse, document: LoadedPdfDocum
         const fn = ops.fnArray[index];
         const args = ops.argsArray[index];
 
-        if (fn === OPS.save) {
+        if (fn === pdfjs.OPS.save) {
           transformStack.push([...transformMatrix]);
           continue;
         }
 
-        if (fn === OPS.restore) {
+        if (fn === pdfjs.OPS.restore) {
           transformMatrix = transformStack.pop() ?? [1, 0, 0, 1, 0, 0];
           continue;
         }
 
-        if (fn === OPS.transform) {
-          transformMatrix = Util.transform(transformMatrix, args);
+        if (fn === pdfjs.OPS.transform) {
+          transformMatrix = pdfjs.Util.transform(transformMatrix, args);
           continue;
         }
 
-        if (fn !== OPS.paintImageXObject && fn !== OPS.paintInlineImageXObject) {
+        if (fn !== pdfjs.OPS.paintImageXObject && fn !== pdfjs.OPS.paintInlineImageXObject) {
           continue;
         }
 
@@ -336,7 +343,7 @@ async function extractPdfImagesByPage(parser: PDFParse, document: LoadedPdfDocum
           continue;
         }
 
-        const bounds = getImageBounds(transformMatrix);
+        const bounds = getImageBounds(transformMatrix, pdfjs.Util);
         const widthRatio = pageWidth ? bounds.width / pageWidth : 0;
         const heightRatio = pageHeight ? bounds.height / pageHeight : 0;
 
@@ -519,15 +526,21 @@ export const POST: APIRoute = async (context) => {
     return json('Only PDF uploads are supported.', 400);
   }
 
-  let parser: PDFParse | null = null;
+  let parser: PDFParseInstance | null = null;
 
   try {
+    const [{ PDFParse }, pdfjs] = await Promise.all([loadPdfParse(), loadPdfJs()]);
     const pdfData = new Uint8Array(await file.arrayBuffer());
     parser = new PDFParse({ data: pdfData });
     const document = await (parser as unknown as { load: () => Promise<LoadedPdfDocument> }).load();
 
     const textResult = await parser.getText();
-    const { pages: imagePages, skippedImagePages, positionedImages } = await extractPdfImagesByPage(parser, document, textResult.pages.length);
+    const { pages: imagePages, skippedImagePages, positionedImages } = await extractPdfImagesByPage(
+      parser,
+      document,
+      textResult.pages.length,
+      pdfjs
+    );
     const questionBlocks = await extractQuestionBlocks(document);
     const parsedResult = parseQuestionsFromPdfText(textResult.text, textResult.pages);
     const { questions: parsedQuestions, skipped } = parsedResult;
