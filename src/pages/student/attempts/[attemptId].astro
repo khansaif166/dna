@@ -162,8 +162,17 @@ const incorrectCount = reviewCards.filter((row) => row.status === 'incorrect').l
 const skippedCount = reviewCards.filter((row) => row.status === 'skipped').length;
 ---
 
-<PlatformLayout title={`${attempt.testTitle} Review | Dream Neet Academy`}>
+<PlatformLayout title={`${attempt.testTitle} Review | Dream Neet Academy`} activeMobileNav="dashboard">
   <section class="attempt-review">
+    <div class="mobile-page-header">
+      <div class="mobile-breadcrumb">
+        <span>Student</span>
+        <span>/</span>
+        <span>Attempts</span>
+      </div>
+      <div class="mobile-page-title">{attempt.testTitle}</div>
+      <div class="mobile-page-subtitle">Submitted {submittedFormatter.format(attempt.submittedAt)}</div>
+    </div>
     <section class="hero-card">
       <div class="hero-card__ring-wrap">
         <div class="score-ring">

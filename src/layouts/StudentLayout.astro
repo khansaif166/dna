@@ -1,5 +1,7 @@
 ---
 import Base from './Base.astro';
+import MobileNav from '../components/platform/MobileNav.astro';
+import '../styles/mobile.css';
 
 interface Props {
   title: string;
@@ -17,7 +19,7 @@ const initials = `${firstName[0] ?? 'S'}${lastName[0] ?? firstName[1] ?? ''}`.to
 
 <Base title={title}>
   <div class="student-shell">
-    <aside class="sidebar">
+    <aside class="sidebar student-sidebar">
       <div class="sidebar__inner">
         <div class="sidebar__top">
           <a href="/student" class="brand">
@@ -82,6 +84,7 @@ const initials = `${firstName[0] ?? 'S'}${lastName[0] ?? firstName[1] ?? ''}`.to
       <slot />
     </main>
   </div>
+  <MobileNav activePage={activeNav} />
 </Base>
 
 <style>

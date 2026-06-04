@@ -1,0 +1,132 @@
+---
+export const prerender = false;
+
+import { and, count, eq, isNotNull, sql } from 'drizzle-orm';
+
+import Base from '../../layouts/Base.astro';
+import MobileNav from '../../components/platform/MobileNav.astro';
+import { db, testAttempts } from '../../db';
+import { requireAuth } from '../../lib/auth';
+import '../../styles/mobile.css';
+
+const userAgent = Astro.request.headers.get('user-agent') ?? '';
+const isMobile = /iPhone|iPad|iPod|Android|Mobile/i.test(userAgent);
+
+if (!isMobile) {
+  return Astro.redirect('/student');
+}
+
+const authResult = await requireAuth(Astro, 'student');
+
+if (authResult instanceof Response) {
+  return authResult;
+}
+
+const profile = authResult;
+
+const [statsRow] = await db
+  .select({
+    totalAttempts: count(),
+    totalCorrect: sql<number>`coalesce(sum(${testAttempts.score}), 0)::int`,
+    totalQuestions: sql<number>`coalesce(sum(${testAttempts.totalQuestions}), 0)::int`,
+  })
+  .from(testAttempts)
+  .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt)));
+
+const totalAttempts = statsRow?.totalAttempts ?? 0;
+const averageScore =
+  (statsRow?.totalQuestions ?? 0) > 0
+    ? Math.round(((statsRow?.totalCorrect ?? 0) / (statsRow?.totalQuestions ?? 1)) * 100)
+    : 0;
+
+const attemptDays = await db
+  .select({ submittedAt: testAttempts.submittedAt })
+  .from(testAttempts)
+  .where(and(eq(testAttempts.studentId, profile.id), isNotNull(testAttempts.submittedAt)));
+
+const dayMs = 24 * 60 * 60 * 1000;
+const distinctDays = Array.from(
+  new Set(
+    attemptDays
+      .map((row) => row.submittedAt)
+      .filter((value): value is Date => Boolean(value))
+      .map((value) => value.toISOString().slice(0, 10))
+  )
+).sort().reverse();
+
+let streak = 0;
+let previous: Date | null = null;
+
+for (const dayKey of distinctDays) {
+  const current = new Date(`${dayKey}T00:00:00.000Z`);
+  if (!previous) {
+    streak = 1;
+    previous = current;
+    continue;
+  }
+
+  const diff = Math.round((previous.getTime() - current.getTime()) / dayMs);
+  if (diff === 1) {
+    streak += 1;
+    previous = current;
+    continue;
+  }
+
+  break;
+}
+
+const parts = profile.fullName.trim().split(/\s+/).filter(Boolean);
+const initials = `${parts[0]?.[0] ?? 'S'}${parts[1]?.[0] ?? parts[0]?.[1] ?? ''}`.toUpperCase();
+---
+
+<Base title="Profile | Dream Neet Academy">
+  <section class="student-profile-page">
+    <div class="student-profile-top">
+      <div class="student-profile-avatar">{initials}</div>
+      <h1>{profile.fullName}</h1>
+      <p>{Astro.locals.user?.email ?? 'student@dreamneetacademy.com'}</p>
+      <span class="student-role-chip">STUDENT</span>
+    </div>
+
+    <div class="student-profile-stats">
+      <div>
+        <strong>{totalAttempts}</strong>
+        <span>Tests</span>
+      </div>
+      <div>
+        <strong>{averageScore}%</strong>
+        <span>Avg Score</span>
+      </div>
+      <div>
+        <strong>{streak}</strong>
+        <span>Streak</span>
+      </div>
+    </div>
+
+    <div class="student-profile-menu">
+      <a href="/student/analysis" class="student-profile-link">
+        <span class="student-profile-link__icon">📊</span>
+        <span>View Analysis</span>
+        <span class="student-profile-link__arrow">›</span>
+      </a>
+      <a href="/student#subjects" class="student-profile-link">
+        <span class="student-profile-link__icon">📚</span>
+        <span>All Subjects</span>
+        <span class="student-profile-link__arrow">›</span>
+      </a>
+      <a href="/student/profile" class="student-profile-link">
+        <span class="student-profile-link__icon">🔔</span>
+        <span>Notifications</span>
+        <span class="student-profile-link__arrow">Coming soon</span>
+      </a>
+      <form action="/api/auth/logout" method="POST">
+        <button type="submit">
+          <span class="student-profile-link__icon">↪</span>
+          <span>Logout</span>
+          <span class="student-profile-link__arrow">›</span>
+        </button>
+      </form>
+    </div>
+  </section>
+  <MobileNav activePage="profile" />
+</Base>

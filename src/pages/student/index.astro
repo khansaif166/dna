@@ -4,9 +4,11 @@ export const prerender = false;
 import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
 
 import Base from '../../layouts/Base.astro';
+import MobileNav from '../../components/platform/MobileNav.astro';
 import { db, subjects, testAttempts, tests, topics } from '../../db';
 import { requireAuth } from '../../lib/auth';
 import { withTimeout } from '../../lib/withTimeout';
+import '../../styles/mobile.css';
 
 console.log('[student] dashboard request started');
 
@@ -351,7 +353,7 @@ const firstSubjectLink = subjectCards[0] ? `/student/subjects/${subjectCards[0].
 
 <Base title="Student Dashboard | Dream Neet Academy">
   <div class="dashboard-shell">
-    <aside class="sidebar">
+    <aside class="sidebar student-sidebar">
       <div class="sidebar__inner">
         <div class="sidebar__top">
           <a href="/student" class="brand">
@@ -674,6 +676,7 @@ const firstSubjectLink = subjectCards[0] ? `/student/subjects/${subjectCards[0].
       </section>
     </main>
   </div>
+  <MobileNav activePage="dashboard" />
 </Base>
 
 <style>

@@ -1,14 +1,17 @@
 ---
 import PlatformFooter from '../components/platform/PlatformFooter.astro';
+import MobileNav from '../components/platform/MobileNav.astro';
 import PlatformNav from '../components/platform/PlatformNav.astro';
 import '../styles/platform.css';
+import '../styles/mobile.css';
 
 interface Props {
   title: string;
   showNav?: boolean;
+  activeMobileNav?: 'dashboard' | 'subjects' | 'analysis' | 'profile';
 }
 
-const { title, showNav = true } = Astro.props;
+const { title, showNav = true, activeMobileNav = 'dashboard' } = Astro.props;
 ---
 
 <!doctype html>
@@ -33,6 +36,7 @@ const { title, showNav = true } = Astro.props;
     <main class:list={['platform-main', { 'platform-main--with-nav': showNav }]}>
       <slot />
     </main>
+    <MobileNav activePage={activeMobileNav} />
     <PlatformFooter />
   </body>
 </html>

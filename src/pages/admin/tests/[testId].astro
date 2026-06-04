@@ -191,8 +191,20 @@ try {
       </div>
     </section>
 
+    <div class="mobile-editor-tabs" data-mobile-editor-tabs>
+      <button type="button" class="mobile-editor-tab is-active" data-mobile-editor-tab="questions">
+        Questions ({questionCount})
+      </button>
+      <button type="button" class="mobile-editor-tab" data-mobile-editor-tab="add-question">
+        Add Question
+      </button>
+      <button type="button" class="mobile-editor-tab" data-mobile-editor-tab="import-pdf">
+        Import PDF
+      </button>
+    </div>
+
     <section class="editor-shell">
-      <div class="questions-zone">
+      <div class="questions-zone" data-mobile-editor-panel="questions">
         <div class="search-filter-bar">
           <span class="search-filter-bar__icon" aria-hidden="true">🔍</span>
           <input
@@ -389,7 +401,7 @@ try {
       </div>
 
       <aside class="right-panel" id="right-panel">
-        <div class="panel-card add-question-card">
+        <div class="panel-card add-question-card" data-mobile-editor-panel="add-question">
           <div class="panel-card__header panel-card__header--blue">
             <span class="panel-card__accent panel-card__accent--dark"></span>
             <div>
@@ -534,7 +546,7 @@ try {
           </form>
         </div>
 
-        <div class="panel-card import-panel-card">
+        <div class="panel-card import-panel-card" data-mobile-editor-panel="import-pdf">
           <div class="panel-card__header panel-card__header--amber">
             <span class="panel-card__accent panel-card__accent--amber"></span>
             <div>
@@ -651,6 +663,8 @@ Explanation: optional</pre>
   const filterEmptyState = document.querySelector('[data-filter-empty]');
   const panelToggle = document.getElementById('panel-toggle');
   const rightPanel = document.getElementById('right-panel');
+  const mobileEditorTabs = Array.from(document.querySelectorAll('[data-mobile-editor-tab]'));
+  const mobileEditorPanels = Array.from(document.querySelectorAll('[data-mobile-editor-panel]'));
   const PANEL_KEY = 'questions_panel_open';
   const RIGHT_PANEL_WIDTH = '360px';
   let questionList = document.querySelector('[data-question-list]');
@@ -658,6 +672,26 @@ Explanation: optional</pre>
   let deleteTestPending = false;
   let activeInlineCard = null;
   let activeFilter = 'all';
+  let activeMobilePanel = 'questions';
+
+  const syncMobileEditorPanels = () => {
+    mobileEditorTabs.forEach((tab) => {
+      if (!(tab instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      const isActive = tab.dataset.mobileEditorTab === activeMobilePanel;
+      tab.classList.toggle('is-active', isActive);
+    });
+
+    mobileEditorPanels.forEach((panel) => {
+      if (!(panel instanceof HTMLElement)) {
+        return;
+      }
+
+      panel.hidden = window.innerWidth <= 768 && panel.dataset.mobileEditorPanel !== activeMobilePanel;
+    });
+  };
 
   const escapeHtml = (value) =>
     String(value ?? '')
@@ -699,6 +733,20 @@ Explanation: optional</pre>
       deleteTestButton.textContent = 'Delete Test';
     }
   };
+
+  mobileEditorTabs.forEach((tab) => {
+    if (!(tab instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    tab.addEventListener('click', () => {
+      activeMobilePanel = tab.dataset.mobileEditorTab ?? 'questions';
+      syncMobileEditorPanels();
+    });
+  });
+
+  window.addEventListener('resize', syncMobileEditorPanels);
+  syncMobileEditorPanels();
 
   const attachQuestionImageUpload = (form) => {
     if (!(form instanceof HTMLFormElement)) {

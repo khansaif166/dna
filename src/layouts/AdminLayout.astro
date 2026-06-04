@@ -1,5 +1,6 @@
 ---
 import '../styles/platform.css';
+import '../styles/mobile-admin.css';
 
 interface Props {
   title: string;
@@ -60,6 +61,7 @@ const isActive = (label: string, href: string) => {
   </head>
   <body class="admin-app">
     <div class="admin-shell">
+      <div class="mobile-overlay" id="mobile-overlay"></div>
       <aside class="admin-sidebar" id="admin-sidebar">
         <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
           <svg class="toggle-icon" viewBox="0 0 12 12" aria-hidden="true">
@@ -144,6 +146,19 @@ const isActive = (label: string, href: string) => {
       </aside>
 
       <div class="admin-main">
+        <header class="admin-mobile-topbar">
+          <button type="button" class="admin-mobile-topbar__toggle" id="mobile-hamburger" aria-label="Open admin menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h16"></path>
+              <path d="M4 12h16"></path>
+              <path d="M4 17h16"></path>
+            </svg>
+          </button>
+          <div class="admin-mobile-topbar__title">{pageTitle}</div>
+          <div class="admin-mobile-topbar__action">
+            <slot name="actions" />
+          </div>
+        </header>
         {!hideTopbar && (
           <header class="admin-topbar">
             <h1 class="admin-topbar__title">{pageTitle}</h1>
@@ -162,6 +177,8 @@ const isActive = (label: string, href: string) => {
     <script is:inline>
       const sidebar = document.getElementById('admin-sidebar');
       const toggle = document.getElementById('sidebar-toggle');
+      const hamburger = document.getElementById('mobile-hamburger');
+      const overlay = document.getElementById('mobile-overlay');
       const STORAGE_KEY = 'admin_sidebar_collapsed';
 
       if (sidebar && localStorage.getItem(STORAGE_KEY) === 'true' && window.innerWidth > 900) {
@@ -185,6 +202,22 @@ const isActive = (label: string, href: string) => {
           }
         });
       }
+
+      const closeMobileSidebar = () => {
+        sidebar?.classList.remove('mobile-open');
+        overlay?.classList.remove('active');
+      };
+
+      hamburger?.addEventListener('click', () => {
+        sidebar?.classList.toggle('mobile-open');
+        overlay?.classList.toggle('active');
+      });
+
+      overlay?.addEventListener('click', closeMobileSidebar);
+
+      sidebar?.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', closeMobileSidebar);
+      });
     </script>
   </body>
 </html>

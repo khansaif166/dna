@@ -212,6 +212,7 @@ const theme = {
 }[subjectType];
 
 const practiced = attemptedTestIds.size > 0;
+const mobileBlocked = Astro.url.searchParams.get('mobile_blocked') === 'true';
 
 const enrichedTests = testRows.map((test) => {
   const attempts = attemptsByTestId.get(test.id) ?? [];
@@ -280,8 +281,24 @@ function scoreTone(percent: number) {
 }
 ---
 
-<PlatformLayout title={`${topic.name} | Dream Neet Academy`}>
+<PlatformLayout title={`${topic.name} | Dream Neet Academy`} activeMobileNav="subjects">
   <section class="topic-page">
+    {mobileBlocked && (
+      <div class="mobile-topic-banner">
+        <strong>💻 Tests are only available on desktop</strong>
+        <p>You can watch all study videos here and take tests when you open this on a laptop or computer.</p>
+      </div>
+    )}
+
+    <div class="mobile-page-header">
+      <div class="mobile-breadcrumb">
+        <a href="/student">Student</a>
+        <span>/</span>
+        <a href={`/student/subjects/${topic.subjectId}`}>{topic.subjectName}</a>
+      </div>
+      <div class="mobile-page-title">{topic.name}</div>
+      <div class="mobile-page-subtitle">{testRows.length} tests · {resources.length} videos</div>
+    </div>
     <header class="topic-header">
       <div class="topic-header__left">
         <div class="topic-breadcrumbs">
@@ -408,6 +425,7 @@ function scoreTone(percent: number) {
                             <span class="subtopic-test-link__meta">
                               {test.attempted ? 'Retake test' : 'Start test'}
                             </span>
+                            <div class="mobile-test-block">💻 Open on desktop to attempt this test</div>
                           </a>
                         ))}
                       </div>
@@ -565,6 +583,7 @@ function scoreTone(percent: number) {
                       >
                         {enrichedTest.attempted ? 'Retake' : 'Start Test →'}
                       </a>
+                      <div class="mobile-test-block">💻 Open on desktop to attempt this test</div>
                     </div>
                   </article>
                 );
