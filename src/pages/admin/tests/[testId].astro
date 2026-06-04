@@ -7,64 +7,108 @@ import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { db, questions, subjects, tests, topics } from '../../../db';
 import { requireAuth } from '../../../lib/auth';
 import { getUuidParam } from '../../../lib/routeParams';
+import { withTimeout } from '../../../lib/withTimeout';
 
-const authResult = await requireAuth(Astro, 'admin');
+console.log('[admin-test-detail] request started', Astro.url.pathname);
 
-if (authResult instanceof Response) {
-  return authResult;
+let admin;
+let test;
+let testQuestions;
+let nextOrder;
+let questionCount;
+let testTypeLabel;
+let attemptModeLabel;
+let metaSubject;
+let metaChapter;
+
+try {
+  const authResult = await withTimeout(requireAuth(Astro, 'admin'), 'admin test detail auth check');
+
+  if (authResult instanceof Response) {
+    console.log('[admin-test-detail] auth returned redirect response');
+    return authResult;
+  }
+
+  admin = authResult;
+
+  const testId = getUuidParam(Astro.params.testId);
+
+  if (testId instanceof Response) {
+    console.warn('[admin-test-detail] invalid test id', Astro.params.testId);
+    return testId;
+  }
+
+  console.log('[admin-test-detail] loading test', testId);
+
+  const testRows = await withTimeout(
+    db
+      .select({
+        id: tests.id,
+        title: tests.title,
+        status: tests.status,
+        testType: tests.testType,
+        attemptMode: tests.attemptMode,
+        durationMinutes: tests.durationMinutes,
+        publishedAt: tests.publishedAt,
+        createdAt: tests.createdAt,
+        subjectName: subjects.name,
+        topicName: topics.name,
+      })
+      .from(tests)
+      .leftJoin(subjects, eq(tests.subjectId, subjects.id))
+      .leftJoin(topics, eq(tests.topicId, topics.id))
+      .where(eq(tests.id, testId)),
+    'admin test detail test query'
+  );
+
+  if (!testRows || testRows.length === 0) {
+    console.warn('[admin-test-detail] test not found', testId);
+    return new Response(null, { status: 404 });
+  }
+
+  [test] = testRows;
+
+  const rawTestQuestions = await withTimeout(
+    db
+      .select()
+      .from(questions)
+      .where(eq(questions.testId, test.id))
+      .orderBy(asc(questions.order)),
+    'admin test detail questions query'
+  );
+
+  testQuestions = rawTestQuestions.map((question) => ({
+    ...question,
+    prompt: question.prompt ?? '',
+    optionA: question.optionA ?? '',
+    optionB: question.optionB ?? '',
+    optionC: question.optionC ?? '',
+    optionD: question.optionD ?? '',
+    explanation: question.explanation ?? '',
+    questionImageUrl: question.questionImageUrl ?? '',
+  }));
+
+  nextOrder = (testQuestions.at(-1)?.order ?? 0) + 1;
+  questionCount = testQuestions.length;
+  testTypeLabel = test.testType === 'mock_exam' ? 'Mock Exam' : 'Practice';
+  attemptModeLabel = test.attemptMode === 'multiple' ? 'Multiple attempts' : 'Single attempt';
+  metaSubject = test.subjectName ?? 'General';
+  metaChapter = test.topicName ?? 'No chapter assigned';
+
+  console.log('[admin-test-detail] loaded test page data', {
+    testId: test.id,
+    questionCount,
+  });
+} catch (error) {
+  console.error('[admin-test-detail] failed to render', {
+    path: Astro.url.pathname,
+    testId: Astro.params.testId ?? null,
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack ?? null : null,
+  });
+
+  return new Response('Internal Server Error', { status: 500 });
 }
-
-const admin = authResult;
-const testId = getUuidParam(Astro.params.testId);
-
-if (testId instanceof Response) {
-  return testId;
-}
-
-const testRows = await db
-  .select({
-    id: tests.id,
-    title: tests.title,
-    status: tests.status,
-    testType: tests.testType,
-    attemptMode: tests.attemptMode,
-    durationMinutes: tests.durationMinutes,
-    publishedAt: tests.publishedAt,
-    createdAt: tests.createdAt,
-    subjectName: subjects.name,
-    topicName: topics.name,
-  })
-  .from(tests)
-  .leftJoin(subjects, eq(tests.subjectId, subjects.id))
-  .leftJoin(topics, eq(tests.topicId, topics.id))
-  .where(eq(tests.id, testId));
-
-if (!testRows || testRows.length === 0) {
-  return new Response(null, { status: 404 });
-}
-
-const [test] = testRows;
-const rawTestQuestions = await db
-  .select()
-  .from(questions)
-  .where(eq(questions.testId, test.id))
-  .orderBy(asc(questions.order));
-const testQuestions = rawTestQuestions.map((question) => ({
-  ...question,
-  prompt: question.prompt ?? '',
-  optionA: question.optionA ?? '',
-  optionB: question.optionB ?? '',
-  optionC: question.optionC ?? '',
-  optionD: question.optionD ?? '',
-  explanation: question.explanation ?? '',
-  questionImageUrl: question.questionImageUrl ?? '',
-}));
-const nextOrder = (testQuestions.at(-1)?.order ?? 0) + 1;
-const questionCount = testQuestions.length;
-const testTypeLabel = test.testType === 'mock_exam' ? 'Mock Exam' : 'Practice';
-const attemptModeLabel = test.attemptMode === 'multiple_attempts' ? 'Multiple attempts' : 'Single attempt';
-const metaSubject = test.subjectName ?? 'General';
-const metaChapter = test.topicName ?? 'No chapter assigned';
 ---
 
 <AdminLayout
