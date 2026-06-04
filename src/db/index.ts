@@ -5,21 +5,54 @@ import * as schema from './schema';
 import { requireServerEnv } from '../lib/serverEnv';
 
 type Database = ReturnType<typeof drizzle<typeof schema>>;
+type SqlClient = ReturnType<typeof postgres>;
 
 let database: Database | null = null;
+let client: SqlClient | null = null;
+let databaseCreatedAt = 0;
+
+const CLIENT_MAX_AGE_MS = 55 * 1000;
+
+function shouldRequireSsl(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    return url.hostname !== 'localhost' && url.hostname !== '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+function closeClient() {
+  if (!client) {
+    return;
+  }
+
+  void client.end({ timeout: 0 });
+  client = null;
+  database = null;
+  databaseCreatedAt = 0;
+}
 
 function getDb(): Database {
-  if (database) {
+  const now = Date.now();
+
+  if (database && now - databaseCreatedAt < CLIENT_MAX_AGE_MS) {
     return database;
   }
 
+  closeClient();
+
   const connectionString = requireServerEnv('DATABASE_URL');
-  const client = postgres(connectionString, {
+  client = postgres(connectionString, {
     prepare: false,
     connect_timeout: 10,
+    idle_timeout: 20,
+    max_lifetime: 60,
+    ssl: shouldRequireSsl(connectionString) ? 'require' : undefined,
   });
 
   database = drizzle(client, { schema });
+  databaseCreatedAt = now;
   return database;
 }
 
