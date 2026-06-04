@@ -66,7 +66,9 @@ function getDb(): Database {
   const connectionString = requireServerEnv('DATABASE_URL');
   validateConnectionString(connectionString);
   client = postgres(connectionString, {
+    max: 1,
     prepare: false,
+    fetch_types: false,
     connect_timeout: 10,
     idle_timeout: 20,
     max_lifetime: 60,
